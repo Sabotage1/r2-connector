@@ -6,6 +6,16 @@ export function apiBaseUrl(locationUrl?: URL): string {
   return `${url.protocol}//${url.hostname}:8080`;
 }
 
+export class ReaPrimeApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number
+  ) {
+    super(message);
+    this.name = "ReaPrimeApiError";
+  }
+}
+
 export class ReaPrimeApi {
   constructor(private readonly baseUrl = apiBaseUrl()) {}
 
@@ -21,7 +31,7 @@ export class ReaPrimeApi {
     });
     const text = await response.text();
     if (!response.ok) {
-      throw new Error(`${method} ${path} failed: ${response.status} ${text}`);
+      throw new ReaPrimeApiError(`${method} ${path} failed: ${response.status} ${text}`, response.status);
     }
     return text ? (JSON.parse(text) as T) : (undefined as T);
   }
@@ -85,7 +95,7 @@ export class ReaPrimeApi {
     try {
       return await this.request<T>(`/api/v1/kv/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`);
     } catch (error) {
-      if (error instanceof Error && error.message.includes("404")) return null;
+      if (error instanceof ReaPrimeApiError && error.status === 404) return null;
       throw error;
     }
   }

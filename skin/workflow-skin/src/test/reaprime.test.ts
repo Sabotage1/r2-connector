@@ -26,6 +26,26 @@ describe("ReaPrimeApi", () => {
   it("throws readable errors for non-2xx responses", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("bad", { status: 500 }));
     const api = new ReaPrimeApi("http://machine:8080");
-    await expect(api.getWorkflow()).rejects.toThrow("GET /api/v1/workflow failed: 500 bad");
+    const request = api.getWorkflow();
+    await expect(request).rejects.toThrow("GET /api/v1/workflow failed: 500 bad");
+    await expect(request).rejects.toMatchObject({ status: 500 });
+  });
+
+  it("returns null for missing KV entries", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("missing", { status: 404 }));
+    const api = new ReaPrimeApi("http://machine:8080");
+    await expect(api.getKv("workflow skin", "settings/key")).resolves.toBeNull();
+    expect(fetch).toHaveBeenCalledWith(
+      "http://machine:8080/api/v1/kv/workflow%20skin/settings%2Fkey",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("throws non-404 KV errors even when the response mentions 404", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("upstream mentioned 404", { status: 500 }));
+    const api = new ReaPrimeApi("http://machine:8080");
+    await expect(api.getKv("workflow-skin", "settings")).rejects.toThrow(
+      "GET /api/v1/kv/workflow-skin/settings failed: 500 upstream mentioned 404"
+    );
   });
 });
