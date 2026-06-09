@@ -22,6 +22,8 @@ export function App() {
           return (
             <button
               key={item.id}
+              aria-current={page === item.id ? "page" : undefined}
+              aria-label={item.label}
               className={page === item.id ? "nav-button active" : "nav-button"}
               onClick={() => setPage(item.id)}
             >
