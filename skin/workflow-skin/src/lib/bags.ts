@@ -22,6 +22,8 @@ export interface BagFilters {
   roastLevel?: string;
 }
 
+const filterKeys = ["roaster", "bean", "country", "region", "process", "roastLevel"] as const;
+
 export function buildBag(bean: Bean, batch: BeanBatch): Bag {
   return {
     id: batch.id,
@@ -41,9 +43,19 @@ export function isValidBag(bag: Bag): boolean {
   return Boolean(bag.roaster?.trim() && bag.bean?.trim() && bag.roastDate?.trim() && bag.process?.trim());
 }
 
+function normalizeFilter(filter: string | undefined): string | undefined {
+  const normalized = filter?.trim();
+  return normalized ? normalized : undefined;
+}
+
+function hasActiveFilters(filters: BagFilters): boolean {
+  return filterKeys.some((key) => Boolean(normalizeFilter(filters[key])));
+}
+
 function matches(value: string | undefined, filter: string | undefined): boolean {
-  if (!filter) return true;
-  return (value ?? "").toLowerCase().includes(filter.toLowerCase());
+  const normalizedFilter = normalizeFilter(filter);
+  if (!normalizedFilter) return true;
+  return (value ?? "").toLowerCase().includes(normalizedFilter.toLowerCase());
 }
 
 export function filterBags(bags: Bag[], filters: BagFilters): Bag[] {
@@ -58,6 +70,7 @@ export function filterBags(bags: Bag[], filters: BagFilters): Bag[] {
 }
 
 export function filterShotsByBagFields(shots: ShotRecord[], bags: Bag[], filters: BagFilters): ShotRecord[] {
+  if (!hasActiveFilters(filters)) return shots;
   const matchingBatchIds = new Set(filterBags(bags, filters).map((bag) => bag.id));
   return shots.filter((shot) => {
     const batchId = shot.workflow.context?.beanBatchId;

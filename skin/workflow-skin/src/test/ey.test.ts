@@ -15,6 +15,7 @@ describe("cleanNumber", () => {
   it("parses finite text numbers and rejects blanks", () => {
     expect(cleanNumber(" 9.5 ")).toBe(9.5);
     expect(cleanNumber("")).toBeNull();
+    expect(cleanNumber("   ")).toBeNull();
     expect(cleanNumber("abc")).toBeNull();
   });
 });

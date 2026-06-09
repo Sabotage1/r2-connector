@@ -1,6 +1,7 @@
 export function cleanNumber(value: string | number | undefined | null): number | null {
-  if (value === undefined || value === null || value === "") return null;
-  const parsed = Number(value);
+  const normalized = typeof value === "string" ? value.trim() : value;
+  if (normalized === undefined || normalized === null || normalized === "") return null;
+  const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
