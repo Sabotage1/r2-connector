@@ -81,6 +81,22 @@ export class ReaPrimeApi {
     });
   }
 
+  async getKv<T>(namespace: string, key: string): Promise<T | null> {
+    try {
+      return await this.request<T>(`/api/v1/kv/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("404")) return null;
+      throw error;
+    }
+  }
+
+  putKv(namespace: string, key: string, value: unknown) {
+    return this.request<void>(`/api/v1/kv/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`, {
+      method: "PUT",
+      body: JSON.stringify(value)
+    });
+  }
+
   listSensors() {
     return this.request<SensorListItem[]>("/api/v1/sensors");
   }
