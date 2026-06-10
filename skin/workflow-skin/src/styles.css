@@ -78,6 +78,192 @@ textarea {
   color: #9daab4;
 }
 
+.workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.panel {
+  border: 1px solid #303a43;
+  background: #151c22;
+  border-radius: 8px;
+  padding: 18px;
+}
+
+.panel h2,
+.bag-form h2 {
+  margin: 0 0 16px;
+  font-size: 18px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.preset-button {
+  display: grid;
+  grid-template-columns: 1fr 44px;
+  border: 1px solid #34414b;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #10161b;
+}
+
+.preset-button button {
+  color: #f5f7f8;
+  background: transparent;
+  border: 0;
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.preset-button button:disabled {
+  color: #7f8b94;
+  cursor: not-allowed;
+}
+
+.preset-button button span,
+.metric-tile span,
+.list-row span,
+.recommendation-row span {
+  color: #9daab4;
+}
+
+.preset-button button span,
+.preset-button button strong {
+  display: block;
+}
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  border-left: 1px solid #34414b !important;
+}
+
+.metric-tile {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.bag-form {
+  border: 1px solid #303a43;
+  border-radius: 8px;
+  padding: 18px;
+  background: #151c22;
+}
+
+.form-header,
+.form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.eyebrow,
+.bag-form label span {
+  display: block;
+  color: #9daab4;
+  text-transform: uppercase;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid #303a43;
+  border-radius: 8px;
+  min-height: 48px;
+  padding: 10px 12px;
+  color: #f5f7f8;
+  background: #12191f;
+}
+
+textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.notes-field {
+  display: block;
+  margin-top: 16px;
+}
+
+.primary-button,
+.ghost-button {
+  min-height: 44px;
+  border-radius: 8px;
+  padding: 0 18px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.primary-button {
+  border: 0;
+  color: #11171c;
+  background: #f5f7f8;
+}
+
+.ghost-button {
+  border: 1px solid #303a43;
+  color: #f5f7f8;
+  background: #151c22;
+}
+
+.list-row,
+.recommendation-row {
+  width: 100%;
+  display: grid;
+  gap: 6px;
+  border: 1px solid #303a43;
+  border-radius: 8px;
+  padding: 12px;
+  color: #f5f7f8;
+  background: #12191f;
+  text-align: left;
+}
+
+.list-row + .list-row,
+.recommendation-row + .recommendation-row {
+  margin-top: 10px;
+}
+
+.recommendation-row {
+  cursor: pointer;
+}
+
+.inline-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #9daab4;
+}
+
+.inline-toggle input {
+  width: auto;
+  min-height: 0;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -105,5 +291,20 @@ textarea {
 
   .nav-button span {
     display: none;
+  }
+
+  .page-surface {
+    padding: 18px;
+  }
+
+  .workflow-grid,
+  .preset-grid,
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-header {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
