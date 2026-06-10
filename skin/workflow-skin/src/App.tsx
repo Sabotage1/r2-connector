@@ -19,10 +19,20 @@ const nav: Array<{ id: Page; label: string; icon: React.ComponentType<{ size?: n
   { id: "settings", label: "Settings", icon: Settings }
 ];
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function dateOnlyToIsoDateTime(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? `${trimmed}T00:00:00Z` : trimmed;
+}
+
 export function App() {
   const [page, setPage] = useState<Page>("brew");
   const [editingSlotIndex, setEditingSlotIndex] = useState<number | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
+  const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const api = useMemo(() => new ReaPrimeApi(), []);
   const data = useReaData(api);
 
@@ -32,10 +42,14 @@ export function App() {
   };
 
   const toggleReview = async (profileId: string, enabled: boolean) => {
-    await data.persistSettings({
-      ...data.settings,
-      reviewEnabledByProfile: { ...data.settings.reviewEnabledByProfile, [profileId]: enabled }
-    });
+    try {
+      await data.persistSettings({
+        ...data.settings,
+        reviewEnabledByProfile: { ...data.settings.reviewEnabledByProfile, [profileId]: enabled }
+      });
+    } catch (error) {
+      setStatus({ type: "error", message: `Could not save profile setting: ${errorMessage(error)}` });
+    }
   };
 
   const assignPresetProfile = async (profile: ProfileRecord) => {
@@ -43,12 +57,16 @@ export function App() {
     const slot = data.settings.presetSlots[editingSlotIndex];
     if (!slot) return;
 
-    await data.persistSettings({
-      ...data.settings,
-      presetSlots: data.settings.presetSlots.map((item, index) => (index === editingSlotIndex ? { ...item, profileId: profile.id } : item))
-    });
-    setStatus(`Preset ${slot.label} set to ${profile.profile.title ?? profile.id}.`);
-    setEditingSlotIndex(null);
+    try {
+      await data.persistSettings({
+        ...data.settings,
+        presetSlots: data.settings.presetSlots.map((item, index) => (index === editingSlotIndex ? { ...item, profileId: profile.id } : item))
+      });
+      setStatus({ type: "success", message: `Preset ${slot.label} set to ${profile.profile.title ?? profile.id}.` });
+      setEditingSlotIndex(null);
+    } catch (error) {
+      setStatus({ type: "error", message: `Could not save preset: ${errorMessage(error)}` });
+    }
   };
 
   const saveBag = async (bag: Bag) => {
@@ -60,12 +78,23 @@ export function App() {
       processing: bag.process?.trim() || undefined,
       notes: bag.notes?.trim() || undefined
     });
-    await api.createBatch(bean.id, {
-      roastDate: bag.roastDate?.trim() || undefined,
-      roastLevel: bag.roastLevel?.trim() || undefined,
-      notes: bag.notes?.trim() || undefined,
-      extras: { workflowSkin: { createdFromBagForm: true } }
-    });
+
+    try {
+      await api.createBatch(bean.id, {
+        roastDate: dateOnlyToIsoDateTime(bag.roastDate),
+        roastLevel: bag.roastLevel?.trim() || undefined,
+        notes: bag.notes?.trim() || undefined,
+        extras: { workflowSkin: { createdFromBagForm: true } }
+      });
+    } catch (error) {
+      try {
+        await api.deleteBean(bean.id);
+      } catch {
+        throw new Error(`Could not save bag: batch creation failed; cleanup also failed. ${errorMessage(error)}`);
+      }
+      throw new Error(`Could not save bag: batch creation failed. ${errorMessage(error)}`);
+    }
+
     await data.refresh();
   };
 
@@ -99,8 +128,12 @@ export function App() {
           </p>
         )}
         {status && (
-          <p className="status-message" role="status" aria-live="polite">
-            {status}
+          <p
+            className={status.type === "error" ? "status-message error" : "status-message"}
+            role={status.type === "error" ? "alert" : "status"}
+            aria-live={status.type === "error" ? "assertive" : "polite"}
+          >
+            {status.message}
           </p>
         )}
         {page === "brew" && (
@@ -111,7 +144,10 @@ export function App() {
             shots={data.shots}
             settings={data.settings}
             onApplyProfile={applyProfile}
-            onEditSlot={setEditingSlotIndex}
+            onEditSlot={(index) => {
+              setStatus(null);
+              setEditingSlotIndex(index);
+            }}
           />
         )}
         {page === "bags" && <BagsPage bags={data.bags} onSaveBag={saveBag} />}
@@ -142,7 +178,9 @@ export function App() {
                     type="button"
                     className="list-row"
                     aria-label={`Use ${profile.profile.title ?? profile.id}`}
-                    onClick={() => void assignPresetProfile(profile)}
+                    onClick={() => {
+                      void assignPresetProfile(profile);
+                    }}
                   >
                     <strong>{profile.profile.title ?? profile.id}</strong>
                     <span>{profile.id === editingSlot.profileId ? "Current profile" : "Use this profile"}</span>

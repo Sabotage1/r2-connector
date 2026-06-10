@@ -83,6 +83,12 @@ export class ReaPrimeApi {
     });
   }
 
+  deleteBean(id: string) {
+    return this.request<void>(`/api/v1/beans/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    });
+  }
+
   listBatches(beanId: string) {
     return this.request<BeanBatch[]>(`/api/v1/beans/${encodeURIComponent(beanId)}/batches?includeArchived=false`);
   }

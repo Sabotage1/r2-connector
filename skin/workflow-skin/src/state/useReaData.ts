@@ -52,8 +52,8 @@ export function useReaData(api: ReaPrimeApi) {
 
   const persistSettings = useCallback(
     async (next: SkinSettings) => {
-      setSettings(next);
       await saveSkinSettings(api, next);
+      setSettings(next);
     },
     [api]
   );

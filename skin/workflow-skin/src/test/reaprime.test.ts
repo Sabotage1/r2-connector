@@ -112,4 +112,18 @@ describe("ReaPrimeApi", () => {
       })
     );
   });
+
+  it("deletes beans through the ReaPrime bean API", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));
+    const api = new ReaPrimeApi("http://machine:8080");
+
+    await expect(api.deleteBean("bean/1")).resolves.toBeUndefined();
+
+    expect(fetch).toHaveBeenCalledWith(
+      "http://machine:8080/api/v1/beans/bean%2F1",
+      expect.objectContaining({
+        method: "DELETE"
+      })
+    );
+  });
 });
