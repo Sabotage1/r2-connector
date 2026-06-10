@@ -99,6 +99,35 @@ function stubClosingWebSocket() {
   vi.stubGlobal("WebSocket", ClosingWebSocket);
 }
 
+function stubMeasurementWebSocket() {
+  let activeSocket: MeasurementWebSocket | null = null;
+  let measurementRanBeforeSocket = false;
+
+  class MeasurementWebSocket {
+    onmessage: ((event: { data: string }) => void) | null = null;
+    onclose: (() => void) | null = null;
+
+    constructor() {
+      activeSocket = this;
+      if (measurementRanBeforeSocket) window.setTimeout(() => this.onclose?.(), 0);
+    }
+
+    close() {}
+  }
+
+  vi.stubGlobal("WebSocket", MeasurementWebSocket);
+
+  return {
+    emitDuringMeasure(tds: number) {
+      if (activeSocket?.onmessage) {
+        activeSocket.onmessage({ data: JSON.stringify({ tds }) });
+        return;
+      }
+      measurementRanBeforeSocket = true;
+    }
+  };
+}
+
 afterEach(() => {
   appMocks.data = null;
   appMocks.executeSensor.mockReset();
@@ -245,6 +274,23 @@ describe("ReviewPage", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Sensor busy");
     expect(appMocks.executeSensor).toHaveBeenCalledWith("sensor-r2", "measure");
+  });
+
+  it("imports an R2 TDS reading emitted during the measurement command", async () => {
+    const socket = stubMeasurementWebSocket();
+    appMocks.data = appData({ sensors: [r2Sensor] });
+    appMocks.executeSensor.mockImplementation(async () => {
+      socket.emitDuringMeasure(9.7);
+      return { status: "ok" };
+    });
+
+    render(<App />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Review" }));
+    await userEvent.click(screen.getByRole("button", { name: "Read from R2" }));
+
+    expect(screen.getByLabelText("TDS")).toHaveValue("9.7");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("shows an error when R2 does not return a TDS reading", async () => {
