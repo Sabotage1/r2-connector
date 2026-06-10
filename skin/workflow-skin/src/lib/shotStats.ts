@@ -10,7 +10,8 @@ export function shotStats(shot: ShotRecord) {
   const timestamps = measurements
     .map((sample) => sample.machine?.timestamp)
     .filter((value): value is string => Boolean(value))
-    .map((value) => new Date(value).getTime());
+    .map((value) => new Date(value).getTime())
+    .filter(Number.isFinite);
   const durationSeconds = timestamps.length >= 2 ? Math.round((timestamps[timestamps.length - 1] - timestamps[0]) / 1000) : null;
   const pressures = measurements.map((sample) => sample.machine?.pressure).filter((value): value is number => typeof value === "number");
   const flows = measurements.map((sample) => sample.machine?.flow).filter((value): value is number => typeof value === "number");

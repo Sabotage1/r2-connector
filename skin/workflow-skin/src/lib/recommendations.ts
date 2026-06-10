@@ -7,6 +7,22 @@ export interface Recommendation {
   reasons: string[];
 }
 
+function validTitle(title: string | undefined): string | undefined {
+  return title?.trim() ? title : undefined;
+}
+
+function displayTitle(profile: ProfileRecord): string {
+  return validTitle(profile.profile.title) ?? profile.id;
+}
+
+function isPreferredEy(ey: number | undefined, preferredEy: [number, number]): boolean {
+  return typeof ey === "number" && ey >= preferredEy[0] && ey <= preferredEy[1];
+}
+
+function isSuccessfulShot(shot: ShotRecord, preferredEy: [number, number]): boolean {
+  return (shot.annotations?.enjoyment ?? 0) >= 7 || isPreferredEy(shot.annotations?.drinkEy, preferredEy);
+}
+
 export function recommendProfiles(input: {
   profiles: ProfileRecord[];
   shots: ShotRecord[];
@@ -14,19 +30,34 @@ export function recommendProfiles(input: {
   bags: Bag[];
   preferredEy: [number, number];
 }): Recommendation[] {
-  const titleToProfile = new Map(input.profiles.map((profile) => [profile.profile.title, profile]));
+  const titleCounts = new Map<string, number>();
+  for (const profile of input.profiles) {
+    const title = validTitle(profile.profile.title);
+    if (title) titleCounts.set(title, (titleCounts.get(title) ?? 0) + 1);
+  }
+  const titleToProfile = new Map(
+    input.profiles
+      .map((profile): [string, ProfileRecord] | undefined => {
+        const title = validTitle(profile.profile.title);
+        return title && titleCounts.get(title) === 1 ? [title, profile] : undefined;
+      })
+      .filter((value): value is [string, ProfileRecord] => Boolean(value))
+  );
   const bagById = new Map(input.bags.map((bag) => [bag.id, bag]));
   const scores = new Map<string, Recommendation>();
+  const matchedShotsByProfileId = new Map<string, ShotRecord[]>();
 
   for (const profile of input.profiles) {
     scores.set(profile.id, { profile, score: 0, reasons: [] });
   }
 
   for (const shot of input.shots) {
-    const profile = titleToProfile.get(shot.workflow.profile?.title);
+    const shotTitle = validTitle(shot.workflow.profile?.title);
+    const profile = shotTitle ? titleToProfile.get(shotTitle) : undefined;
     if (!profile) continue;
     const rec = scores.get(profile.id);
     if (!rec) continue;
+    matchedShotsByProfileId.set(profile.id, [...(matchedShotsByProfileId.get(profile.id) ?? []), shot]);
     const shotBagId = shot.workflow.context?.beanBatchId;
     const shotBag = shotBagId ? bagById.get(shotBagId) : undefined;
     const sameBag = input.selectedBag?.id && shotBagId === input.selectedBag.id;
@@ -34,16 +65,18 @@ export function recommendProfiles(input: {
     const sameCountry = input.selectedBag?.country && shotBag?.country === input.selectedBag.country;
     const ey = shot.annotations?.drinkEy;
     const enjoyment = shot.annotations?.enjoyment;
+    const preferredEy = isPreferredEy(ey, input.preferredEy);
+    const successfulShot = isSuccessfulShot(shot, input.preferredEy);
 
-    if (sameBag) rec.score += 50;
+    if (sameBag && successfulShot) rec.score += 50;
     if (sameProcess) rec.score += 12;
     if (sameCountry) rec.score += 6;
     if (typeof enjoyment === "number") rec.score += enjoyment * 3;
-    if (typeof ey === "number" && ey >= input.preferredEy[0] && ey <= input.preferredEy[1]) rec.score += 15;
+    if (preferredEy) rec.score += 15;
   }
 
   for (const rec of scores.values()) {
-    const matchingShots = input.shots.filter((shot) => shot.workflow.profile?.title === rec.profile.profile.title);
+    const matchingShots = matchedShotsByProfileId.get(rec.profile.id) ?? [];
     const sameBagShots = matchingShots.filter((shot) => shot.workflow.context?.beanBatchId === input.selectedBag?.id);
     const enjoymentValues = matchingShots.map((shot) => shot.annotations?.enjoyment).filter((value): value is number => typeof value === "number");
     if (sameBagShots.length) rec.reasons.push(`${sameBagShots.length} previous shot${sameBagShots.length === 1 ? "" : "s"} on this bag`);
@@ -54,5 +87,5 @@ export function recommendProfiles(input: {
     if (rec.reasons.length === 0) rec.reasons.push("available profile with no matching history");
   }
 
-  return [...scores.values()].sort((a, b) => b.score - a.score || a.profile.profile.title!.localeCompare(b.profile.profile.title!));
+  return [...scores.values()].sort((a, b) => b.score - a.score || displayTitle(a.profile).localeCompare(displayTitle(b.profile)) || a.profile.id.localeCompare(b.profile.id));
 }
