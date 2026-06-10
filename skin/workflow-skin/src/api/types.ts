@@ -126,3 +126,25 @@ export interface SensorListItem {
     commands?: Array<{ id: string; name?: string; description?: string }>;
   };
 }
+
+export interface MachineState {
+  connected?: boolean;
+  ip?: string;
+  ipAddress?: string;
+  machineIp?: string;
+  wifi?: {
+    connected?: boolean;
+    ip?: string;
+    ipAddress?: string;
+    ssid?: string;
+  };
+  network?: {
+    connected?: boolean;
+    ip?: string;
+    ipAddress?: string;
+  };
+  scale?: {
+    connected?: boolean;
+    name?: string;
+  };
+}

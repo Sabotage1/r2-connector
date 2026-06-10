@@ -1,4 +1,4 @@
-import type { Bean, BeanBatch, Grinder, JsonMap, ProfileRecord, SensorListItem, ShotPage, ShotRecord, Workflow } from "./types";
+import type { Bean, BeanBatch, Grinder, JsonMap, MachineState, ProfileRecord, SensorListItem, ShotPage, ShotRecord, Workflow } from "./types";
 
 export interface CreateBeanPayload {
   roaster: string;
@@ -156,5 +156,9 @@ export class ReaPrimeApi {
         body: JSON.stringify({ commandId, params })
       }
     );
+  }
+
+  getMachineState() {
+    return this.request<MachineState>("/api/v1/machine/state");
   }
 }

@@ -22,15 +22,35 @@ The package script creates `skin/workflow-skin/workflow-skin.zip`.
 ## Workflow Checks
 
 1. Assign at least one profile preset on the Brew page.
-2. Create or select a valid bag. A bag is valid only when it has roaster, bean, roast date, and process.
-3. Pull a shot.
-4. Open Review.
-5. Enter dose, yield, and TDS manually to calculate EY.
-6. Save grind size and tasting notes.
-7. Upload to Visualizer when the bundled Visualizer plugin is configured.
+2. Choose a startup default profile on the Profiles page. The skin applies it once after the skin loads with ReaPrime.
+3. Create or select a valid bag. A bag is valid only when it has roaster, bean, roast date, and process.
+4. Pull a shot.
+5. Open Review.
+6. Enter dose, yield, and TDS manually to calculate EY.
+7. Save grind size and tasting notes.
+8. Upload to Visualizer when the bundled Visualizer plugin is configured.
+
+## Milk Workflows
+
+Each profile can be marked as a milk drink on the Profiles page. Milk profiles have predefined steam timers for small, medium, and large jugs.
+
+When a new shot is detected for a milk profile, the skin moves to the Steam page instead of Review. The Steam page shows the profile name, jug-size timer buttons, and start/pause/reset controls. Review is still available from the Steam page.
+
+## Connection Status
+
+The Brew page shows a compact status bar for:
+
+- Machine connection.
+- WiFi/IP address.
+- Scale connection.
+- DiFluid R2 connection when R2 has been set up in Settings.
+
+Green means connected. Red means not connected. R2 stays hidden until Settings has a configured R2 sensor id.
 
 ## DiFluid R2
 
 Manual TDS/EY entry is always available. The R2 button only appears when the running ReaPrime build exposes a DiFluid R2 through `/api/v1/sensors`, with a TDS data channel and a `measure` command.
+
+Use Settings to save the detected R2 as the configured reflectometer. This makes the R2 status appear on the Brew page.
 
 This repository does not add a native DiFluid R2 adapter to ReaPrime itself. If ReaPrime does not expose the R2 as a sensor, use the manual TDS field and the EY calculation still works.

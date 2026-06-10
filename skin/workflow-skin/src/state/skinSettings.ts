@@ -3,10 +3,24 @@ export interface PresetSlot {
   profileId?: string;
 }
 
+export interface SteamTimers {
+  small: number;
+  medium: number;
+  large: number;
+}
+
+export interface ProfileWorkflowSettings {
+  milkBased: boolean;
+  steamTimers: SteamTimers;
+}
+
 export interface SkinSettings {
   presetSlots: PresetSlot[];
   defaultReviewEnabled: boolean;
   reviewEnabledByProfile: Record<string, boolean>;
+  startupProfileId?: string;
+  r2SensorId?: string;
+  profileWorkflows: Record<string, ProfileWorkflowSettings>;
   lastBeanBatchId?: string;
   lastGrinderId?: string;
   preferredEyMin?: number;
@@ -23,15 +37,22 @@ const DEFAULT_PRESET_SLOTS: PresetSlot[] = [
   { label: "Classic" }
 ];
 
+export const DEFAULT_STEAM_TIMERS: SteamTimers = { small: 20, medium: 30, large: 40 };
+
 function clonePresetSlots(slots: PresetSlot[]): PresetSlot[] {
   return slots.map((slot) => ({ ...slot }));
+}
+
+function cloneSteamTimers(timers: SteamTimers): SteamTimers {
+  return { ...timers };
 }
 
 export function createDefaultSkinSettings(): SkinSettings {
   return {
     presetSlots: clonePresetSlots(DEFAULT_PRESET_SLOTS),
     defaultReviewEnabled: true,
-    reviewEnabledByProfile: {}
+    reviewEnabledByProfile: {},
+    profileWorkflows: {}
   };
 }
 
@@ -66,15 +87,47 @@ function normalizeReviewEnabledByProfile(value: unknown): Record<string, boolean
   return Object.fromEntries(Object.entries(value).filter(([, enabled]) => typeof enabled === "boolean")) as Record<string, boolean>;
 }
 
+function normalizeSteamTimer(value: unknown, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 1) return fallback;
+  return Math.round(value);
+}
+
+function normalizeSteamTimers(value: unknown): SteamTimers {
+  if (!isPlainRecord(value)) return cloneSteamTimers(DEFAULT_STEAM_TIMERS);
+  return {
+    small: normalizeSteamTimer(value.small, DEFAULT_STEAM_TIMERS.small),
+    medium: normalizeSteamTimer(value.medium, DEFAULT_STEAM_TIMERS.medium),
+    large: normalizeSteamTimer(value.large, DEFAULT_STEAM_TIMERS.large)
+  };
+}
+
+function normalizeProfileWorkflows(value: unknown): Record<string, ProfileWorkflowSettings> {
+  if (!isPlainRecord(value)) return {};
+
+  const workflows: Record<string, ProfileWorkflowSettings> = {};
+  for (const [profileId, workflow] of Object.entries(value)) {
+    if (!isPlainRecord(workflow) || typeof workflow.milkBased !== "boolean") continue;
+    workflows[profileId] = {
+      milkBased: workflow.milkBased,
+      steamTimers: normalizeSteamTimers(workflow.steamTimers)
+    };
+  }
+
+  return workflows;
+}
+
 export function normalizeSkinSettings(value: unknown): SkinSettings {
   if (!isPlainRecord(value)) return createDefaultSkinSettings();
 
   const settings: SkinSettings = {
     presetSlots: normalizePresetSlots(value.presetSlots),
     defaultReviewEnabled: typeof value.defaultReviewEnabled === "boolean" ? value.defaultReviewEnabled : true,
-    reviewEnabledByProfile: normalizeReviewEnabledByProfile(value.reviewEnabledByProfile)
+    reviewEnabledByProfile: normalizeReviewEnabledByProfile(value.reviewEnabledByProfile),
+    profileWorkflows: normalizeProfileWorkflows(value.profileWorkflows)
   };
 
+  if (typeof value.startupProfileId === "string") settings.startupProfileId = value.startupProfileId;
+  if (typeof value.r2SensorId === "string") settings.r2SensorId = value.r2SensorId;
   if (typeof value.lastBeanBatchId === "string") settings.lastBeanBatchId = value.lastBeanBatchId;
   if (typeof value.lastGrinderId === "string") settings.lastGrinderId = value.lastGrinderId;
   if (typeof value.preferredEyMin === "number" && Number.isFinite(value.preferredEyMin)) settings.preferredEyMin = value.preferredEyMin;
@@ -96,4 +149,16 @@ export function isReviewEnabled(settings: SkinSettings, profileId?: string): boo
   const defaultEnabled = typeof settings.defaultReviewEnabled === "boolean" ? settings.defaultReviewEnabled : true;
   if (!profileId) return defaultEnabled;
   return normalizeReviewEnabledByProfile(settings.reviewEnabledByProfile)[profileId] ?? defaultEnabled;
+}
+
+export function profileWorkflowFor(settings: SkinSettings, profileId?: string): ProfileWorkflowSettings {
+  if (!profileId) return { milkBased: false, steamTimers: cloneSteamTimers(DEFAULT_STEAM_TIMERS) };
+  const workflow = settings.profileWorkflows[profileId];
+  return workflow
+    ? { milkBased: workflow.milkBased, steamTimers: cloneSteamTimers(workflow.steamTimers) }
+    : { milkBased: false, steamTimers: cloneSteamTimers(DEFAULT_STEAM_TIMERS) };
+}
+
+export function isMilkProfile(settings: SkinSettings, profileId?: string): boolean {
+  return profileWorkflowFor(settings, profileId).milkBased;
 }

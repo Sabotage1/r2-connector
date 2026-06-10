@@ -1,10 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
-import { defaultSkinSettings, isReviewEnabled, loadSkinSettings, saveSkinSettings } from "../state/skinSettings";
+import {
+  DEFAULT_STEAM_TIMERS,
+  defaultSkinSettings,
+  isMilkProfile,
+  isReviewEnabled,
+  loadSkinSettings,
+  profileWorkflowFor,
+  saveSkinSettings
+} from "../state/skinSettings";
 
 describe("skin settings", () => {
   it("has post-shot review enabled by default", () => {
     expect(defaultSkinSettings.reviewEnabledByProfile).toEqual({});
     expect(defaultSkinSettings.defaultReviewEnabled).toBe(true);
+    expect(defaultSkinSettings.profileWorkflows).toEqual({});
+    expect(defaultSkinSettings.startupProfileId).toBeUndefined();
+    expect(defaultSkinSettings.r2SensorId).toBeUndefined();
   });
 
   it("loads default settings when KV is missing", async () => {
@@ -22,6 +33,12 @@ describe("skin settings", () => {
         presetSlots: [{ label: "Valid" }, { label: 7 }],
         defaultReviewEnabled: "yes",
         reviewEnabledByProfile: { p1: false, p2: true, stale: "no" },
+        startupProfileId: "p2",
+        r2SensorId: "sensor-r2",
+        profileWorkflows: {
+          p2: { milkBased: true, steamTimers: { small: 18, medium: 28, large: 42 } },
+          bad: { milkBased: "yes", steamTimers: { small: "soon" } }
+        },
         lastBeanBatchId: 12,
         lastGrinderId: "g1",
         preferredEyMin: 18.5,
@@ -36,6 +53,11 @@ describe("skin settings", () => {
     expect(settings.presetSlots).not.toBe(defaultSkinSettings.presetSlots);
     expect(settings.defaultReviewEnabled).toBe(true);
     expect(settings.reviewEnabledByProfile).toEqual({ p1: false, p2: true });
+    expect(settings.startupProfileId).toBe("p2");
+    expect(settings.r2SensorId).toBe("sensor-r2");
+    expect(settings.profileWorkflows).toEqual({
+      p2: { milkBased: true, steamTimers: { small: 18, medium: 28, large: 42 } }
+    });
     expect(settings.lastBeanBatchId).toBeUndefined();
     expect(settings.lastGrinderId).toBe("g1");
     expect(settings.preferredEyMin).toBe(18.5);
@@ -80,5 +102,22 @@ describe("skin settings", () => {
   it("uses the default review setting when profileId is missing", () => {
     expect(isReviewEnabled({ ...defaultSkinSettings, defaultReviewEnabled: false })).toBe(false);
     expect(isReviewEnabled({ ...defaultSkinSettings, defaultReviewEnabled: true })).toBe(true);
+  });
+
+  it("returns default steam workflow for profiles without milk settings", () => {
+    expect(profileWorkflowFor(defaultSkinSettings, "p1")).toEqual({ milkBased: false, steamTimers: DEFAULT_STEAM_TIMERS });
+    expect(isMilkProfile(defaultSkinSettings, "p1")).toBe(false);
+  });
+
+  it("returns profile-specific milk workflow settings", () => {
+    const settings = {
+      ...defaultSkinSettings,
+      profileWorkflows: {
+        p1: { milkBased: true, steamTimers: { small: 22, medium: 32, large: 46 } }
+      }
+    };
+
+    expect(profileWorkflowFor(settings, "p1")).toEqual({ milkBased: true, steamTimers: { small: 22, medium: 32, large: 46 } });
+    expect(isMilkProfile(settings, "p1")).toBe(true);
   });
 });

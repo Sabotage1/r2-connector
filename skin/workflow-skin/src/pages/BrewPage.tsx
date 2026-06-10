@@ -2,8 +2,27 @@ import type { ProfileRecord, ShotRecord, Workflow } from "../api/types";
 import { MetricTile } from "../components/MetricTile";
 import { ProfilePresetGrid } from "../components/ProfilePresetGrid";
 import type { Bag } from "../lib/bags";
+import type { ConnectivityStatus } from "../lib/connectivity";
 import { recommendProfiles } from "../lib/recommendations";
 import type { SkinSettings } from "../state/skinSettings";
+
+function StatusDot({ connected }: { connected: boolean }) {
+  return <span className={connected ? "status-dot connected" : "status-dot disconnected"} aria-hidden="true" />;
+}
+
+export function StatusBar({ statuses }: { statuses: ConnectivityStatus[] }) {
+  return (
+    <section className="status-bar" aria-label="Connection status">
+      {statuses.map((status) => (
+        <div className="status-chip" key={status.id}>
+          <StatusDot connected={status.connected} />
+          <span>{status.label}</span>
+          <strong>{status.detail}</strong>
+        </div>
+      ))}
+    </section>
+  );
+}
 
 export function BrewPage({
   workflow,
@@ -11,6 +30,7 @@ export function BrewPage({
   bags,
   shots,
   settings,
+  statuses,
   onApplyProfile,
   onEditSlot
 }: {
@@ -19,6 +39,7 @@ export function BrewPage({
   bags: Bag[];
   shots: ShotRecord[];
   settings: SkinSettings;
+  statuses: ConnectivityStatus[];
   onApplyProfile: (profile: ProfileRecord) => void;
   onEditSlot: (index: number) => void;
 }) {
@@ -33,6 +54,9 @@ export function BrewPage({
 
   return (
     <div className="workflow-grid">
+      <div className="wide">
+        <StatusBar statuses={statuses} />
+      </div>
       <section className="panel wide">
         <h2>Presets</h2>
         <ProfilePresetGrid slots={settings.presetSlots} profiles={profiles} onApply={onApplyProfile} onEditSlot={onEditSlot} />

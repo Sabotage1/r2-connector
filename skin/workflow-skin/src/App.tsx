@@ -1,22 +1,28 @@
-import { Activity, Coffee, History, PackageOpen, Settings, SlidersHorizontal } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Activity, Coffee, Flame, History, PackageOpen, Settings, SlidersHorizontal } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiBaseUrl, ReaPrimeApi } from "./api/reaprime";
 import { findDifluidR2Sensor, r2SocketUrl } from "./api/sensors";
 import type { ProfileRecord, ShotAnnotations } from "./api/types";
 import { uploadShotToVisualizer } from "./api/visualizer";
 import type { Bag } from "./lib/bags";
+import { buildConnectivityStatuses } from "./lib/connectivity";
+import { postShotPageForShot, selectedProfileIdFromWorkflow } from "./lib/workflowRouting";
 import { BagsPage } from "./pages/BagsPage";
 import { BrewPage } from "./pages/BrewPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { ProfilesPage } from "./pages/ProfilesPage";
 import { ReviewPage } from "./pages/ReviewPage";
+import { SettingsPage } from "./pages/SettingsPage";
+import { SteamPage } from "./pages/SteamPage";
+import { profileWorkflowFor, type ProfileWorkflowSettings, type SkinSettings } from "./state/skinSettings";
 import { useReaData } from "./state/useReaData";
 
-type Page = "brew" | "review" | "bags" | "profiles" | "history" | "settings";
+type Page = "brew" | "review" | "steam" | "bags" | "profiles" | "history" | "settings";
 
 const nav: Array<{ id: Page; label: string; icon: React.ComponentType<{ size?: number }> }> = [
   { id: "brew", label: "Brew", icon: Coffee },
   { id: "review", label: "Review", icon: Activity },
+  { id: "steam", label: "Steam", icon: Flame },
   { id: "bags", label: "Bags", icon: PackageOpen },
   { id: "profiles", label: "Profiles", icon: SlidersHorizontal },
   { id: "history", label: "History", icon: History },
@@ -94,15 +100,70 @@ export function App() {
   const [page, setPage] = useState<Page>("brew");
   const [editingSlotIndex, setEditingSlotIndex] = useState<number | null>(null);
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const startupAppliedRef = useRef(false);
+  const knownLatestShotIdRef = useRef<string | null | undefined>(undefined);
   const api = useMemo(() => new ReaPrimeApi(), []);
   const data = useReaData(api);
   const latestShot = data.shots[0] ?? null;
   const r2Sensor = findDifluidR2Sensor(data.sensors);
+  const selectedProfileId = selectedProfileIdFromWorkflow(data.workflow, data.profiles);
+  const activeProfile = data.profiles.find((profile) => profile.id === selectedProfileId);
+  const activeProfileWorkflow = profileWorkflowFor(data.settings, selectedProfileId);
+  const statuses = useMemo(
+    () =>
+      buildConnectivityStatuses({
+        apiHost: new URL(apiBaseUrl()).hostname,
+        machineState: data.machineState,
+        sensors: data.sensors,
+        r2SensorId: data.settings.r2SensorId,
+        r2Sensor
+      }),
+    [data.machineState, data.sensors, data.settings.r2SensorId, r2Sensor]
+  );
 
   const applyProfile = async (profile: ProfileRecord) => {
-    await api.updateWorkflow({ profile: profile.profile });
+    const extras = data.workflow.context?.extras ?? {};
+    const workflowSkin = extras.workflowSkin && typeof extras.workflowSkin === "object" && !Array.isArray(extras.workflowSkin) ? extras.workflowSkin : {};
+    await api.updateWorkflow({
+      profile: profile.profile,
+      context: {
+        ...data.workflow.context,
+        extras: {
+          ...extras,
+          workflowSkin: {
+            ...workflowSkin,
+            selectedProfileId: profile.id
+          }
+        }
+      }
+    });
     await data.refresh();
   };
+
+  useEffect(() => {
+    if (startupAppliedRef.current || !data.loaded || !data.settings.startupProfileId) return;
+    const startupProfile = data.profiles.find((profile) => profile.id === data.settings.startupProfileId);
+    if (!startupProfile) return;
+    startupAppliedRef.current = true;
+    applyProfile(startupProfile).catch((error) => {
+      setStatus({ type: "error", message: `Could not apply startup profile: ${errorMessage(error)}` });
+    });
+  }, [data.loaded, data.settings.startupProfileId, data.profiles]);
+
+  useEffect(() => {
+    if (!data.loaded) return;
+    const latestShotId = latestShot?.id ?? null;
+    if (knownLatestShotIdRef.current === undefined) {
+      knownLatestShotIdRef.current = latestShotId;
+      return;
+    }
+    if (knownLatestShotIdRef.current === latestShotId) return;
+    knownLatestShotIdRef.current = latestShotId;
+    if (!latestShot) return;
+
+    const nextPage = postShotPageForShot(latestShot, data.settings, data.profiles);
+    if (nextPage) setPage(nextPage);
+  }, [data.loaded, latestShot, data.settings, data.profiles]);
 
   const toggleReview = async (profileId: string, enabled: boolean) => {
     try {
@@ -113,6 +174,26 @@ export function App() {
     } catch (error) {
       setStatus({ type: "error", message: `Could not save profile setting: ${errorMessage(error)}` });
     }
+  };
+
+  const persistSettings = async (next: SkinSettings, successMessage?: string) => {
+    try {
+      await data.persistSettings(next);
+      if (successMessage) setStatus({ type: "success", message: successMessage });
+    } catch (error) {
+      setStatus({ type: "error", message: `Could not save setting: ${errorMessage(error)}` });
+    }
+  };
+
+  const setStartupProfile = async (profileId?: string) => {
+    await persistSettings({ ...data.settings, startupProfileId: profileId }, "Startup profile saved.");
+  };
+
+  const updateProfileWorkflow = async (profileId: string, workflow: ProfileWorkflowSettings) => {
+    await persistSettings({
+      ...data.settings,
+      profileWorkflows: { ...data.settings.profileWorkflows, [profileId]: workflow }
+    });
   };
 
   const assignPresetProfile = async (profile: ProfileRecord) => {
@@ -248,6 +329,7 @@ export function App() {
             bags={data.bags}
             shots={data.shots}
             settings={data.settings}
+            statuses={statuses}
             onApplyProfile={applyProfile}
             onEditSlot={(index) => {
               setStatus(null);
@@ -272,14 +354,26 @@ export function App() {
               <p className="muted">Pull a shot to unlock post-shot review.</p>
             </div>
           ))}
+        {page === "steam" && (
+          <SteamPage
+            profileTitle={activeProfile?.profile.title ?? data.workflow.profile?.title ?? "Milk profile"}
+            timers={activeProfileWorkflow.steamTimers}
+            onReview={() => setPage("review")}
+          />
+        )}
         {page === "bags" && <BagsPage bags={data.bags} onSaveBag={saveBag} />}
-        {page === "profiles" && <ProfilesPage profiles={data.profiles} settings={data.settings} onToggleReview={toggleReview} />}
+        {page === "profiles" && (
+          <ProfilesPage
+            profiles={data.profiles}
+            settings={data.settings}
+            onToggleReview={toggleReview}
+            onSetStartupProfile={setStartupProfile}
+            onUpdateProfileWorkflow={updateProfileWorkflow}
+          />
+        )}
         {page === "history" && <HistoryPage shots={data.shots} bags={data.bags} />}
         {page === "settings" && (
-          <div className="panel wide">
-            <h2>Settings</h2>
-            <p className="muted">Workflow skin settings are stored in ReaPrime.</p>
-          </div>
+          <SettingsPage settings={data.settings} r2Sensor={r2Sensor} onUpdateSettings={(next) => void persistSettings(next, "Settings saved.")} />
         )}
         {editingSlot && (
           <div className="preset-editor" role="dialog" aria-modal="true" aria-labelledby="preset-editor-title">

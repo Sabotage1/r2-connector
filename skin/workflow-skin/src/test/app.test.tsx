@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
@@ -18,18 +18,28 @@ function mockReaFetch(
   options: {
     failSettingsPut?: boolean;
     failBatchCreate?: boolean;
+    workflow?: unknown;
   } = {}
 ) {
   let savedSettings = initialSettings;
+  let workflow = options.workflow ?? { context: { targetDoseWeight: 18, targetYield: 36 } };
   const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init = {}) => {
     const url = new URL(String(input));
     const method = init.method ?? "GET";
 
     if (method === "GET" && url.pathname === "/api/v1/profiles") return responseJson(profiles);
-    if (method === "GET" && url.pathname === "/api/v1/workflow") return responseJson({ context: { targetDoseWeight: 18, targetYield: 36 } });
+    if (method === "GET" && url.pathname === "/api/v1/workflow") return responseJson(workflow);
+    if (method === "PUT" && url.pathname === "/api/v1/workflow") {
+      workflow = JSON.parse(String(init.body));
+      return responseJson(workflow);
+    }
+    if (method === "GET" && url.pathname === "/api/v1/machine/state") {
+      return responseJson({ connected: true, wifi: { connected: true, ipAddress: "192.168.1.20" } });
+    }
     if (method === "GET" && url.pathname === "/api/v1/beans") return responseJson([]);
     if (method === "GET" && url.pathname === "/api/v1/grinders") return responseJson([]);
     if (method === "GET" && url.pathname === "/api/v1/shots") return responseJson({ items: [], total: 0, limit: 100, offset: 0 });
+    if (method === "GET" && url.pathname === "/api/v1/sensors") return responseJson([]);
     if (method === "GET" && url.pathname === "/api/v1/kv/workflow-skin/settings") return responseJson(savedSettings);
     if (method === "PUT" && url.pathname === "/api/v1/kv/workflow-skin/settings") {
       if (options.failSettingsPut) return Promise.resolve(new Response("kv unavailable", { status: 500 }));
@@ -50,6 +60,9 @@ function mockReaFetch(
     fetchMock,
     get savedSettings() {
       return savedSettings;
+    },
+    get workflow() {
+      return workflow;
     }
   };
 }
@@ -62,7 +75,8 @@ const initialSettings: SkinSettings = {
     { label: "Classic" }
   ],
   defaultReviewEnabled: true,
-  reviewEnabledByProfile: {}
+  reviewEnabledByProfile: {},
+  profileWorkflows: {}
 };
 
 describe("App shell", () => {
@@ -97,6 +111,22 @@ describe("App shell", () => {
     expect(await screen.findByRole("button", { name: "Light Classic" })).toBeInTheDocument();
     expect(fetchState.savedSettings.presetSlots[0]).toEqual({ label: "Light", profileId: "p2" });
     expect(screen.queryByRole("dialog", { name: "Edit Light preset" })).not.toBeInTheDocument();
+  });
+
+  it("applies the configured startup profile after loading", async () => {
+    const fetchState = mockReaFetch({ ...initialSettings, startupProfileId: "p2" });
+    render(<App />);
+
+    await waitFor(() => {
+      expect(fetchState.workflow).toEqual(
+        expect.objectContaining({
+          profile: profiles[1].profile,
+          context: expect.objectContaining({
+            extras: { workflowSkin: { selectedProfileId: "p2" } }
+          })
+        })
+      );
+    });
   });
 
   it("keeps preset editing open when saving the slot fails", async () => {

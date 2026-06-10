@@ -1,9 +1,11 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ProfilePresetGrid } from "../components/ProfilePresetGrid";
 import { BagsPage } from "../pages/BagsPage";
+import { ProfilesPage } from "../pages/ProfilesPage";
 import type { ProfileRecord } from "../api/types";
+import { defaultSkinSettings } from "../state/skinSettings";
 
 const profiles: ProfileRecord[] = [
   { id: "p1", profile: { title: "Blooming" } },
@@ -78,5 +80,50 @@ describe("BagsPage", () => {
 
     expect(onSaveBag).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent("Roaster, bean, roast date, and process are required.");
+  });
+});
+
+describe("ProfilesPage", () => {
+  it("selects a startup default profile", async () => {
+    const onSetStartupProfile = vi.fn();
+    render(
+      <ProfilesPage
+        profiles={profiles}
+        settings={defaultSkinSettings}
+        onToggleReview={vi.fn()}
+        onSetStartupProfile={onSetStartupProfile}
+        onUpdateProfileWorkflow={vi.fn()}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("radio", { name: /Use Blooming at startup/i }));
+
+    expect(onSetStartupProfile).toHaveBeenCalledWith("p1");
+  });
+
+  it("edits milk workflow timers for a profile", async () => {
+    const onUpdateProfileWorkflow = vi.fn();
+    render(
+      <ProfilesPage
+        profiles={profiles}
+        settings={{
+          ...defaultSkinSettings,
+          profileWorkflows: {
+            p1: { milkBased: true, steamTimers: { small: 20, medium: 30, large: 40 } }
+          }
+        }}
+        onToggleReview={vi.fn()}
+        onSetStartupProfile={vi.fn()}
+        onUpdateProfileWorkflow={onUpdateProfileWorkflow}
+      />
+    );
+
+    const row = screen.getByRole("group", { name: "Blooming profile workflow" });
+    fireEvent.change(within(row).getByLabelText("Medium jug seconds"), { target: { value: "36" } });
+
+    expect(onUpdateProfileWorkflow).toHaveBeenLastCalledWith("p1", {
+      milkBased: true,
+      steamTimers: { small: 20, medium: 36, large: 40 }
+    });
   });
 });

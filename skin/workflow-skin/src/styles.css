@@ -157,6 +157,52 @@ textarea {
   padding: 10px 0;
 }
 
+.status-bar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.status-chip {
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 4px 8px;
+  border: 1px solid #303a43;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #151c22;
+}
+
+.status-chip span:not(.status-dot) {
+  color: #9daab4;
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.status-chip strong {
+  grid-column: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.status-dot.connected {
+  background: #5bd179;
+}
+
+.status-dot.disconnected {
+  background: #ff5f5f;
+}
+
 .shot-graph {
   display: block;
   width: 100%;
@@ -234,6 +280,10 @@ textarea {
 .primary-button,
 .ghost-button {
   min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   border-radius: 8px;
   padding: 0 18px;
   font-weight: 800;
@@ -244,6 +294,12 @@ textarea {
   border: 0;
   color: #11171c;
   background: #f5f7f8;
+}
+
+.primary-button:disabled {
+  color: #7f8b94;
+  background: #263039;
+  cursor: not-allowed;
 }
 
 .ghost-button {
@@ -284,6 +340,67 @@ textarea {
 .inline-toggle input {
   width: auto;
   min-height: 0;
+}
+
+.profile-workflow-row {
+  gap: 12px;
+}
+
+.profile-workflow-controls,
+.steam-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.timer-grid,
+.jug-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.timer-grid label {
+  display: grid;
+  gap: 6px;
+  color: #9daab4;
+  font-weight: 800;
+}
+
+.steam-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.steam-timer {
+  font-size: 64px;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.jug-button {
+  min-height: 88px;
+  display: grid;
+  gap: 8px;
+  border: 1px solid #34414b;
+  border-radius: 8px;
+  padding: 12px;
+  color: #f5f7f8;
+  background: #10161b;
+  text-align: left;
+  cursor: pointer;
+}
+
+.jug-button.active,
+.jug-button:hover {
+  border-color: #5bd179;
+  background: #16251d;
+}
+
+.jug-button span {
+  color: #9daab4;
 }
 
 .status-message {
@@ -332,7 +449,7 @@ textarea {
   .side-nav {
     order: 2;
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(7, 1fr);
     gap: 6px;
     padding: 8px;
     border-right: 0;
@@ -358,8 +475,15 @@ textarea {
 
   .workflow-grid,
   .preset-grid,
-  .form-grid {
+  .form-grid,
+  .status-bar,
+  .timer-grid,
+  .jug-grid {
     grid-template-columns: 1fr;
+  }
+
+  .steam-timer {
+    font-size: 52px;
   }
 
   .form-header {
