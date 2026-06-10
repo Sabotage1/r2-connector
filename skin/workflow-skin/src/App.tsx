@@ -161,10 +161,9 @@ export function App() {
     await data.refresh();
   };
 
-  const saveReview = async (annotations: ShotAnnotations) => {
-    if (!latestShot) return;
+  const saveReview = async (shotId: string, annotations: ShotAnnotations) => {
     try {
-      await api.updateShot(latestShot.id, { annotations });
+      await api.updateShot(shotId, { annotations });
       await data.refresh();
       setStatus({ type: "success", message: "Review saved." });
     } catch (error) {
@@ -249,6 +248,7 @@ export function App() {
         {page === "review" &&
           (latestShot ? (
             <ReviewPage
+              key={latestShot.id}
               shot={latestShot}
               previousShots={data.shots}
               onSaveAnnotations={saveReview}

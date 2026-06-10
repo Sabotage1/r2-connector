@@ -18,7 +18,7 @@ export function ReviewPage({
 }: {
   shot: ShotRecord;
   previousShots: ShotRecord[];
-  onSaveAnnotations: (annotations: ShotAnnotations) => Promise<void> | void;
+  onSaveAnnotations: (shotId: string, annotations: ShotAnnotations) => Promise<void> | void;
   onUploadVisualizer: () => Promise<void> | void;
   r2Sensor: SensorListItem | null;
   onReadR2: () => Promise<number | null> | number | null;
@@ -46,21 +46,24 @@ export function ReviewPage({
 
   async function save() {
     const workflowSkin = (shot.annotations?.extras?.workflowSkin as Record<string, unknown> | undefined) ?? {};
-    await onSaveAnnotations({
-      ...shot.annotations,
-      actualDoseWeight: cleanNumber(doseText) ?? undefined,
-      actualYield: cleanNumber(yieldText) ?? undefined,
-      drinkTds: cleanNumber(tdsText) ?? undefined,
-      drinkEy: ey ?? undefined,
-      espressoNotes: notes,
-      extras: {
-        ...shot.annotations?.extras,
-        workflowSkin: {
-          ...workflowSkin,
-          grindSize
+    await onSaveAnnotations(
+      shot.id,
+      {
+        ...shot.annotations,
+        actualDoseWeight: cleanNumber(doseText) ?? undefined,
+        actualYield: cleanNumber(yieldText) ?? undefined,
+        drinkTds: cleanNumber(tdsText) ?? undefined,
+        drinkEy: ey ?? undefined,
+        espressoNotes: notes,
+        extras: {
+          ...shot.annotations?.extras,
+          workflowSkin: {
+            ...workflowSkin,
+            grindSize
+          }
         }
       }
-    });
+    );
   }
 
   async function readR2() {
