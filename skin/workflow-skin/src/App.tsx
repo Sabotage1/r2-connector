@@ -1,18 +1,22 @@
-import { Coffee, History, PackageOpen, Settings, SlidersHorizontal } from "lucide-react";
+import { Activity, Coffee, History, PackageOpen, Settings, SlidersHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
-import { ReaPrimeApi } from "./api/reaprime";
-import type { ProfileRecord } from "./api/types";
+import { apiBaseUrl, ReaPrimeApi } from "./api/reaprime";
+import { findDifluidR2Sensor, r2SocketUrl } from "./api/sensors";
+import type { ProfileRecord, ShotAnnotations } from "./api/types";
+import { uploadShotToVisualizer } from "./api/visualizer";
 import type { Bag } from "./lib/bags";
 import { BagsPage } from "./pages/BagsPage";
 import { BrewPage } from "./pages/BrewPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { ProfilesPage } from "./pages/ProfilesPage";
+import { ReviewPage } from "./pages/ReviewPage";
 import { useReaData } from "./state/useReaData";
 
-type Page = "brew" | "bags" | "profiles" | "history" | "settings";
+type Page = "brew" | "review" | "bags" | "profiles" | "history" | "settings";
 
 const nav: Array<{ id: Page; label: string; icon: React.ComponentType<{ size?: number }> }> = [
   { id: "brew", label: "Brew", icon: Coffee },
+  { id: "review", label: "Review", icon: Activity },
   { id: "bags", label: "Bags", icon: PackageOpen },
   { id: "profiles", label: "Profiles", icon: SlidersHorizontal },
   { id: "history", label: "History", icon: History },
@@ -29,12 +33,71 @@ function dateOnlyToIsoDateTime(value: string | undefined): string | undefined {
   return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? `${trimmed}T00:00:00Z` : trimmed;
 }
 
+function extractNumericTds(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (!value || typeof value !== "object") return null;
+  if ("key" in value && String((value as { key?: unknown }).key).toLowerCase() === "tds") {
+    const tds = extractNumericTds((value as { value?: unknown }).value);
+    if (tds !== null) return tds;
+  }
+  if ("tds" in value) {
+    const tds = extractNumericTds((value as { tds?: unknown }).tds);
+    if (tds !== null) return tds;
+  }
+  if ("data" in value) {
+    const tds = extractNumericTds((value as { data?: unknown }).data);
+    if (tds !== null) return tds;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const tds = extractNumericTds(item);
+      if (tds !== null) return tds;
+    }
+  }
+  return null;
+}
+
+function waitForR2Tds(apiBase: string, sensorId: string): Promise<number | null> {
+  if (typeof WebSocket === "undefined") return Promise.resolve(null);
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const socket = new WebSocket(r2SocketUrl(apiBase, sensorId));
+    const timeout = window.setTimeout(() => finish(null), 2500);
+
+    function finish(value: number | null) {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      socket.close();
+      resolve(value);
+    }
+
+    socket.onmessage = (event) => {
+      try {
+        const tds = extractNumericTds(JSON.parse(String(event.data)));
+        if (tds !== null) finish(tds);
+      } catch {
+        return;
+      }
+    };
+    socket.onerror = () => finish(null);
+    socket.onclose = () => finish(null);
+  });
+}
+
 export function App() {
   const [page, setPage] = useState<Page>("brew");
   const [editingSlotIndex, setEditingSlotIndex] = useState<number | null>(null);
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const api = useMemo(() => new ReaPrimeApi(), []);
   const data = useReaData(api);
+  const latestShot = data.shots[0] ?? null;
+  const r2Sensor = findDifluidR2Sensor(data.sensors);
 
   const applyProfile = async (profile: ProfileRecord) => {
     await api.updateWorkflow({ profile: profile.profile });
@@ -98,6 +161,39 @@ export function App() {
     await data.refresh();
   };
 
+  const saveReview = async (annotations: ShotAnnotations) => {
+    if (!latestShot) return;
+    try {
+      await api.updateShot(latestShot.id, { annotations });
+      await data.refresh();
+      setStatus({ type: "success", message: "Review saved." });
+    } catch (error) {
+      setStatus({ type: "error", message: `Could not save review: ${errorMessage(error)}` });
+    }
+  };
+
+  const uploadReviewToVisualizer = async () => {
+    if (!latestShot) return;
+    try {
+      await uploadShotToVisualizer({ baseUrl: apiBaseUrl() }, await api.getShot(latestShot.id));
+      setStatus({ type: "success", message: "Shot uploaded to Visualizer." });
+    } catch (error) {
+      setStatus({ type: "error", message: `Could not upload to Visualizer: ${errorMessage(error)}` });
+    }
+  };
+
+  const readR2 = async () => {
+    if (!r2Sensor) return null;
+    try {
+      const tdsPromise = waitForR2Tds(apiBaseUrl(), r2Sensor.id);
+      await api.executeSensor(r2Sensor.id, "measure");
+      return await tdsPromise;
+    } catch (error) {
+      setStatus({ type: "error", message: `Could not read R2: ${errorMessage(error)}` });
+      return null;
+    }
+  };
+
   const editingSlot = editingSlotIndex === null ? undefined : data.settings.presetSlots[editingSlotIndex];
 
   return (
@@ -150,6 +246,22 @@ export function App() {
             }}
           />
         )}
+        {page === "review" &&
+          (latestShot ? (
+            <ReviewPage
+              shot={latestShot}
+              previousShots={data.shots}
+              onSaveAnnotations={saveReview}
+              onUploadVisualizer={uploadReviewToVisualizer}
+              r2Sensor={r2Sensor}
+              onReadR2={readR2}
+            />
+          ) : (
+            <div className="panel wide">
+              <h2>Shot Review</h2>
+              <p className="muted">Pull a shot to unlock post-shot review.</p>
+            </div>
+          ))}
         {page === "bags" && <BagsPage bags={data.bags} onSaveBag={saveBag} />}
         {page === "profiles" && <ProfilesPage profiles={data.profiles} settings={data.settings} onToggleReview={toggleReview} />}
         {page === "history" && <HistoryPage shots={data.shots} bags={data.bags} />}

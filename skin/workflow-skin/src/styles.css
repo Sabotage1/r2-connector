@@ -157,6 +157,28 @@ textarea {
   padding: 10px 0;
 }
 
+.shot-graph {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+}
+
+.review-form {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.review-form label {
+  display: grid;
+  gap: 8px;
+  color: #cfd7dd;
+}
+
+.review-actions {
+  margin-top: 14px;
+}
+
 .bag-form {
   border: 1px solid #303a43;
   border-radius: 8px;
@@ -310,7 +332,7 @@ textarea {
   .side-nav {
     order: 2;
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     gap: 6px;
     padding: 8px;
     border-right: 0;
