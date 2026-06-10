@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import type { SensorListItem, ShotAnnotations, ShotRecord } from "../api/types";
 import { ShotGraph } from "../components/ShotGraph";
 import { calculateEy, cleanNumber } from "../lib/ey";
-import { grindSizeFromShot, previousFiveForBag, shotStats } from "../lib/shotStats";
+import { grindSizeFromShot, previousFiveForBag, shotContext, shotStats } from "../lib/shotStats";
 
 function formatStat(value: number | null, unit: string): string {
   return value == null ? "—" : `${value}${unit}`;
@@ -24,8 +24,9 @@ export function ReviewPage({
   onReadR2: () => Promise<number | null> | number | null;
 }) {
   const stats = shotStats(shot);
+  const context = shotContext(shot);
   const [tdsText, setTdsText] = useState(String(shot.annotations?.drinkTds ?? ""));
-  const [doseText, setDoseText] = useState(String(shot.annotations?.actualDoseWeight ?? shot.workflow.context?.targetDoseWeight ?? ""));
+  const [doseText, setDoseText] = useState(String(shot.annotations?.actualDoseWeight ?? context?.targetDoseWeight ?? ""));
   const [yieldText, setYieldText] = useState(String(shot.annotations?.actualYield ?? stats.finalYield ?? ""));
   const [grindSize, setGrindSize] = useState(grindSizeFromShot(shot) ?? "");
   const [notes, setNotes] = useState(shot.annotations?.espressoNotes ?? "");
@@ -40,9 +41,7 @@ export function ReviewPage({
     [doseText, yieldText, tdsText]
   );
 
-  const sameBagShots = shot.workflow.context?.beanBatchId
-    ? previousFiveForBag(previousShots, shot.workflow.context.beanBatchId, shot.id)
-    : [];
+  const sameBagShots = context?.beanBatchId ? previousFiveForBag(previousShots, context.beanBatchId, shot.id) : [];
 
   async function save() {
     const workflowSkin = (shot.annotations?.extras?.workflowSkin as Record<string, unknown> | undefined) ?? {};

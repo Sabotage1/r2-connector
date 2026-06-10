@@ -13,7 +13,8 @@ export function findDifluidR2Sensor(sensors: SensorListItem[]): SensorListItem |
     sensors.find((sensor) => {
       const name = `${sensor.info.vendor} ${sensor.info.name}`.toLowerCase();
       const hasTds = sensor.info.data.some((channel) => channel.key.toLowerCase() === "tds");
-      return name.includes("difluid") && name.includes("r2") && hasTds;
+      const hasMeasureCommand = sensor.info.commands?.some((command) => command.id === "measure") ?? false;
+      return name.includes("difluid") && name.includes("r2") && hasTds && hasMeasureCommand;
     }) ?? null
   );
 }

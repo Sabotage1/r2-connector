@@ -184,9 +184,18 @@ export function App() {
   const readR2 = async () => {
     if (!r2Sensor) return null;
     try {
-      const tdsPromise = waitForR2Tds(apiBaseUrl(), r2Sensor.id);
-      await api.executeSensor(r2Sensor.id, "measure");
-      return await tdsPromise;
+      const result = await api.executeSensor(r2Sensor.id, "measure");
+      if (result.status === "error") {
+        setStatus({ type: "error", message: `Could not read R2: ${result.message ?? "Measurement command failed."}` });
+        return null;
+      }
+
+      const tds = await waitForR2Tds(apiBaseUrl(), r2Sensor.id);
+      if (tds === null) {
+        setStatus({ type: "error", message: "R2 did not return a TDS reading." });
+        return null;
+      }
+      return tds;
     } catch (error) {
       setStatus({ type: "error", message: `Could not read R2: ${errorMessage(error)}` });
       return null;

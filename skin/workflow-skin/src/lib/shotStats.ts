@@ -1,8 +1,14 @@
-import type { ShotRecord, ShotSnapshot } from "../api/types";
+import type { ShotRecord, ShotSnapshot, WorkflowContext } from "../api/types";
 
 function average(values: number[]): number | null {
   if (values.length === 0) return null;
   return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 100) / 100;
+}
+
+export function shotContext(shot: ShotRecord): WorkflowContext | undefined {
+  const workflow = (shot as { workflow?: { context?: WorkflowContext } | null }).workflow;
+  if (!workflow || typeof workflow !== "object") return undefined;
+  return workflow.context;
 }
 
 export function shotStats(shot: ShotRecord) {
@@ -28,7 +34,7 @@ export function shotStats(shot: ShotRecord) {
 
 export function previousFiveForBag(shots: ShotRecord[], beanBatchId: string, currentShotId?: string): ShotRecord[] {
   return shots
-    .filter((shot) => shot.id !== currentShotId && shot.workflow.context?.beanBatchId === beanBatchId)
+    .filter((shot) => shot.id !== currentShotId && shotContext(shot)?.beanBatchId === beanBatchId)
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
     .slice(0, 5);
 }
@@ -36,7 +42,7 @@ export function previousFiveForBag(shots: ShotRecord[], beanBatchId: string, cur
 export function grindSizeFromShot(shot: ShotRecord): string | undefined {
   const extras = shot.annotations?.extras;
   const workflowSkin = extras?.workflowSkin as { grindSize?: string } | undefined;
-  return workflowSkin?.grindSize ?? shot.workflow.context?.grinderSetting;
+  return workflowSkin?.grindSize ?? shotContext(shot)?.grinderSetting;
 }
 
 export function graphSeries(measurements: ShotSnapshot[]) {

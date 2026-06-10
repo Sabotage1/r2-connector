@@ -22,6 +22,21 @@ describe("findDifluidR2Sensor", () => {
     ];
     expect(findDifluidR2Sensor(sensors)?.id).toBe("sensor-r2");
   });
+
+  it("does not match a DiFluid R2 sensor without a measure command", () => {
+    const sensors: SensorListItem[] = [
+      {
+        id: "sensor-r2",
+        info: {
+          name: "DiFluid R2",
+          vendor: "DiFluid",
+          data: [{ key: "tds", type: "number", unit: "%" }],
+          commands: [{ id: "calibrate" }]
+        }
+      }
+    ];
+    expect(findDifluidR2Sensor(sensors)).toBeNull();
+  });
 });
 
 describe("uploadShotToVisualizer", () => {
