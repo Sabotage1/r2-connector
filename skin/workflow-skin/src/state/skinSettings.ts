@@ -18,6 +18,7 @@ export interface SkinSettings {
   presetSlots: PresetSlot[];
   defaultReviewEnabled: boolean;
   reviewEnabledByProfile: Record<string, boolean>;
+  skinTitle: string;
   startupProfileId?: string;
   r2SensorId?: string;
   profileWorkflows: Record<string, ProfileWorkflowSettings>;
@@ -52,6 +53,7 @@ export function createDefaultSkinSettings(): SkinSettings {
     presetSlots: clonePresetSlots(DEFAULT_PRESET_SLOTS),
     defaultReviewEnabled: true,
     reviewEnabledByProfile: {},
+    skinTitle: "Workflow",
     profileWorkflows: {}
   };
 }
@@ -123,6 +125,7 @@ export function normalizeSkinSettings(value: unknown): SkinSettings {
     presetSlots: normalizePresetSlots(value.presetSlots),
     defaultReviewEnabled: typeof value.defaultReviewEnabled === "boolean" ? value.defaultReviewEnabled : true,
     reviewEnabledByProfile: normalizeReviewEnabledByProfile(value.reviewEnabledByProfile),
+    skinTitle: typeof value.skinTitle === "string" && value.skinTitle.trim() ? value.skinTitle.trim() : "Workflow",
     profileWorkflows: normalizeProfileWorkflows(value.profileWorkflows)
   };
 

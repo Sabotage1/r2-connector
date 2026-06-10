@@ -76,6 +76,7 @@ const initialSettings: SkinSettings = {
   ],
   defaultReviewEnabled: true,
   reviewEnabledByProfile: {},
+  skinTitle: "Workflow",
   profileWorkflows: {}
 };
 
@@ -98,6 +99,16 @@ describe("App shell", () => {
 
     expect(screen.getByRole("heading", { name: "Bags" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Bag Filters" })).toBeInTheDocument();
+  });
+
+  it("has a dedicated menu item for editing profile workflow settings", async () => {
+    mockReaFetch(initialSettings);
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Edit Profiles" }));
+
+    expect(screen.getByRole("heading", { name: "Edit Profiles" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Blooming profile workflow" })).toBeInTheDocument();
   });
 
   it("persists preset slot assignment from the edit panel", async () => {

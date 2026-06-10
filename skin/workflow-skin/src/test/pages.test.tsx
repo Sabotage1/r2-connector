@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ProfilePresetGrid } from "../components/ProfilePresetGrid";
 import { BagsPage } from "../pages/BagsPage";
 import { ProfilesPage } from "../pages/ProfilesPage";
+import { SettingsPage } from "../pages/SettingsPage";
 import type { ProfileRecord } from "../api/types";
 import { defaultSkinSettings } from "../state/skinSettings";
 
@@ -125,5 +126,17 @@ describe("ProfilesPage", () => {
       milkBased: true,
       steamTimers: { small: 20, medium: 36, large: 40 }
     });
+  });
+});
+
+describe("SettingsPage", () => {
+  it("edits the centered skin title shown above the menu", async () => {
+    const onUpdateSettings = vi.fn();
+    render(<SettingsPage settings={defaultSkinSettings} r2Sensor={null} onUpdateSettings={onUpdateSettings} />);
+
+    await userEvent.clear(screen.getByLabelText("Skin title"));
+    await userEvent.type(screen.getByLabelText("Skin title"), "Roy's DE1");
+
+    expect(onUpdateSettings).toHaveBeenLastCalledWith({ ...defaultSkinSettings, skinTitle: "Roy's DE1" });
   });
 });

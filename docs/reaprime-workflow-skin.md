@@ -22,7 +22,7 @@ The package script creates `skin/workflow-skin/workflow-skin.zip`.
 ## Workflow Checks
 
 1. Assign at least one profile preset on the Brew page.
-2. Choose a startup default profile on the Profiles page. The skin applies it once after the skin loads with ReaPrime.
+2. Choose a startup default profile on the Edit Profiles page. The skin applies it once after the skin loads with ReaPrime.
 3. Create or select a valid bag. A bag is valid only when it has roaster, bean, roast date, and process.
 4. Pull a shot.
 5. Open Review.
@@ -32,13 +32,13 @@ The package script creates `skin/workflow-skin/workflow-skin.zip`.
 
 ## Milk Workflows
 
-Each profile can be marked as a milk drink on the Profiles page. Milk profiles have predefined steam timers for small, medium, and large jugs.
+Each profile can be marked as a milk drink on the Edit Profiles page. Milk profiles have predefined steam timers for small, medium, and large jugs.
 
 When a new shot is detected for a milk profile, the skin moves to the Steam page instead of Review. The Steam page shows the profile name, jug-size timer buttons, and start/pause/reset controls. Review is still available from the Steam page.
 
 ## Connection Status
 
-The Brew page shows a compact status bar for:
+The top-left header above the menu shows the skin title and a compact status bar for:
 
 - Machine connection.
 - WiFi/IP address.
@@ -46,6 +46,8 @@ The Brew page shows a compact status bar for:
 - DiFluid R2 connection when R2 has been set up in Settings.
 
 Green means connected. Red means not connected. R2 stays hidden until Settings has a configured R2 sensor id.
+
+The title is centered and can be changed from Settings.
 
 ## DiFluid R2
 

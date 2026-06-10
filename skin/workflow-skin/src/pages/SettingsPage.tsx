@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { SensorListItem } from "../api/types";
 import type { SkinSettings } from "../state/skinSettings";
 
@@ -11,10 +12,27 @@ export function SettingsPage({
   onUpdateSettings: (settings: SkinSettings) => void;
 }) {
   const r2Configured = Boolean(settings.r2SensorId);
+  const [title, setTitle] = useState(settings.skinTitle);
+
+  useEffect(() => {
+    setTitle(settings.skinTitle);
+  }, [settings.skinTitle]);
+
+  const updateTitle = (value: string) => {
+    setTitle(value);
+    onUpdateSettings({ ...settings, skinTitle: value.trim() || "Workflow" });
+  };
 
   return (
     <div className="panel wide">
       <h2>Settings</h2>
+      <div className="list-row">
+        <strong>Skin title</strong>
+        <label className="settings-field">
+          Skin title
+          <input value={title} onChange={(event) => updateTitle(event.target.value)} />
+        </label>
+      </div>
       <div className="list-row">
         <strong>DiFluid R2 status</strong>
         <span>{r2Configured ? `Configured sensor: ${settings.r2SensorId}` : "R2 status is hidden until setup."}</span>

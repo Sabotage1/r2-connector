@@ -6,6 +6,7 @@ import type { ProfileRecord, ShotAnnotations } from "./api/types";
 import { uploadShotToVisualizer } from "./api/visualizer";
 import type { Bag } from "./lib/bags";
 import { buildConnectivityStatuses } from "./lib/connectivity";
+import type { ConnectivityStatus } from "./lib/connectivity";
 import { postShotPageForShot, selectedProfileIdFromWorkflow } from "./lib/workflowRouting";
 import { BagsPage } from "./pages/BagsPage";
 import { BrewPage } from "./pages/BrewPage";
@@ -17,14 +18,14 @@ import { SteamPage } from "./pages/SteamPage";
 import { profileWorkflowFor, type ProfileWorkflowSettings, type SkinSettings } from "./state/skinSettings";
 import { useReaData } from "./state/useReaData";
 
-type Page = "brew" | "review" | "steam" | "bags" | "profiles" | "history" | "settings";
+type Page = "brew" | "review" | "steam" | "bags" | "editProfiles" | "history" | "settings";
 
 const nav: Array<{ id: Page; label: string; icon: React.ComponentType<{ size?: number }> }> = [
   { id: "brew", label: "Brew", icon: Coffee },
   { id: "review", label: "Review", icon: Activity },
   { id: "steam", label: "Steam", icon: Flame },
   { id: "bags", label: "Bags", icon: PackageOpen },
-  { id: "profiles", label: "Profiles", icon: SlidersHorizontal },
+  { id: "editProfiles", label: "Edit Profiles", icon: SlidersHorizontal },
   { id: "history", label: "History", icon: History },
   { id: "settings", label: "Settings", icon: Settings }
 ];
@@ -94,6 +95,24 @@ function waitForR2Tds(apiBase: string, sensorId: string): Promise<number | null>
     socket.onerror = () => finish(null);
     socket.onclose = () => finish(null);
   });
+}
+
+function SidebarStatus({ title, statuses }: { title: string; statuses: ConnectivityStatus[] }) {
+  return (
+    <div className="sidebar-header">
+      <div className="skin-title-card" aria-label="Current skin title">
+        <span>{title}</span>
+      </div>
+      <div className="compact-status-bar" aria-label="Connection status">
+        {statuses.map((status) => (
+          <div className="compact-status-chip" key={status.id} title={`${status.label}: ${status.detail}`}>
+            <span className={status.connected ? "status-dot connected" : "status-dot disconnected"} aria-hidden="true" />
+            <span>{status.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function App() {
@@ -289,7 +308,7 @@ export function App() {
   return (
     <main className="app-shell">
       <nav className="side-nav" aria-label="Workflow navigation">
-        <div className="brand">Workflow</div>
+        <SidebarStatus title={data.settings.skinTitle} statuses={statuses} />
         {nav.map((item) => {
           const Icon = item.icon;
           return (
@@ -329,7 +348,6 @@ export function App() {
             bags={data.bags}
             shots={data.shots}
             settings={data.settings}
-            statuses={statuses}
             onApplyProfile={applyProfile}
             onEditSlot={(index) => {
               setStatus(null);
@@ -362,7 +380,7 @@ export function App() {
           />
         )}
         {page === "bags" && <BagsPage bags={data.bags} onSaveBag={saveBag} />}
-        {page === "profiles" && (
+        {page === "editProfiles" && (
           <ProfilesPage
             profiles={data.profiles}
             settings={data.settings}

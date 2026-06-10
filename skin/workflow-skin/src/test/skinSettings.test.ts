@@ -14,6 +14,7 @@ describe("skin settings", () => {
     expect(defaultSkinSettings.reviewEnabledByProfile).toEqual({});
     expect(defaultSkinSettings.defaultReviewEnabled).toBe(true);
     expect(defaultSkinSettings.profileWorkflows).toEqual({});
+    expect(defaultSkinSettings.skinTitle).toBe("Workflow");
     expect(defaultSkinSettings.startupProfileId).toBeUndefined();
     expect(defaultSkinSettings.r2SensorId).toBeUndefined();
   });
@@ -33,6 +34,7 @@ describe("skin settings", () => {
         presetSlots: [{ label: "Valid" }, { label: 7 }],
         defaultReviewEnabled: "yes",
         reviewEnabledByProfile: { p1: false, p2: true, stale: "no" },
+        skinTitle: "Roy's Decent",
         startupProfileId: "p2",
         r2SensorId: "sensor-r2",
         profileWorkflows: {
@@ -53,6 +55,7 @@ describe("skin settings", () => {
     expect(settings.presetSlots).not.toBe(defaultSkinSettings.presetSlots);
     expect(settings.defaultReviewEnabled).toBe(true);
     expect(settings.reviewEnabledByProfile).toEqual({ p1: false, p2: true });
+    expect(settings.skinTitle).toBe("Roy's Decent");
     expect(settings.startupProfileId).toBe("p2");
     expect(settings.r2SensorId).toBe("sensor-r2");
     expect(settings.profileWorkflows).toEqual({
