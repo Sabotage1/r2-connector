@@ -1,11 +1,19 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 const profiles = Array.from({ length: 28 }, (_, index) => ({
   id: `profile-${index + 1}`,
   profile: { title: `Long Profile ${index + 1}` }
 }));
 
-test("preset editor keeps long profile lists scrollable inside the dialog", async ({ page }) => {
+async function routeProfileEditorApi(page: Page) {
+  let settings = {
+    presetSlots: [{ label: "Light" }, { label: "Sweet" }, { label: "Turbo" }, { label: "Classic" }],
+    defaultReviewEnabled: true,
+    reviewEnabledByProfile: {},
+    profileWorkflows: {},
+    skinTitle: "Workflow"
+  };
+
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -19,20 +27,27 @@ test("preset editor keeps long profile lists scrollable inside the dialog", asyn
     else if (method === "GET" && url.pathname === "/api/v1/shots") body = { items: [], total: 0, limit: 100, offset: 0 };
     else if (method === "GET" && url.pathname === "/api/v1/sensors") body = [];
     else if (method === "GET" && url.pathname === "/api/v1/machine/state") body = { connected: true, wifi: { connected: true, ipAddress: "192.168.1.20" } };
-    else if (method === "GET" && url.pathname === "/api/v1/kv/workflow-skin/settings") {
-      body = {
-        presetSlots: [{ label: "Light" }, { label: "Sweet" }, { label: "Turbo" }, { label: "Classic" }],
-        defaultReviewEnabled: true,
-        reviewEnabledByProfile: {},
-        profileWorkflows: {},
-        skinTitle: "Workflow"
-      };
+    else if (method === "GET" && url.pathname === "/api/v1/kv/workflow-skin/settings") body = settings;
+    else if (method === "PUT" && url.pathname === "/api/v1/kv/workflow-skin/settings") {
+      settings = JSON.parse(request.postData() ?? "{}");
+      await route.fulfill({ status: 200, body: "" });
+      return;
     } else {
       body = {};
     }
 
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
   });
+
+  return {
+    get settings() {
+      return settings;
+    }
+  };
+}
+
+test("preset editor keeps long profile lists scrollable inside the dialog", async ({ page }) => {
+  await routeProfileEditorApi(page);
 
   await page.goto("/");
   await page.getByRole("button", { name: "Edit Light" }).click();
@@ -59,4 +74,16 @@ test("preset editor keeps long profile lists scrollable inside the dialog", asyn
     element.scrollTop = 180;
   });
   await expect.poll(() => picker.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+});
+
+test("preset editor assigns a profile when a visible profile row is clicked", async ({ page }) => {
+  const api = await routeProfileEditorApi(page);
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Edit Light" }).click();
+  await page.getByRole("button", { name: "Use Long Profile 2", exact: true }).click();
+
+  await expect(page.getByRole("dialog", { name: "Edit Light preset" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Light Long Profile 2" })).toBeVisible();
+  expect(api.settings.presetSlots[0]).toEqual({ label: "Light", profileId: "profile-2" });
 });

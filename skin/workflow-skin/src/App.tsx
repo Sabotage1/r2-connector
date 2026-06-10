@@ -338,7 +338,7 @@ export function App() {
             {data.error}
           </p>
         )}
-        {status && (
+        {status && !editingSlot && (
           <p
             className={status.type === "error" ? "status-message error" : "status-message"}
             role={status.type === "error" ? "alert" : "status"}
@@ -411,6 +411,15 @@ export function App() {
                   Cancel
                 </button>
               </div>
+              {status && (
+                <p
+                  className={status.type === "error" ? "status-message error" : "status-message"}
+                  role={status.type === "error" ? "alert" : "status"}
+                  aria-live={status.type === "error" ? "assertive" : "polite"}
+                >
+                  {status.message}
+                </p>
+              )}
               <div className="profile-picker" aria-label={`Choose a profile for ${editingSlot.label}`}>
                 {data.profiles.map((profile) => (
                   <button

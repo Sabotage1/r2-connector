@@ -155,10 +155,11 @@ describe("App shell", () => {
     render(<App />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Edit Light" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit Light preset" });
     await userEvent.click(screen.getByRole("button", { name: "Use Classic" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Could not save preset");
-    expect(screen.getByRole("dialog", { name: "Edit Light preset" })).toBeInTheDocument();
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Could not save preset");
+    expect(dialog).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Light Blooming" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Light Classic" })).not.toBeInTheDocument();
   });
