@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ReaPrimeApi } from "../api/reaprime";
+import type { ReaPrimeApi } from "../api/reaprime";
 import type { Bean, BeanBatch, Grinder, ProfileRecord, ShotRecord, Workflow } from "../api/types";
 import { buildBag, type Bag } from "../lib/bags";
 import { defaultSkinSettings, loadSkinSettings, saveSkinSettings, type SkinSettings } from "./skinSettings";
 
-export function useReaData(api = new ReaPrimeApi()) {
+export function useReaData(api: ReaPrimeApi) {
   const [profiles, setProfiles] = useState<ProfileRecord[]>([]);
   const [workflow, setWorkflow] = useState<Workflow>({});
   const [beans, setBeans] = useState<Bean[]>([]);

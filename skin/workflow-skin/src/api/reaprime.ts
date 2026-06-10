@@ -1,4 +1,21 @@
-import type { Bean, BeanBatch, Grinder, ProfileRecord, SensorListItem, ShotPage, ShotRecord, Workflow } from "./types";
+import type { Bean, BeanBatch, Grinder, JsonMap, ProfileRecord, SensorListItem, ShotPage, ShotRecord, Workflow } from "./types";
+
+export interface CreateBeanPayload {
+  roaster: string;
+  name: string;
+  country?: string;
+  region?: string;
+  processing?: string;
+  notes?: string;
+  extras?: JsonMap;
+}
+
+export interface CreateBatchPayload {
+  roastDate?: string;
+  roastLevel?: string;
+  notes?: string;
+  extras?: JsonMap;
+}
 
 export function apiBaseUrl(locationUrl?: URL): string {
   if (!locationUrl && typeof window === "undefined") return "http://localhost:8080";
@@ -59,8 +76,22 @@ export class ReaPrimeApi {
     return this.request<Bean[]>("/api/v1/beans?includeArchived=false");
   }
 
+  createBean(payload: CreateBeanPayload) {
+    return this.request<Bean>("/api/v1/beans", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  }
+
   listBatches(beanId: string) {
     return this.request<BeanBatch[]>(`/api/v1/beans/${encodeURIComponent(beanId)}/batches?includeArchived=false`);
+  }
+
+  createBatch(beanId: string, payload: CreateBatchPayload) {
+    return this.request<BeanBatch>(`/api/v1/beans/${encodeURIComponent(beanId)}/batches`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
   }
 
   listGrinders() {

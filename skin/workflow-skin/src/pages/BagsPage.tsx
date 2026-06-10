@@ -15,10 +15,26 @@ const emptyBag: Bag = {
   notes: ""
 };
 
-export function BagsPage({ bags }: { bags: Bag[] }) {
+export function BagsPage({ bags, onSaveBag }: { bags: Bag[]; onSaveBag: (bag: Bag) => Promise<void> | void }) {
   const [filters, setFilters] = useState<BagFilters>({});
   const [draft, setDraft] = useState<Bag>(emptyBag);
+  const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const visibleBags = useMemo(() => filterBags(bags, filters), [bags, filters]);
+
+  const saveDraft = async () => {
+    if (!isValidBag(draft)) {
+      setStatus({ type: "error", message: "Roaster, bean, roast date, and process are required." });
+      return;
+    }
+
+    try {
+      await onSaveBag(draft);
+      setDraft(emptyBag);
+      setStatus({ type: "success", message: "Bag saved" });
+    } catch (error) {
+      setStatus({ type: "error", message: error instanceof Error ? error.message : String(error) });
+    }
+  };
 
   return (
     <div className="workflow-grid">
@@ -62,13 +78,17 @@ export function BagsPage({ bags }: { bags: Bag[] }) {
         <BagForm
           value={draft}
           onChange={setDraft}
-          onCancel={() => setDraft(emptyBag)}
-          onSave={() =>
-            window.alert(
-              isValidBag(draft) ? "Use ReaPrime bean/batch APIs to save this bag." : "Roaster, bean, roast date, and process are required."
-            )
-          }
+          onCancel={() => {
+            setDraft(emptyBag);
+            setStatus(null);
+          }}
+          onSave={saveDraft}
         />
+        {status && (
+          <p className={status.type === "error" ? "status-message error" : "status-message"} role={status.type === "error" ? "alert" : "status"}>
+            {status.message}
+          </p>
+        )}
       </section>
     </div>
   );

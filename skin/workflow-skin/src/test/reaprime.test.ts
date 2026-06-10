@@ -48,4 +48,68 @@ describe("ReaPrimeApi", () => {
       "GET /api/v1/kv/workflow-skin/settings failed: 500 upstream mentioned 404"
     );
   });
+
+  it("creates beans through the ReaPrime bean API", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ id: "bean-1", roaster: "Pilot", name: "Halo" }), { status: 200 })
+    );
+    const api = new ReaPrimeApi("http://machine:8080");
+
+    await expect(
+      api.createBean({
+        roaster: "Pilot",
+        name: "Halo",
+        country: "Ethiopia",
+        region: "Gedeb",
+        processing: "Washed",
+        notes: "Citrus",
+        extras: { workflowSkin: true }
+      })
+    ).resolves.toEqual({ id: "bean-1", roaster: "Pilot", name: "Halo" });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "http://machine:8080/api/v1/beans",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          roaster: "Pilot",
+          name: "Halo",
+          country: "Ethiopia",
+          region: "Gedeb",
+          processing: "Washed",
+          notes: "Citrus",
+          extras: { workflowSkin: true }
+        })
+      })
+    );
+  });
+
+  it("creates batches for beans through the ReaPrime batch API", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ id: "batch-1", beanId: "bean/1", roastDate: "2026-06-01" }), { status: 200 })
+    );
+    const api = new ReaPrimeApi("http://machine:8080");
+
+    await expect(
+      api.createBatch("bean/1", {
+        roastDate: "2026-06-01",
+        roastLevel: "Light",
+        notes: "Rest 10 days",
+        extras: { workflowSkin: { createdFromBagForm: true } }
+      })
+    ).resolves.toEqual({ id: "batch-1", beanId: "bean/1", roastDate: "2026-06-01" });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "http://machine:8080/api/v1/beans/bean%2F1/batches",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          roastDate: "2026-06-01",
+          roastLevel: "Light",
+          notes: "Rest 10 days",
+          extras: { workflowSkin: { createdFromBagForm: true } }
+        })
+      })
+    );
+  });
 });

@@ -23,6 +23,7 @@ export function BagForm({
 }) {
   return (
     <form
+      aria-label="Add a bag"
       className="bag-form"
       onSubmit={(event) => {
         event.preventDefault();

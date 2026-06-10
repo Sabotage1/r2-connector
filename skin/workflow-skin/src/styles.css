@@ -264,6 +264,43 @@ textarea {
   min-height: 0;
 }
 
+.status-message {
+  border: 1px solid #34414b;
+  border-radius: 8px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  color: #dceef0;
+  background: #162328;
+}
+
+.status-message.error {
+  border-color: #6f3c3c;
+  color: #ffd9d9;
+  background: #28191b;
+}
+
+.preset-editor {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgb(6 10 13 / 72%);
+}
+
+.preset-editor-panel {
+  width: min(520px, 100%);
+  border: 1px solid #34414b;
+  border-radius: 8px;
+  padding: 18px;
+  background: #151c22;
+}
+
+.profile-picker {
+  display: grid;
+  gap: 10px;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     grid-template-columns: 1fr;
