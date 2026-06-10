@@ -101,6 +101,16 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { name: "Bag Filters" })).toBeInTheDocument();
   });
 
+  it("renders the skin title as a centered app headline outside the menu", async () => {
+    mockReaFetch({ ...initialSettings, skinTitle: "Roy's Workflow" });
+    render(<App />);
+
+    const title = await screen.findByLabelText("App title");
+
+    expect(title).toHaveTextContent("Roy's Workflow");
+    expect(title.closest("nav")).toBeNull();
+  });
+
   it("has a dedicated menu item for editing profile workflow settings", async () => {
     mockReaFetch(initialSettings);
     render(<App />);

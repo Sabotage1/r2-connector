@@ -38,7 +38,7 @@ When a new shot is detected for a milk profile, the skin moves to the Steam page
 
 ## Connection Status
 
-The top-left header above the menu shows the skin title and a compact status bar for:
+The top-left header above the menu shows a compact status bar for:
 
 - Machine connection.
 - WiFi/IP address.
@@ -47,7 +47,7 @@ The top-left header above the menu shows the skin title and a compact status bar
 
 Green means connected. Red means not connected. R2 stays hidden until Settings has a configured R2 sensor id.
 
-The title is centered and can be changed from Settings.
+The skin title is a centered top-middle app headline above the active page. It can be changed from Settings.
 
 ## DiFluid R2
 

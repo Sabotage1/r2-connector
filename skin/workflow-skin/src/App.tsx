@@ -97,12 +97,9 @@ function waitForR2Tds(apiBase: string, sensorId: string): Promise<number | null>
   });
 }
 
-function SidebarStatus({ title, statuses }: { title: string; statuses: ConnectivityStatus[] }) {
+function SidebarStatus({ statuses }: { statuses: ConnectivityStatus[] }) {
   return (
     <div className="sidebar-header">
-      <div className="skin-title-card" aria-label="Current skin title">
-        <span>{title}</span>
-      </div>
       <div className="compact-status-bar" aria-label="Connection status">
         {statuses.map((status) => (
           <div className="compact-status-chip" key={status.id} title={`${status.label}: ${status.detail}`}>
@@ -112,6 +109,14 @@ function SidebarStatus({ title, statuses }: { title: string; statuses: Connectiv
         ))}
       </div>
     </div>
+  );
+}
+
+function AppHeadline({ title }: { title: string }) {
+  return (
+    <header className="app-headline" aria-label="App title">
+      <span>{title}</span>
+    </header>
   );
 }
 
@@ -308,7 +313,7 @@ export function App() {
   return (
     <main className="app-shell">
       <nav className="side-nav" aria-label="Workflow navigation">
-        <SidebarStatus title={data.settings.skinTitle} statuses={statuses} />
+        <SidebarStatus statuses={statuses} />
         {nav.map((item) => {
           const Icon = item.icon;
           return (
@@ -326,6 +331,7 @@ export function App() {
         })}
       </nav>
       <section className="page-surface">
+        <AppHeadline title={data.settings.skinTitle} />
         <h1>{nav.find((item) => item.id === page)?.label}</h1>
         {data.error && (
           <p className="muted" role="alert" aria-live="assertive">
