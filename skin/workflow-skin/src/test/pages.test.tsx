@@ -139,4 +139,11 @@ describe("SettingsPage", () => {
 
     expect(onUpdateSettings).toHaveBeenLastCalledWith({ ...defaultSkinSettings, skinTitle: "Roy's DE1" });
   });
+
+  it("shows the skin creator credit", () => {
+    render(<SettingsPage settings={defaultSkinSettings} r2Sensor={null} onUpdateSettings={vi.fn()} />);
+
+    expect(screen.getByText("Creator")).toBeInTheDocument();
+    expect(screen.getByText("Roy Ackerman")).toBeInTheDocument();
+  });
 });

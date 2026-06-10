@@ -34,6 +34,10 @@ export function SettingsPage({
         </label>
       </div>
       <div className="list-row">
+        <strong>Creator</strong>
+        <span>Roy Ackerman</span>
+      </div>
+      <div className="list-row">
         <strong>DiFluid R2 status</strong>
         <span>{r2Configured ? `Configured sensor: ${settings.r2SensorId}` : "R2 status is hidden until setup."}</span>
         <div className="profile-workflow-controls">

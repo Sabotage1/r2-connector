@@ -2,6 +2,8 @@
 
 This skin targets ReaPrime/Decent.app v0.7.6 or newer. It adds editable profile presets, valid bag tracking, bag-aware history, profile recommendations, and a post-shot review page with manual TDS/EY entry.
 
+Version: 0.1.5. Creator: Roy Ackerman.
+
 ## Build
 
 ```bash
