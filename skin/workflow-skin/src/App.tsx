@@ -16,7 +16,7 @@ import { LivePage } from "./pages/LivePage";
 import { ProfilesPage } from "./pages/ProfilesPage";
 import { ReviewPage } from "./pages/ReviewPage";
 import { ScreensaverPage } from "./pages/ScreensaverPage";
-import { SettingsPage } from "./pages/SettingsPage";
+import { SettingsPage, type SkinUpdatePhase } from "./pages/SettingsPage";
 import { SteamPage } from "./pages/SteamPage";
 import { isProfileShown, profileWorkflowFor, type ProfileWorkflowSettings, type SkinSettings } from "./state/skinSettings";
 import { useLiveTelemetry } from "./state/useLiveTelemetry";
@@ -205,6 +205,7 @@ export function App() {
   const [sleepPending, setSleepPending] = useState(false);
   const [brewPending, setBrewPending] = useState(false);
   const [skinUpdateBusy, setSkinUpdateBusy] = useState(false);
+  const [skinUpdatePhase, setSkinUpdatePhase] = useState<SkinUpdatePhase>("idle");
   const [expandedStatusId, setExpandedStatusId] = useState<ConnectivityStatus["id"] | null>(null);
   const startupAppliedRef = useRef(false);
   const startupConnectRef = useRef(false);
@@ -367,6 +368,7 @@ export function App() {
 
   const checkSkinUpdates = async (reportStatus = true) => {
     setSkinUpdateBusy(true);
+    setSkinUpdatePhase("checking");
     try {
       const result = await api.updateWebUISkins();
       await data.refresh();
@@ -376,6 +378,7 @@ export function App() {
       throw error;
     } finally {
       setSkinUpdateBusy(false);
+      setSkinUpdatePhase("idle");
     }
   };
 
@@ -387,6 +390,7 @@ export function App() {
     }
 
     setSkinUpdateBusy(true);
+    setSkinUpdatePhase("downloading");
     try {
       const asset = data.settings.skinUpdateAsset.trim();
       const result = await api.installSkinFromGithubRelease({
@@ -414,6 +418,7 @@ export function App() {
       throw error;
     } finally {
       setSkinUpdateBusy(false);
+      setSkinUpdatePhase("idle");
     }
   };
 
@@ -857,6 +862,7 @@ export function App() {
             defaultWebuiSkin={data.defaultWebuiSkin}
             skinUpdateStatus={status}
             skinUpdateBusy={skinUpdateBusy}
+            skinUpdatePhase={skinUpdatePhase}
             onCheckSkinUpdates={() => checkSkinUpdates()}
             onInstallSkinUpdate={() => installSkinUpdate()}
             onUpdateSettings={(next) => void persistSettings(next, "Settings saved.")}

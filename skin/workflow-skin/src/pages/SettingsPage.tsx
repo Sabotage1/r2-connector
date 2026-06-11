@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import skinManifest from "../../skin-manifest.json";
 import type { DisplayState, JsonMap, PluginManifest, SensorListItem, VisualizerStatus, WebUISkin } from "../api/types";
 import {
   defaultPresetLabel,
@@ -9,8 +10,10 @@ import {
 } from "../state/skinSettings";
 
 const WORKFLOW_SKIN_ID = "workflow-skin";
+const CURRENT_SKIN_VERSION = typeof skinManifest.version === "string" ? skinManifest.version : "";
 
 type SkinUpdateStatus = { type: "success" | "error"; message: string };
+export type SkinUpdatePhase = "idle" | "checking" | "downloading";
 
 function pluginLine(plugin: PluginManifest | null | undefined): string {
   if (!plugin) return "Not installed";
@@ -63,6 +66,40 @@ function installedSkinLine(skin: WebUISkin | null | undefined): string {
   return `${skinName(skin)}${skin.version ? ` v${skin.version}` : ""}`;
 }
 
+function versionParts(value: string): number[] | null {
+  const clean = value.trim().replace(/^v/i, "").split("-", 1)[0];
+  if (!/^\d+(?:\.\d+)*$/.test(clean)) return null;
+  return clean.split(".").map((part) => Number(part));
+}
+
+function compareVersions(left: string, right: string): number | null {
+  const leftParts = versionParts(left);
+  const rightParts = versionParts(right);
+  if (!leftParts || !rightParts) return null;
+  const length = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftPart = leftParts[index] ?? 0;
+    const rightPart = rightParts[index] ?? 0;
+    if (leftPart !== rightPart) return leftPart > rightPart ? 1 : -1;
+  }
+  return 0;
+}
+
+function skinUpdateLine(skin: WebUISkin | null | undefined, phase: SkinUpdatePhase): string {
+  if (phase === "checking") return "Checking for skin updates...";
+  if (phase === "downloading") return "Downloading update...";
+  if (!skin) return "Skin status unavailable.";
+
+  const installedVersion = skin.version?.trim();
+  if (!installedVersion || !CURRENT_SKIN_VERSION) return "Skin version unknown.";
+
+  const comparison = compareVersions(installedVersion, CURRENT_SKIN_VERSION);
+  if (comparison === null) return `Skin version ${installedVersion} installed.`;
+  if (comparison < 0) return `Update available: v${CURRENT_SKIN_VERSION} is available (installed v${installedVersion}).`;
+  if (comparison > 0) return `Installed skin v${installedVersion} is newer than this build v${CURRENT_SKIN_VERSION}.`;
+  return "The skin is up-to-date.";
+}
+
 function brightnessValue(value: number | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return 8;
   return Math.min(100, Math.max(0, Math.round(value)));
@@ -104,6 +141,7 @@ export function SettingsPage({
   defaultWebuiSkin,
   skinUpdateStatus,
   skinUpdateBusy,
+  skinUpdatePhase = "idle",
   onCheckSkinUpdates,
   onInstallSkinUpdate
 }: {
@@ -118,6 +156,7 @@ export function SettingsPage({
   defaultWebuiSkin?: WebUISkin | null;
   skinUpdateStatus?: SkinUpdateStatus | null;
   skinUpdateBusy?: boolean;
+  skinUpdatePhase?: SkinUpdatePhase;
   onCheckSkinUpdates?: () => Promise<void> | void;
   onInstallSkinUpdate?: () => Promise<void> | void;
 }) {
@@ -216,6 +255,7 @@ export function SettingsPage({
       </div>
       <div className="list-row settings-update-row">
         <strong>Skin updates</strong>
+        <span className={skinUpdatePhase === "idle" ? "settings-update-state" : "settings-update-state busy"}>{skinUpdateLine(workflowSkin, skinUpdatePhase)}</span>
         <span>Installed: {installedSkinLine(workflowSkin)}</span>
         <span>Default skin: {skinName(defaultWebuiSkin)}</span>
         <span>{sourceLine(workflowSkin)}</span>

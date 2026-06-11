@@ -522,6 +522,48 @@ describe("SettingsPage", () => {
     expect(onInstallSkinUpdate).toHaveBeenCalledTimes(1);
   });
 
+  it("shows whether the workflow skin is up-to-date or has an available update", () => {
+    const commonProps = {
+      settings: defaultSkinSettings,
+      r2Sensor: null,
+      onUpdateSettings: vi.fn(),
+      defaultWebuiSkin: { id: "workflow-skin", name: "Workflow Skin", version: "0.1.16", path: "/skins/workflow", isBundled: false }
+    };
+    const { rerender } = render(
+      <SettingsPage
+        {...commonProps}
+        webuiSkins={[{ id: "workflow-skin", name: "Workflow Skin", version: "0.1.16", path: "/skins/workflow", isBundled: false }]}
+      />
+    );
+
+    expect(screen.getByText("The skin is up-to-date.")).toBeInTheDocument();
+
+    rerender(
+      <SettingsPage
+        {...commonProps}
+        webuiSkins={[{ id: "workflow-skin", name: "Workflow Skin", version: "0.1.15", path: "/skins/workflow", isBundled: false }]}
+      />
+    );
+
+    expect(screen.getByText("Update available: v0.1.16 is available (installed v0.1.15).")).toBeInTheDocument();
+  });
+
+  it("shows the downloading state while a skin update is installing", () => {
+    render(
+      <SettingsPage
+        {...({
+          settings: defaultSkinSettings,
+          r2Sensor: null,
+          onUpdateSettings: vi.fn(),
+          webuiSkins: [{ id: "workflow-skin", name: "Workflow Skin", version: "0.1.15", path: "/skins/workflow", isBundled: false }],
+          skinUpdatePhase: "downloading"
+        } as any)}
+      />
+    );
+
+    expect(screen.getByText("Downloading update...")).toBeInTheDocument();
+  });
+
   it("edits the number of preset cards and their titles before saving settings", async () => {
     const onUpdateSettings = vi.fn();
     render(

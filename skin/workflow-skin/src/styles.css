@@ -684,6 +684,15 @@ textarea {
   font-weight: 800;
 }
 
+.settings-update-state {
+  color: #b8f0c6 !important;
+  font-weight: 900;
+}
+
+.settings-update-state.busy {
+  color: #f7d680 !important;
+}
+
 .settings-update-status.error {
   color: #ffd9d9 !important;
 }

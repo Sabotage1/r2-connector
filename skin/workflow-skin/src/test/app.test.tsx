@@ -35,6 +35,7 @@ function mockReaFetch(
     webuiSkins?: WebUISkin[];
     defaultWebuiSkin?: WebUISkin;
     failGithubReleaseInstall?: boolean;
+    githubReleaseInstallWait?: Promise<void>;
   } = {}
 ) {
   let savedSettings = initialSettings;
@@ -113,6 +114,9 @@ function mockReaFetch(
     if (method === "POST" && url.pathname === "/api/v1/webui/skins/install/github-release") {
       if (options.failGithubReleaseInstall) {
         return Promise.resolve(new Response("error: Exception: Failed to fetch Github release: 404", { status: 500 }));
+      }
+      if (options.githubReleaseInstallWait) {
+        return options.githubReleaseInstallWait.then(() => responseJson({ success: true, repo: JSON.parse(String(init.body)).repo }));
       }
       return responseJson({ success: true, repo: JSON.parse(String(init.body)).repo });
     }
@@ -531,6 +535,32 @@ describe("App shell", () => {
         body: JSON.stringify({ repo: "roy/workflow-skin", asset: "workflow-skin.zip", prerelease: false })
       })
     );
+  });
+
+  it("shows downloading update while the configured skin update is installing", async () => {
+    let finishInstall!: () => void;
+    const installWait = new Promise<void>((resolve) => {
+      finishInstall = resolve;
+    });
+    mockReaFetch(
+      {
+        ...initialSettings,
+        skinUpdateRepo: "roy/workflow-skin",
+        skinUpdateAsset: "workflow-skin.zip",
+        skinUpdatePrerelease: false
+      },
+      { githubReleaseInstallWait: installWait }
+    );
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Install/update from GitHub release" }));
+
+    expect(await screen.findByText("Downloading update...")).toBeInTheDocument();
+
+    finishInstall();
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Skin installed from GitHub release.");
   });
 
   it("falls back to the committed workflow zip when GitHub release install is missing", async () => {
