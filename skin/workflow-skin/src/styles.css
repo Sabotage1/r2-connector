@@ -39,6 +39,10 @@ textarea {
   overflow: hidden;
 }
 
+.app-shell.menu-collapsed {
+  grid-template-columns: 72px 1fr;
+}
+
 .side-nav {
   min-width: 0;
   height: 100vh;
@@ -82,6 +86,24 @@ textarea {
   border-color: #5bd179;
   color: #f5f7f8;
   background: #16251d;
+}
+
+.menu-collapsed .compact-status-bar {
+  grid-template-columns: 1fr;
+}
+
+.menu-collapsed .compact-status-chip {
+  justify-content: center;
+  padding: 6px;
+}
+
+.menu-collapsed .compact-status-chip span:not(.status-dot),
+.menu-collapsed .nav-button span {
+  display: none;
+}
+
+.menu-collapsed .status-popover {
+  display: none;
 }
 
 .status-popover {
@@ -128,6 +150,15 @@ textarea {
   color: #f5f7f8;
   background: #202a32;
   border-color: #34414b;
+}
+
+.menu-toggle-button {
+  margin-bottom: 8px;
+}
+
+.menu-collapsed .nav-button {
+  justify-content: center;
+  padding: 10px;
 }
 
 .page-surface {
@@ -283,7 +314,7 @@ textarea {
 
 .preset-button {
   display: grid;
-  grid-template-columns: 1fr 44px;
+  grid-template-columns: 1fr 40px;
   border: 1px solid #34414b;
   border-radius: 8px;
   overflow: hidden;
@@ -304,7 +335,8 @@ textarea {
   color: #f5f7f8;
   background: transparent;
   border: 0;
-  padding: 12px;
+  min-height: 56px;
+  padding: 8px 10px;
   text-align: left;
   cursor: pointer;
 }
@@ -422,6 +454,11 @@ textarea {
   gap: 16px;
 }
 
+.live-waiting {
+  margin: 8px 0 0;
+  font-weight: 800;
+}
+
 .light-graph-panel {
   background: #dfe9e5;
 }
@@ -440,6 +477,9 @@ textarea {
   place-items: center;
   padding: 28px;
   background: #020506;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
   cursor: pointer;
 }
 
@@ -451,6 +491,11 @@ textarea {
   display: grid;
   place-items: center;
   gap: 18px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 8px;
+  padding: 28px;
+  background: rgb(2 5 6 / 58%);
+  box-shadow: 0 18px 52px rgb(0 0 0 / 38%);
   text-align: center;
 }
 
@@ -517,6 +562,17 @@ textarea {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
+}
+
+.mandatory-help {
+  margin: 0 0 14px;
+  color: #f7d680;
+  font-weight: 800;
+}
+
+.mandatory-field input {
+  border-color: #6d5b2d;
+  box-shadow: inset 3px 0 0 #f0c36a;
 }
 
 input,
@@ -612,6 +668,12 @@ textarea {
   gap: 12px;
 }
 
+.settings-preset-title-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .settings-update-prerelease {
   min-height: 48px;
   align-items: center;
@@ -678,6 +740,11 @@ textarea {
   margin-top: 14px;
 }
 
+.recipe-save-button {
+  width: 100%;
+  margin-top: 12px;
+}
+
 .ghost-button {
   border: 1px solid #303a43;
   color: #f5f7f8;
@@ -716,6 +783,43 @@ textarea {
   align-items: center;
   gap: 10px;
   color: #9daab4;
+}
+
+.compact-field {
+  margin-bottom: 12px;
+}
+
+.recipe-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.recipe-edit-grid label {
+  display: grid;
+  gap: 6px;
+  color: #9daab4;
+  font-weight: 800;
+}
+
+.bag-guidance {
+  display: grid;
+  gap: 5px;
+  border-top: 1px solid #303a43;
+  margin-top: 12px;
+  padding-top: 12px;
+  color: #9daab4;
+}
+
+.bag-guidance strong {
+  color: #f5f7f8;
+}
+
+.profile-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
 .inline-toggle input {
@@ -939,10 +1043,13 @@ textarea {
   .live-grid,
   .preset-grid,
   .form-grid,
+  .settings-preset-title-grid,
+  .profile-filter-bar,
   .settings-update-grid,
   .status-bar,
   .timer-grid,
-  .jug-grid {
+  .jug-grid,
+  .recipe-edit-grid {
     grid-template-columns: 1fr;
   }
 

@@ -14,6 +14,17 @@ function profileTitle(profile: ProfileRecord): string {
   return profile.profile.title?.trim() || profile.id;
 }
 
+function profileSearchText(profile: ProfileRecord): string {
+  return [profile.id, profile.profile.title, profile.profile.author, profile.profile.beverage_type, profile.profile.notes].filter(Boolean).join(" ").toLowerCase();
+}
+
+function profileType(profile: ProfileRecord): "pressure" | "flow" | "other" {
+  const serialized = JSON.stringify(profile.profile.steps ?? []).toLowerCase();
+  if (serialized.includes("flow")) return "flow";
+  if (serialized.includes("pressure")) return "pressure";
+  return "other";
+}
+
 function draftFromProfile(profile: Profile): ProfileDraft {
   return {
     title: profile.title ?? "",
@@ -62,11 +73,32 @@ export function ProfilesPage({
   const [draft, setDraft] = useState<ProfileDraft | null>(null);
   const [savingProfileId, setSavingProfileId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | "pressure" | "flow">("all");
+  const filteredProfiles = profiles.filter((profile) => {
+    const matchesSearch = !search.trim() || profileSearchText(profile).includes(search.trim().toLowerCase());
+    const matchesType = typeFilter === "all" || profileType(profile) === typeFilter;
+    return matchesSearch && matchesType;
+  });
 
   return (
     <div className="panel wide">
       <h2>Profiles</h2>
-      {profiles.map((profile) => {
+      <div className="profile-filter-bar">
+        <label className="settings-field">
+          Search profiles
+          <input aria-label="Search profiles" value={search} onChange={(event) => setSearch(event.target.value)} />
+        </label>
+        <label className="settings-field">
+          Profile type
+          <select aria-label="Profile type" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as typeof typeFilter)}>
+            <option value="all">All profiles</option>
+            <option value="pressure">Pressure based</option>
+            <option value="flow">Flow based</option>
+          </select>
+        </label>
+      </div>
+      {filteredProfiles.map((profile) => {
         const enabled = settings.reviewEnabledByProfile[profile.id] ?? settings.defaultReviewEnabled;
         const title = profileTitle(profile);
         const workflow = profileWorkflowFor(settings, profile.id);

@@ -1,5 +1,7 @@
 import type { AppInfo, DeviceInfo, MachineState, SensorListItem, WaterLevels } from "../api/types";
 
+const DEFAULT_TANK_LEVEL_MM = 60;
+
 export interface ConnectivityStatus {
   id: "machine" | "wifi" | "scale" | "water" | "r2";
   label: string;
@@ -71,6 +73,14 @@ function scaleConnectedFromDevices(devices: DeviceInfo[] | undefined): boolean {
   return Boolean(devices?.some((device) => device.type === "scale" && device.state === "connected"));
 }
 
+function waterTankFullLevel(waterLevels: WaterLevels | null | undefined): number {
+  if (!waterLevels || typeof waterLevels !== "object") return DEFAULT_TANK_LEVEL_MM;
+  const record = waterLevels as Record<string, unknown>;
+  const candidates = [record.fullLevel, record.maxLevel, record.tankMaxLevel, record.tankCapacityMm, record.capacityMm];
+  const full = candidates.find((value): value is number => typeof value === "number" && Number.isFinite(value) && value > 0);
+  return full ?? DEFAULT_TANK_LEVEL_MM;
+}
+
 function waterStatus(waterLevels: WaterLevels | null | undefined): ConnectivityStatus {
   const currentLevel = waterLevels?.currentLevel;
   const refillLevel = waterLevels?.refillLevel;
@@ -78,11 +88,12 @@ function waterStatus(waterLevels: WaterLevels | null | undefined): ConnectivityS
     return { id: "water", label: "Water", detail: "Unknown", connected: false };
   }
   const rounded = Math.round(currentLevel);
+  const percent = Math.max(0, Math.min(100, Math.round((currentLevel / waterTankFullLevel(waterLevels)) * 100)));
   const low = typeof refillLevel === "number" && Number.isFinite(refillLevel) && currentLevel <= refillLevel;
   return {
     id: "water",
     label: "Water",
-    detail: low ? `Low ${rounded}ml` : `${rounded}ml`,
+    detail: low ? `Low ${rounded}mm · ${percent}%` : `${rounded}mm · ${percent}%`,
     connected: !low
   };
 }

@@ -28,7 +28,7 @@ export function shotStats(shot: ShotRecord) {
     averagePressure: average(pressures),
     peakFlow: flows.length ? Math.max(...flows) : null,
     averageFlow: average(flows),
-    finalYield: shot.annotations?.actualYield ?? weights.at(-1) ?? null
+    finalYield: shot.annotations?.actualYield ?? (weights.length ? weights[weights.length - 1] : null)
   };
 }
 

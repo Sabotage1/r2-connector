@@ -1,11 +1,51 @@
 import { Play } from "lucide-react";
-import type { ProfileRecord, ShotRecord, Workflow } from "../api/types";
+import { useEffect, useMemo, useState } from "react";
+import type { Grinder, ProfileRecord, ShotRecord, Workflow } from "../api/types";
 import { MetricTile } from "../components/MetricTile";
 import { ProfilePresetGrid } from "../components/ProfilePresetGrid";
 import type { Bag } from "../lib/bags";
 import { recommendProfiles } from "../lib/recommendations";
+import { grindSizeFromShot, previousFiveForBag, shotContext, shotStats } from "../lib/shotStats";
 import { selectedProfileIdFromWorkflow } from "../lib/workflowRouting";
-import { isProfileShown, type SkinSettings } from "../state/skinSettings";
+import { isProfileShown, visiblePresetSlots, type SkinSettings } from "../state/skinSettings";
+
+function cleanNumber(value: string): number | undefined {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function average(values: number[]): number | null {
+  if (!values.length) return null;
+  return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
+}
+
+function bagTitle(bag: Bag): string {
+  return bag.name?.trim() || [bag.roaster, bag.bean].filter(Boolean).join(" ") || "Unnamed bag";
+}
+
+function formatRecipeValue(value: number | null): string {
+  if (value === null) return "—";
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function bagGuidance(shots: ShotRecord[], bagId: string | undefined) {
+  if (!bagId) return null;
+  const previousShots = previousFiveForBag(shots, bagId);
+  if (!previousShots.length) return null;
+  const grind = previousShots.map(grindSizeFromShot).find((value): value is string => Boolean(value?.trim()));
+  const doses = previousShots
+    .map((shot) => shot.annotations?.actualDoseWeight ?? shotContext(shot)?.targetDoseWeight)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const yields = previousShots
+    .map((shot) => shot.annotations?.actualYield ?? shotStats(shot).finalYield ?? shotContext(shot)?.targetYield)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  return {
+    count: previousShots.length,
+    grind,
+    dose: average(doses),
+    yield: average(yields)
+  };
+}
 
 export function BrewPage({
   workflow,
@@ -16,21 +56,31 @@ export function BrewPage({
   onApplyProfile,
   onEditSlot,
   onStartBrew,
-  brewPending
+  brewPending,
+  grinders = [],
+  onUpdateRecipe,
+  onSelectBag
 }: {
   workflow: Workflow;
   profiles: ProfileRecord[];
   bags: Bag[];
+  grinders?: Grinder[];
   shots: ShotRecord[];
   settings: SkinSettings;
   onApplyProfile: (profile: ProfileRecord) => void;
   onEditSlot: (index: number) => void;
   onStartBrew: () => void;
   brewPending?: boolean;
+  onUpdateRecipe?: (recipe: { dose?: number; yield?: number }) => void;
+  onSelectBag?: (bagId: string) => void;
 }) {
   const selectedBag = bags.find((bag) => bag.id === workflow.context?.beanBatchId);
   const selectedProfileId = selectedProfileIdFromWorkflow(workflow, profiles);
   const shownProfiles = profiles.filter((profile) => isProfileShown(settings, profile.id));
+  const slots = visiblePresetSlots(settings);
+  const guidance = useMemo(() => bagGuidance(shots, selectedBag?.id), [shots, selectedBag?.id]);
+  const [doseText, setDoseText] = useState(String(workflow.context?.targetDoseWeight ?? ""));
+  const [yieldText, setYieldText] = useState(String(workflow.context?.targetYield ?? workflow.profile?.target_weight ?? ""));
   const recommendations = recommendProfiles({
     profiles: shownProfiles,
     shots,
@@ -39,12 +89,17 @@ export function BrewPage({
     preferredEy: [settings.preferredEyMin ?? 18, settings.preferredEyMax ?? 23]
   });
 
+  useEffect(() => {
+    setDoseText(String(workflow.context?.targetDoseWeight ?? ""));
+    setYieldText(String(workflow.context?.targetYield ?? workflow.profile?.target_weight ?? ""));
+  }, [workflow.context?.targetDoseWeight, workflow.context?.targetYield, workflow.profile?.target_weight]);
+
   return (
     <div className="workflow-grid">
       <section className="panel wide">
         <h2>Presets</h2>
         <ProfilePresetGrid
-          slots={settings.presetSlots}
+          slots={slots}
           profiles={profiles}
           selectedProfileId={selectedProfileId}
           onApply={onApplyProfile}
@@ -53,12 +108,48 @@ export function BrewPage({
       </section>
       <section className="panel">
         <h2>Current Bag</h2>
-        <p>{selectedBag ? `${selectedBag.roaster} ${selectedBag.bean}` : "No bag selected"}</p>
+        <label className="settings-field compact-field">
+          Current bag
+          <select value={selectedBag?.id ?? ""} onChange={(event) => onSelectBag?.(event.target.value)}>
+            <option value="">No bag selected</option>
+            {bags.map((bag) => (
+              <option key={bag.id} value={bag.id}>
+                {bagTitle(bag)}
+              </option>
+            ))}
+          </select>
+        </label>
+        {selectedBag ? <p>{[selectedBag.roaster, selectedBag.bean, selectedBag.process].filter(Boolean).join(" · ")}</p> : <p>No bag selected</p>}
+        <div className="bag-guidance">
+          {guidance ? (
+            <>
+              <strong>Based on previous {guidance.count} shot{guidance.count === 1 ? "" : "s"}</strong>
+              <span>Suggested grind: {guidance.grind ?? "—"}</span>
+              <span>
+                Suggested recipe: {formatRecipeValue(guidance.dose)}g in / {formatRecipeValue(guidance.yield)}g out
+              </span>
+            </>
+          ) : (
+            <span>No bag history yet.</span>
+          )}
+        </div>
       </section>
       <section className="panel">
         <h2>Recipe</h2>
-        <MetricTile label="Dose" value={workflow.context?.targetDoseWeight ?? null} unit="g" />
-        <MetricTile label="Yield" value={workflow.context?.targetYield ?? workflow.profile?.target_weight ?? null} unit="g" />
+        <div className="recipe-edit-grid">
+          <label>
+            <span>Dose</span>
+            <input aria-label="Dose" inputMode="decimal" value={doseText} onChange={(event) => setDoseText(event.target.value)} />
+          </label>
+          <label>
+            <span>Yield</span>
+            <input aria-label="Yield" inputMode="decimal" value={yieldText} onChange={(event) => setYieldText(event.target.value)} />
+          </label>
+        </div>
+        {grinders.length > 0 && <MetricTile label="Grinders" value={`${grinders.length} configured`} />}
+        <button type="button" className="ghost-button recipe-save-button" onClick={() => onUpdateRecipe?.({ dose: cleanNumber(doseText), yield: cleanNumber(yieldText) })}>
+          Save recipe
+        </button>
         <button type="button" className="primary-button brew-start-button" disabled={brewPending} onClick={onStartBrew}>
           <Play size={18} />
           <span>{brewPending ? "Starting" : "Start Brew"}</span>

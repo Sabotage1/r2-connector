@@ -225,6 +225,26 @@ describe("App shell", () => {
     expect(screen.getByRole("group", { name: "Blooming profile workflow" })).toBeInTheDocument();
   });
 
+  it("has a dedicated menu item for grinders", async () => {
+    mockReaFetch(initialSettings);
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Grinders" }));
+
+    expect(screen.getByRole("heading", { name: "Grinders", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("form", { name: "Add grinder" })).toBeInTheDocument();
+  });
+
+  it("collapses the menu to icons and remembers the state", async () => {
+    const fetchState = mockReaFetch(initialSettings);
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Collapse menu" }));
+
+    expect(await screen.findByRole("button", { name: "Expand menu" })).toBeInTheDocument();
+    expect(fetchState.savedSettings.menuCollapsed).toBe(true);
+  });
+
   it("only lists shown profiles when choosing a preset profile", async () => {
     mockReaFetch({ ...initialSettings, shownProfileIds: ["p2"] });
     render(<App />);
@@ -452,6 +472,25 @@ describe("App shell", () => {
     expect(screen.queryByText("localhost")).not.toBeInTheDocument();
   });
 
+  it("tries to force scale connection when the disconnected Scale status is pressed", async () => {
+    const fetchState = mockReaFetch(initialSettings, {
+      devices: [{ id: "scale-1", name: "Acaia", type: "scale", state: "disconnected" }]
+    });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Scale" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Trying to connect scale.");
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/devices/scan?connect=true&quick=false",
+      expect.objectContaining({ method: "GET" })
+    );
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/devices/connect",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "scale-1" }) })
+    );
+  });
+
   it("installs the configured skin update on startup when auto-update is enabled", async () => {
     const fetchState = mockReaFetch({ ...initialSettings, skinAutoUpdateEnabled: true });
     render(<App />);
@@ -535,7 +574,7 @@ describe("App shell", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Water" }));
 
     expect(screen.getByText("Current water level")).toBeInTheDocument();
-    expect(screen.getByText("38ml")).toBeInTheDocument();
+    expect(screen.getByText("38mm · 63%")).toBeInTheDocument();
   });
 
   it("keeps preset editing open when saving the slot fails", async () => {

@@ -49,6 +49,7 @@ export interface UpdateBatchPayload extends Partial<CreateBatchPayload> {
 
 export interface CreateGrinderPayload {
   model: string;
+  burrs?: string;
   settingType?: "numeric" | "preset";
   notes?: string;
   extras?: JsonMap;

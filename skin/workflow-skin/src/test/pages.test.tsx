@@ -4,10 +4,13 @@ import { describe, expect, it, vi } from "vitest";
 import { ProfilePresetGrid } from "../components/ProfilePresetGrid";
 import { BagsPage } from "../pages/BagsPage";
 import { BrewPage } from "../pages/BrewPage";
+import { GrindersPage } from "../pages/GrindersPage";
 import { LivePage } from "../pages/LivePage";
 import { ProfilesPage } from "../pages/ProfilesPage";
+import { ScreensaverPage } from "../pages/ScreensaverPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { SteamPage } from "../pages/SteamPage";
+import { screensaverArt } from "../lib/screensaverArt";
 import type { ProfileRecord } from "../api/types";
 import { defaultSkinSettings } from "../state/skinSettings";
 
@@ -115,6 +118,14 @@ describe("BrewPage", () => {
 });
 
 describe("LivePage", () => {
+  it("renders a nonblank waiting state when no live samples are available", () => {
+    render(<LivePage workflow={{ context: { targetDoseWeight: 18, targetYield: 36 } }} latestShot={null} liveMeasurements={[]} scaleSnapshot={null} />);
+
+    expect(screen.getByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
+    expect(screen.getByText("Waiting for live espresso data")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Shot pressure graph" })).toBeInTheDocument();
+  });
+
   it("shows live brew graph and key details", () => {
     render(
       <LivePage
@@ -180,7 +191,18 @@ describe("BagsPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(onSaveBag).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert")).toHaveTextContent("Roaster, bean, roast date, and process are required.");
+    expect(screen.getByRole("alert")).toHaveTextContent("to consider this a bag for suggestions and future features fill all mandatory fields");
+    expect(screen.getByText("Mandatory for bag suggestions: roaster, bean, process, and roast date.")).toBeInTheDocument();
+  });
+
+  it("includes an optional bag name field and marks mandatory bag fields", () => {
+    render(<BagsPage bags={[]} onSaveBag={vi.fn()} />);
+
+    expect(screen.getByLabelText("Name")).toBeInTheDocument();
+    expect(screen.getByText("Roaster *")).toBeInTheDocument();
+    expect(screen.getByText("Bean *")).toBeInTheDocument();
+    expect(screen.getByText("Process *")).toBeInTheDocument();
+    expect(screen.getByText("Roast Date *")).toBeInTheDocument();
   });
 
   it("edits existing bag and grinder records", async () => {
@@ -258,6 +280,33 @@ describe("SteamPage", () => {
 });
 
 describe("ProfilesPage", () => {
+  it("searches profiles and filters pressure based profiles", async () => {
+    render(
+      <ProfilesPage
+        profiles={[
+          { id: "pressure", profile: { title: "Spring Lever", steps: [{ pressure: 8 }] } },
+          { id: "flow", profile: { title: "Turbo Flow", steps: [{ flow: 4 }] } }
+        ]}
+        settings={defaultSkinSettings}
+        onToggleReview={vi.fn()}
+        onSetStartupProfile={vi.fn()}
+        onSetProfileShown={vi.fn()}
+        onUpdateProfileWorkflow={vi.fn()}
+        onSaveProfile={vi.fn()}
+      />
+    );
+
+    await userEvent.type(screen.getByLabelText("Search profiles"), "spring");
+    expect(screen.getByText("Spring Lever")).toBeInTheDocument();
+    expect(screen.queryByText("Turbo Flow")).not.toBeInTheDocument();
+
+    await userEvent.clear(screen.getByLabelText("Search profiles"));
+    await userEvent.selectOptions(screen.getByLabelText("Profile type"), "pressure");
+
+    expect(screen.getByText("Spring Lever")).toBeInTheDocument();
+    expect(screen.queryByText("Turbo Flow")).not.toBeInTheDocument();
+  });
+
   it("selects a startup default profile", async () => {
     const onSetStartupProfile = vi.fn();
     render(
@@ -471,5 +520,111 @@ describe("SettingsPage", () => {
 
     expect(onCheckSkinUpdates).toHaveBeenCalledTimes(1);
     expect(onInstallSkinUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("edits the number of preset cards and their titles before saving settings", async () => {
+    const onUpdateSettings = vi.fn();
+    render(
+      <SettingsPage
+        settings={{
+          ...defaultSkinSettings,
+          presetSlotCount: 2,
+          presetSlots: [
+            { label: "Light", profileId: "p1" },
+            { label: "Turbo", profileId: "p2" }
+          ]
+        }}
+        r2Sensor={null}
+        onUpdateSettings={onUpdateSettings}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("Preset cards on main page"), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText("Preset 2 title"), { target: { value: "Milk" } });
+
+    expect(onUpdateSettings).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
+
+    expect(onUpdateSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        presetSlotCount: 3,
+        presetSlots: [
+          { label: "Light", profileId: "p1" },
+          { label: "Milk", profileId: "p2" },
+          { label: "Turbo" }
+        ]
+      })
+    );
+  });
+});
+
+describe("BrewPage workflow controls", () => {
+  it("edits recipe, changes the current bag, and shows bag-based grind guidance", async () => {
+    const onUpdateRecipe = vi.fn();
+    const onSelectBag = vi.fn();
+    render(
+      <BrewPage
+        workflow={{ context: { beanBatchId: "bag-1", targetDoseWeight: 18, targetYield: 40 } }}
+        profiles={profiles}
+        bags={[
+          { id: "bag-1", beanId: "bean-1", roaster: "Pilot", bean: "Halo", process: "Washed", roastDate: "2026-06-01" },
+          { id: "bag-2", beanId: "bean-2", roaster: "April", bean: "Nansebo", process: "Natural", roastDate: "2026-06-02" }
+        ]}
+        grinders={[]}
+        shots={[
+          {
+            id: "shot-1",
+            timestamp: "2026-06-11T10:00:00Z",
+            workflow: { context: { beanBatchId: "bag-1", targetDoseWeight: 19, targetYield: 42, grinderSetting: "5.2" } },
+            annotations: { actualDoseWeight: 19, actualYield: 42 }
+          },
+          {
+            id: "shot-2",
+            timestamp: "2026-06-10T10:00:00Z",
+            workflow: { context: { beanBatchId: "bag-1", targetDoseWeight: 18, targetYield: 40, grinderSetting: "5.4" } },
+            annotations: { actualDoseWeight: 18, actualYield: 40 }
+          }
+        ]}
+        settings={{ ...defaultSkinSettings, presetSlotCount: 2, shownProfileIds: ["p1", "p2"] }}
+        onApplyProfile={vi.fn()}
+        onEditSlot={vi.fn()}
+        onStartBrew={vi.fn()}
+        onUpdateRecipe={onUpdateRecipe}
+        onSelectBag={onSelectBag}
+      />
+    );
+
+    await userEvent.selectOptions(screen.getByLabelText("Current bag"), "bag-2");
+    expect(onSelectBag).toHaveBeenCalledWith("bag-2");
+    expect(screen.getByText("Suggested grind: 5.2")).toBeInTheDocument();
+    expect(screen.getByText("Suggested recipe: 18.5g in / 41g out")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Dose"), { target: { value: "20" } });
+    fireEvent.change(screen.getByLabelText("Yield"), { target: { value: "45" } });
+    await userEvent.click(screen.getByRole("button", { name: "Save recipe" }));
+
+    expect(onUpdateRecipe).toHaveBeenCalledWith({ dose: 20, yield: 45 });
+  });
+});
+
+describe("GrindersPage", () => {
+  it("saves grinder burr data", async () => {
+    const onCreateGrinder = vi.fn().mockResolvedValue(undefined);
+    render(<GrindersPage grinders={[]} onCreateGrinder={onCreateGrinder} onUpdateGrinder={vi.fn()} onArchiveGrinder={vi.fn()} />);
+
+    await userEvent.type(screen.getByLabelText("Grinder model"), "ZP6");
+    await userEvent.type(screen.getByLabelText("Burrs"), "MP burrs");
+    await userEvent.click(screen.getByRole("button", { name: "Save grinder" }));
+
+    expect(onCreateGrinder).toHaveBeenCalledWith(expect.objectContaining({ model: "ZP6", burrs: "MP burrs" }));
+  });
+});
+
+describe("ScreensaverPage", () => {
+  it("has 15 dark generated coffee pictures for sleep mode", () => {
+    expect(screensaverArt).toHaveLength(15);
+    render(<ScreensaverPage title="Workflow" onWake={vi.fn()} />);
+
+    expect(screen.getByLabelText("Screensaver mode")).toHaveStyle({ backgroundColor: "#020506" });
   });
 });

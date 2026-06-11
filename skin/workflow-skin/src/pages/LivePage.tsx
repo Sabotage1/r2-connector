@@ -8,7 +8,7 @@ function formatSeconds(value: number | null | undefined): string {
 }
 
 function latestMeasurement(measurements: ShotSnapshot[]): ShotSnapshot | undefined {
-  return measurements.at(-1);
+  return measurements.length ? measurements[measurements.length - 1] : undefined;
 }
 
 function scaleTimerSeconds(scaleSnapshot: WeightSnapshot | null): number | null {
@@ -53,6 +53,7 @@ export function LivePage({
   const time = scaleTimerSeconds(scaleSnapshot) ?? stats.durationSeconds;
   const pressure = latest?.machine?.pressure ?? stats.averagePressure;
   const flow = liveFlow(measurements, scaleSnapshot) ?? stats.averageFlow;
+  const waitingForData = measurements.length === 0 && !scaleSnapshot;
 
   return (
     <div className="live-grid">
@@ -60,6 +61,7 @@ export function LivePage({
         <div>
           <span className="eyebrow">{profileName(activeProfile, workflow)}</span>
           <h2>Live Brew</h2>
+          {waitingForData && <p className="muted live-waiting">Waiting for live espresso data</p>}
         </div>
         <div className="live-primary-stats">
           <MetricTile label="Weight" value={weight} unit="g" />

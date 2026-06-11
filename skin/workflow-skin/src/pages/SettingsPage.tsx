@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import type { DisplayState, JsonMap, PluginManifest, SensorListItem, VisualizerStatus, WebUISkin } from "../api/types";
-import type { SkinSettings } from "../state/skinSettings";
+import {
+  defaultPresetLabel,
+  ensurePresetSlots,
+  MAX_PRESET_SLOT_COUNT,
+  MIN_PRESET_SLOT_COUNT,
+  type SkinSettings
+} from "../state/skinSettings";
 
 const WORKFLOW_SKIN_ID = "workflow-skin";
 
@@ -63,8 +69,11 @@ function brightnessValue(value: number | undefined): number {
 }
 
 function normalizeDraftSettings(settings: SkinSettings): SkinSettings {
+  const presetSlotCount = Math.min(MAX_PRESET_SLOT_COUNT, Math.max(MIN_PRESET_SLOT_COUNT, Math.round(settings.presetSlotCount || 4)));
   const next: SkinSettings = {
     ...settings,
+    presetSlotCount,
+    presetSlots: ensurePresetSlots(settings.presetSlots, presetSlotCount),
     skinTitle: settings.skinTitle.trim() || "Workflow",
     skinUpdateRepo: settings.skinUpdateRepo.trim(),
     skinUpdateAsset: settings.skinUpdateAsset.trim() || "workflow-skin.zip",
@@ -130,6 +139,23 @@ export function SettingsPage({
     setDraftSettings((current) => ({ ...current, ...patch }));
   };
 
+  const updatePresetCount = (value: number) => {
+    const presetSlotCount = Math.min(MAX_PRESET_SLOT_COUNT, Math.max(MIN_PRESET_SLOT_COUNT, Math.round(value)));
+    setDraftSettings((current) => ({
+      ...current,
+      presetSlotCount,
+      presetSlots: ensurePresetSlots(current.presetSlots, presetSlotCount)
+    }));
+  };
+
+  const updatePresetTitle = (index: number, label: string) => {
+    setDraftSettings((current) => {
+      const slots = ensurePresetSlots(current.presetSlots, current.presetSlotCount);
+      slots[index] = { ...slots[index], label };
+      return { ...current, presetSlots: slots };
+    });
+  };
+
   const updateR2SensorId = (sensorId: string | undefined) => {
     setDraftSettings((current) => {
       if (sensorId) return { ...current, r2SensorId: sensorId };
@@ -158,6 +184,35 @@ export function SettingsPage({
       <div className="list-row">
         <strong>Creator</strong>
         <span>Roy Ackerman</span>
+      </div>
+      <div className="list-row settings-update-row">
+        <strong>Main page presets</strong>
+        <label className="settings-field">
+          Preset cards on main page
+          <input
+            aria-label="Preset cards on main page"
+            type="number"
+            min={MIN_PRESET_SLOT_COUNT}
+            max={MAX_PRESET_SLOT_COUNT}
+            value={draftSettings.presetSlotCount}
+            onChange={(event) => updatePresetCount(Number(event.target.value))}
+          />
+        </label>
+        <div className="settings-preset-title-grid">
+          {ensurePresetSlots(draftSettings.presetSlots, draftSettings.presetSlotCount)
+            .slice(0, draftSettings.presetSlotCount)
+            .map((slot, index) => (
+              <label className="settings-field" key={index}>
+                Preset {index + 1} title
+                <input
+                  aria-label={`Preset ${index + 1} title`}
+                  value={slot.label}
+                  placeholder={defaultPresetLabel(index)}
+                  onChange={(event) => updatePresetTitle(index, event.target.value)}
+                />
+              </label>
+            ))}
+        </div>
       </div>
       <div className="list-row settings-update-row">
         <strong>Skin updates</strong>

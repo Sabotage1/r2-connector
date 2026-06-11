@@ -1,6 +1,6 @@
-import { Activity, Coffee, Flame, History, Moon, PackageOpen, Settings, SlidersHorizontal } from "lucide-react";
+import { Activity, Coffee, Flame, Gauge, History, Moon, PackageOpen, PanelLeftClose, PanelLeftOpen, Settings, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { apiBaseUrl, ReaPrimeApi, ReaPrimeApiError } from "./api/reaprime";
+import { apiBaseUrl, ReaPrimeApi, ReaPrimeApiError, type CreateGrinderPayload } from "./api/reaprime";
 import { findDifluidR2Sensor } from "./api/sensors";
 import type { DeviceInfo, Grinder, MachineState, Profile, ProfileRecord, ShotAnnotations } from "./api/types";
 import { uploadShotToVisualizer } from "./api/visualizer";
@@ -10,6 +10,7 @@ import type { ConnectivityStatus } from "./lib/connectivity";
 import { postShotPageForShot, selectedProfileIdFromWorkflow } from "./lib/workflowRouting";
 import { BagsPage } from "./pages/BagsPage";
 import { BrewPage } from "./pages/BrewPage";
+import { GrindersPage } from "./pages/GrindersPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { LivePage } from "./pages/LivePage";
 import { ProfilesPage } from "./pages/ProfilesPage";
@@ -21,7 +22,7 @@ import { isProfileShown, profileWorkflowFor, type ProfileWorkflowSettings, type 
 import { useLiveTelemetry } from "./state/useLiveTelemetry";
 import { useReaData } from "./state/useReaData";
 
-type Page = "brew" | "live" | "review" | "steam" | "bags" | "profiles" | "history" | "settings" | "screensaver";
+type Page = "brew" | "live" | "review" | "steam" | "bags" | "grinders" | "profiles" | "history" | "settings" | "screensaver";
 
 const nav: Array<{ id: Page; label: string; icon: React.ComponentType<{ size?: number }> }> = [
   { id: "brew", label: "Brew", icon: Coffee },
@@ -29,6 +30,7 @@ const nav: Array<{ id: Page; label: string; icon: React.ComponentType<{ size?: n
   { id: "review", label: "Review", icon: Activity },
   { id: "steam", label: "Steam", icon: Flame },
   { id: "bags", label: "Bags", icon: PackageOpen },
+  { id: "grinders", label: "Grinders", icon: Gauge },
   { id: "profiles", label: "Profiles", icon: SlidersHorizontal },
   { id: "history", label: "History", icon: History },
   { id: "settings", label: "Settings", icon: Settings }
@@ -515,7 +517,7 @@ export function App() {
         roastDate: dateOnlyToIsoDateTime(bag.roastDate),
         roastLevel: bag.roastLevel?.trim() || undefined,
         notes: bag.notes?.trim() || undefined,
-        extras: { workflowSkin: { createdFromBagForm: true } }
+        extras: { workflowSkin: { createdFromBagForm: true, name: bag.name?.trim() || undefined } }
       });
     } catch (error) {
       try {
@@ -542,7 +544,8 @@ export function App() {
       api.updateBatch(bag.id, {
         roastDate: dateOnlyToIsoDateTime(bag.roastDate),
         roastLevel: bag.roastLevel?.trim() || undefined,
-        notes: bag.notes?.trim() || undefined
+        notes: bag.notes?.trim() || undefined,
+        extras: { workflowSkin: { name: bag.name?.trim() || undefined } }
       })
     ]);
     await data.refresh();
@@ -553,12 +556,12 @@ export function App() {
     await data.refresh();
   };
 
-  const createGrinder = async (payload: Pick<Grinder, "model" | "settingType" | "notes">) => {
+  const createGrinder = async (payload: CreateGrinderPayload) => {
     await api.createGrinder(payload);
     await data.refresh();
   };
 
-  const updateGrinder = async (id: string, payload: Pick<Grinder, "model" | "settingType" | "notes">) => {
+  const updateGrinder = async (id: string, payload: Partial<CreateGrinderPayload>) => {
     await api.updateGrinder(id, payload);
     await data.refresh();
   };
@@ -640,20 +643,53 @@ export function App() {
     setPage("brew");
   };
 
+  const forceScaleConnection = async () => {
+    setStatus({ type: "success", message: "Trying to connect scale." });
+    try {
+      await api.scanDevices({ connect: true, quick: false }).catch(() => undefined);
+      const devices = await api.listDevices().catch(() => data.devices ?? []);
+      for (const device of devices.filter((device) => device.type === "scale" && device.state !== "connected")) {
+        await api.connectDevice(device.id).catch(() => undefined);
+      }
+      await data.refresh();
+    } catch (error) {
+      setStatus({ type: "error", message: `Could not connect scale: ${errorMessage(error)}` });
+    }
+  };
+
   const toggleStatusPopover = (nextStatus: ConnectivityStatus) => {
+    if (nextStatus.id === "scale" && !nextStatus.connected) {
+      setExpandedStatusId(null);
+      void forceScaleConnection();
+      return;
+    }
     setExpandedStatusId((current) => (current === nextStatus.id ? null : nextStatus.id));
   };
 
   const editingSlot = editingSlotIndex === null ? undefined : data.settings.presetSlots[editingSlotIndex];
+
+  const toggleMenuCollapsed = async () => {
+    await persistSettings({ ...data.settings, menuCollapsed: !data.settings.menuCollapsed });
+  };
 
   if (page === "screensaver") {
     return <ScreensaverPage title={data.settings.skinTitle} onWake={() => void wakeScreen()} />;
   }
 
   return (
-    <main className="app-shell">
+    <main className={data.settings.menuCollapsed ? "app-shell menu-collapsed" : "app-shell"}>
       <nav className="side-nav" aria-label="Workflow navigation">
         <SidebarStatus statuses={statuses} expandedStatusId={expandedStatusId} onStatusPress={toggleStatusPopover} />
+        <button
+          type="button"
+          className="nav-button menu-toggle-button"
+          aria-label={data.settings.menuCollapsed ? "Expand menu" : "Collapse menu"}
+          title={data.settings.menuCollapsed ? "Expand menu" : "Collapse menu"}
+          onClick={() => void toggleMenuCollapsed()}
+        >
+          {data.settings.menuCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+          <span>{data.settings.menuCollapsed ? "Expand" : "Minimize"}</span>
+        </button>
         {nav.map((item) => {
           const Icon = item.icon;
           return (
@@ -718,6 +754,29 @@ export function App() {
               void startBrew();
             }}
             brewPending={brewPending}
+            grinders={data.grinders ?? []}
+            onUpdateRecipe={async ({ dose, yield: targetYield }) => {
+              await api.updateWorkflow({
+                context: {
+                  ...data.workflow.context,
+                  targetDoseWeight: dose,
+                  targetYield
+                }
+              });
+              await data.refresh();
+            }}
+            onSelectBag={async (bagId) => {
+              const bag = data.bags.find((item) => item.id === bagId);
+              await api.updateWorkflow({
+                context: {
+                  ...data.workflow.context,
+                  beanBatchId: bagId || undefined,
+                  coffeeName: bag?.bean,
+                  coffeeRoaster: bag?.roaster
+                }
+              });
+              await data.refresh();
+            }}
           />
         )}
         {page === "live" && (
@@ -761,6 +820,14 @@ export function App() {
             onSaveBag={saveBag}
             onUpdateBag={updateBag}
             onArchiveBag={archiveBag}
+            onCreateGrinder={createGrinder}
+            onUpdateGrinder={updateGrinder}
+            onArchiveGrinder={archiveGrinder}
+          />
+        )}
+        {page === "grinders" && (
+          <GrindersPage
+            grinders={data.grinders ?? []}
             onCreateGrinder={createGrinder}
             onUpdateGrinder={updateGrinder}
             onArchiveGrinder={archiveGrinder}

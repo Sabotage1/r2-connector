@@ -16,9 +16,11 @@ export interface ProfileWorkflowSettings {
 
 export interface SkinSettings {
   presetSlots: PresetSlot[];
+  presetSlotCount: number;
   defaultReviewEnabled: boolean;
   reviewEnabledByProfile: Record<string, boolean>;
   skinTitle: string;
+  menuCollapsed: boolean;
   startupProfileId?: string;
   r2SensorId?: string;
   shownProfileIds: string[];
@@ -38,6 +40,8 @@ export interface SkinSettings {
 export const SKIN_NAMESPACE = "workflow-skin";
 export const SETTINGS_KEY = "settings";
 export const DEFAULT_SKIN_UPDATE_REPO = "Sabotage1/r2-connector";
+export const MIN_PRESET_SLOT_COUNT = 1;
+export const MAX_PRESET_SLOT_COUNT = 8;
 
 const DEFAULT_PRESET_SLOTS: PresetSlot[] = [
   { label: "Light" },
@@ -59,9 +63,11 @@ function cloneSteamTimers(timers: SteamTimers): SteamTimers {
 export function createDefaultSkinSettings(): SkinSettings {
   return {
     presetSlots: clonePresetSlots(DEFAULT_PRESET_SLOTS),
+    presetSlotCount: DEFAULT_PRESET_SLOTS.length,
     defaultReviewEnabled: true,
     reviewEnabledByProfile: {},
     skinTitle: "Workflow",
+    menuCollapsed: false,
     keepScreenAwake: true,
     screensaverBrightness: 8,
     skinAutoUpdateEnabled: false,
@@ -109,6 +115,27 @@ function normalizeStringList(value: unknown): string[] {
   return Array.from(new Set(value.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map((item) => item.trim())));
 }
 
+function normalizePresetSlotCount(value: unknown, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.min(MAX_PRESET_SLOT_COUNT, Math.max(MIN_PRESET_SLOT_COUNT, Math.round(value)));
+}
+
+export function defaultPresetLabel(index: number): string {
+  return DEFAULT_PRESET_SLOTS[index]?.label ?? `Preset ${index + 1}`;
+}
+
+export function ensurePresetSlots(slots: PresetSlot[], count: number): PresetSlot[] {
+  const next = clonePresetSlots(slots);
+  while (next.length < count) {
+    next.push({ label: defaultPresetLabel(next.length) });
+  }
+  return next.map((slot, index) => ({ ...slot, label: slot.label.trim() || defaultPresetLabel(index) }));
+}
+
+export function visiblePresetSlots(settings: SkinSettings): PresetSlot[] {
+  return ensurePresetSlots(settings.presetSlots, settings.presetSlotCount).slice(0, settings.presetSlotCount);
+}
+
 function normalizeString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value.trim() : fallback;
 }
@@ -147,9 +174,11 @@ export function normalizeSkinSettings(value: unknown): SkinSettings {
 
   const settings: SkinSettings = {
     presetSlots: normalizePresetSlots(value.presetSlots),
+    presetSlotCount: normalizePresetSlotCount(value.presetSlotCount, DEFAULT_PRESET_SLOTS.length),
     defaultReviewEnabled: typeof value.defaultReviewEnabled === "boolean" ? value.defaultReviewEnabled : true,
     reviewEnabledByProfile: normalizeReviewEnabledByProfile(value.reviewEnabledByProfile),
     skinTitle: typeof value.skinTitle === "string" && value.skinTitle.trim() ? value.skinTitle.trim() : "Workflow",
+    menuCollapsed: typeof value.menuCollapsed === "boolean" ? value.menuCollapsed : false,
     keepScreenAwake: typeof value.keepScreenAwake === "boolean" ? value.keepScreenAwake : true,
     screensaverBrightness:
       typeof value.screensaverBrightness === "number" && Number.isFinite(value.screensaverBrightness)

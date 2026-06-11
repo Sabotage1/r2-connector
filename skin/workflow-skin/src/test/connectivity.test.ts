@@ -64,7 +64,7 @@ describe("buildConnectivityStatuses", () => {
     expect(statuses.find((status) => status.id === "water")).toEqual({
       id: "water",
       label: "Water",
-      detail: "42ml",
+      detail: "42mm · 70%",
       connected: true
     });
   });
@@ -107,7 +107,7 @@ describe("buildConnectivityStatuses", () => {
     expect(statuses.find((status) => status.id === "water")).toEqual({
       id: "water",
       label: "Water",
-      detail: "Low 12ml",
+      detail: "Low 12mm · 20%",
       connected: false
     });
   });

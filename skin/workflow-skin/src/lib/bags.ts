@@ -3,6 +3,7 @@ import type { Bean, BeanBatch, ShotRecord } from "../api/types";
 export interface Bag {
   id: string;
   beanId: string;
+  name?: string;
   roaster?: string;
   bean?: string;
   country?: string;
@@ -25,9 +26,11 @@ export interface BagFilters {
 const filterKeys = ["roaster", "bean", "country", "region", "process", "roastLevel"] as const;
 
 export function buildBag(bean: Bean, batch: BeanBatch): Bag {
+  const workflowSkin = batch.extras?.workflowSkin as { name?: unknown } | undefined;
   return {
     id: batch.id,
     beanId: bean.id,
+    name: typeof workflowSkin?.name === "string" ? workflowSkin.name : undefined,
     roaster: bean.roaster,
     bean: bean.name,
     country: bean.country,

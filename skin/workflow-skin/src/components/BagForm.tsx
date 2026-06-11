@@ -1,12 +1,13 @@
 import type { Bag } from "../lib/bags";
 
-const fields: Array<{ key: keyof Bag; label: string; type?: string }> = [
-  { key: "roaster", label: "Roaster" },
-  { key: "bean", label: "Bean" },
+const fields: Array<{ key: keyof Bag; label: string; type?: string; mandatory?: boolean }> = [
+  { key: "name", label: "Name" },
+  { key: "roaster", label: "Roaster", mandatory: true },
+  { key: "bean", label: "Bean", mandatory: true },
   { key: "country", label: "Country" },
   { key: "region", label: "Region" },
-  { key: "process", label: "Process" },
-  { key: "roastDate", label: "Roast Date", type: "date" },
+  { key: "process", label: "Process", mandatory: true },
+  { key: "roastDate", label: "Roast Date", type: "date", mandatory: true },
   { key: "roastLevel", label: "Roast Level" }
 ];
 
@@ -47,11 +48,13 @@ export function BagForm({
           </button>
         </div>
       </div>
+      <p className="mandatory-help">Mandatory for bag suggestions: roaster, bean, process, and roast date.</p>
       <div className="form-grid">
         {fields.map((field) => (
-          <label key={field.key}>
-            <span>{field.label}</span>
+          <label key={field.key} className={field.mandatory ? "mandatory-field" : undefined}>
+            <span>{field.mandatory ? `${field.label} *` : field.label}</span>
             <input
+              aria-label={field.label}
               type={field.type ?? "text"}
               value={(value[field.key] as string | undefined) ?? ""}
               onChange={(event) => onChange({ ...value, [field.key]: event.target.value })}

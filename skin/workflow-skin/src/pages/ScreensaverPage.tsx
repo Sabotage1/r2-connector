@@ -1,8 +1,22 @@
+import { useEffect, useState } from "react";
+import { screensaverArt } from "../lib/screensaverArt";
+
 export function ScreensaverPage({ title, onWake }: { title: string; onWake: () => void }) {
+  const [artIndex, setArtIndex] = useState(() => Math.floor(Math.random() * screensaverArt.length));
+  const art = screensaverArt[artIndex] ?? screensaverArt[0];
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setArtIndex((current) => (current + 1) % screensaverArt.length);
+    }, 45000);
+    return () => window.clearInterval(interval);
+  }, []);
+
   return (
     <main
       className="screensaver"
       aria-label="Screensaver mode"
+      style={{ backgroundColor: "#020506", backgroundImage: art.backgroundImage }}
       onClick={onWake}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") onWake();

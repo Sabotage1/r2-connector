@@ -23,6 +23,8 @@ describe("skin settings", () => {
     expect(defaultSkinSettings.skinUpdateRepo).toBe("Sabotage1/r2-connector");
     expect(defaultSkinSettings.skinUpdateAsset).toBe("workflow-skin.zip");
     expect(defaultSkinSettings.skinUpdatePrerelease).toBe(false);
+    expect(defaultSkinSettings.presetSlotCount).toBe(4);
+    expect(defaultSkinSettings.menuCollapsed).toBe(false);
   });
 
   it("loads default settings when KV is missing", async () => {
@@ -47,6 +49,8 @@ describe("skin settings", () => {
         skinUpdateRepo: " roy/workflow-skin ",
         skinUpdateAsset: " workflow-skin.zip ",
         skinUpdatePrerelease: true,
+        presetSlotCount: 12,
+        menuCollapsed: true,
         shownProfileIds: ["p1", 42, "p2"],
         profileWorkflows: {
           p2: { milkBased: true, steamTimers: { small: 18, medium: 28, large: 42 } },
@@ -73,6 +77,8 @@ describe("skin settings", () => {
     expect(settings.skinUpdateRepo).toBe("roy/workflow-skin");
     expect(settings.skinUpdateAsset).toBe("workflow-skin.zip");
     expect(settings.skinUpdatePrerelease).toBe(true);
+    expect(settings.presetSlotCount).toBe(8);
+    expect(settings.menuCollapsed).toBe(true);
     expect(settings.shownProfileIds).toEqual(["p1", "p2"]);
     expect(settings.profileWorkflows).toEqual({
       p2: { milkBased: true, steamTimers: { small: 18, medium: 28, large: 42 } }

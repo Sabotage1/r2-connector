@@ -15,7 +15,16 @@ export function ShotGraph({ measurements }: { measurements: ShotSnapshot[] }) {
   return (
     <svg className="shot-graph" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Shot pressure graph">
       <rect width={width} height={height} rx="8" fill="#10161b" />
-      <polyline points={points} fill="none" stroke="#77d1c2" strokeWidth="4" />
+      {points ? (
+        <polyline points={points} fill="none" stroke="#77d1c2" strokeWidth="4" />
+      ) : (
+        <>
+          <line x1="32" y1={height - 34} x2={width - 32} y2={height - 34} stroke="#2a343c" strokeWidth="2" strokeDasharray="10 10" />
+          <text x={width / 2} y={height / 2} fill="#7f8b94" fontSize="18" fontWeight="800" textAnchor="middle">
+            Waiting for live data
+          </text>
+        </>
+      )}
     </svg>
   );
 }

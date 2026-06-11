@@ -6,6 +6,7 @@ import { filterBags, isValidBag, type Bag, type BagFilters } from "../lib/bags";
 const emptyBag: Bag = {
   id: "draft",
   beanId: "draft",
+  name: "",
   roaster: "",
   bean: "",
   country: "",
@@ -32,6 +33,10 @@ function grinderDraftFrom(grinder: Grinder): GrinderDraft {
     settingType: grinder.settingType ?? "numeric",
     notes: grinder.notes ?? ""
   };
+}
+
+function bagTitle(bag: Bag): string {
+  return bag.name?.trim() || [bag.roaster, bag.bean].filter(Boolean).join(" ") || "Unnamed bag";
 }
 
 function grinderPayload(draft: GrinderDraft) {
@@ -71,7 +76,7 @@ export function BagsPage({
 
   const saveDraft = async () => {
     if (!isValidBag(draft)) {
-      setStatus({ type: "error", message: "Roaster, bean, roast date, and process are required." });
+      setStatus({ type: "error", message: "to consider this a bag for suggestions and future features fill all mandatory fields" });
       return;
     }
 
@@ -160,9 +165,7 @@ export function BagsPage({
         <h2>History</h2>
         {visibleBags.map((bag) => (
           <div className="list-row" key={bag.id}>
-            <strong>
-              {bag.roaster} {bag.bean}
-            </strong>
+            <strong>{bagTitle(bag)}</strong>
             <span>{[bag.country, bag.process, bag.roastLevel].filter(Boolean).join(" · ")}</span>
             <div className="row-actions">
               <button
@@ -174,7 +177,7 @@ export function BagsPage({
                   setStatus(null);
                 }}
               >
-                Edit {bag.roaster} {bag.bean}
+                Edit {bagTitle(bag)}
               </button>
               {onArchiveBag && (
                 <button type="button" className="ghost-button compact-button" onClick={() => void archiveBag(bag)}>
