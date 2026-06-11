@@ -7,6 +7,10 @@ function formatSeconds(value: number | null | undefined): string {
   return typeof value === "number" && Number.isFinite(value) ? String(Math.round(value)) : "—";
 }
 
+function formatLiveNumber(value: number | null | undefined): string | null {
+  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(2) : null;
+}
+
 function latestMeasurement(measurements: ShotSnapshot[]): ShotSnapshot | undefined {
   return measurements.length ? measurements[measurements.length - 1] : undefined;
 }
@@ -64,7 +68,7 @@ export function LivePage({
           {waitingForData && <p className="muted live-waiting">Waiting for live espresso data</p>}
         </div>
         <div className="live-primary-stats">
-          <MetricTile label="Weight" value={weight} unit="g" />
+          <MetricTile label="Weight" value={formatLiveNumber(weight)} unit="g" />
           <MetricTile label="Brew Time" value={formatSeconds(time)} unit="s" />
         </div>
       </section>
@@ -73,8 +77,8 @@ export function LivePage({
       </section>
       <section className="panel">
         <h2>Live Details</h2>
-        <MetricTile label="Pressure" value={pressure} unit="bar" />
-        <MetricTile label="Flow" value={flow} unit="g/s" />
+        <MetricTile label="Pressure" value={formatLiveNumber(pressure)} unit="bar" />
+        <MetricTile label="Flow" value={formatLiveNumber(flow)} unit="g/s" />
         <MetricTile label="Target Dose" value={workflow.context?.targetDoseWeight ?? null} unit="g" />
         <MetricTile label="Target Yield" value={workflow.context?.targetYield ?? workflow.profile?.target_weight ?? null} unit="g" />
       </section>
@@ -82,8 +86,8 @@ export function LivePage({
         <h2>Machine</h2>
         <MetricTile label="State" value={latest?.machine?.state?.state ?? "Waiting"} />
         <MetricTile label="Substate" value={latest?.machine?.state?.substate ?? "—"} />
-        <MetricTile label="Group Temp" value={latest?.machine?.groupTemperature ?? null} unit="°C" />
-        <MetricTile label="Mix Temp" value={latest?.machine?.mixTemperature ?? null} unit="°C" />
+        <MetricTile label="Group Temp" value={formatLiveNumber(latest?.machine?.groupTemperature)} unit="°C" />
+        <MetricTile label="Mix Temp" value={formatLiveNumber(latest?.machine?.mixTemperature)} unit="°C" />
       </section>
     </div>
   );

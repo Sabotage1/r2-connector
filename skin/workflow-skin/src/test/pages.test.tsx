@@ -140,18 +140,22 @@ describe("LivePage", () => {
             scale: { weight: 4 }
           },
           {
-            machine: { timestamp: "2026-06-11T10:00:28.000Z", pressure: 8.5, flow: 2.1 },
+            machine: { timestamp: "2026-06-11T10:00:28.000Z", pressure: 8.567, flow: 2.1, groupTemperature: 92.236, mixTemperature: 88.124 },
             scale: { weight: 36 }
           }
         ]}
-        scaleSnapshot={{ weight: 36, weightFlow: 1.8, timerValue: 28000 }}
+        scaleSnapshot={{ weight: 36.346, weightFlow: 1.847, timerValue: 28000 }}
       />
     );
 
     expect(screen.getByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Shot pressure graph" })).toBeInTheDocument();
     expect(screen.getByText("Blooming")).toBeInTheDocument();
-    expect(screen.getByLabelText("Weight: 36 g")).toBeInTheDocument();
+    expect(screen.getByLabelText("Weight: 36.35 g")).toBeInTheDocument();
+    expect(screen.getByLabelText("Pressure: 8.57 bar")).toBeInTheDocument();
+    expect(screen.getByLabelText("Flow: 1.85 g/s")).toBeInTheDocument();
+    expect(screen.getByLabelText("Group Temp: 92.24 °C")).toBeInTheDocument();
+    expect(screen.getByLabelText("Mix Temp: 88.12 °C")).toBeInTheDocument();
     expect(screen.getByLabelText("Brew Time: 28 s")).toBeInTheDocument();
   });
 });

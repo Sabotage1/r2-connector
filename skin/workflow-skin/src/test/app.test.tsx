@@ -453,7 +453,7 @@ describe("App shell", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Light Blooming" }));
 
     expect(await screen.findByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Weight: 36 g")).toBeInTheDocument();
+    expect(screen.getByLabelText("Weight: 36.00 g")).toBeInTheDocument();
     expect(screen.getByLabelText("Brew Time: 30 s")).toBeInTheDocument();
   });
 
