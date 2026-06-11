@@ -82,7 +82,7 @@ function waterStatus(waterLevels: WaterLevels | null | undefined): ConnectivityS
   return {
     id: "water",
     label: "Water",
-    detail: low ? `Low ${rounded}mm` : `${rounded}mm`,
+    detail: low ? `Low ${rounded}ml` : `${rounded}ml`,
     connected: !low
   };
 }

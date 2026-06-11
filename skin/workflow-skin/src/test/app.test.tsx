@@ -490,7 +490,7 @@ describe("App shell", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Water" }));
 
     expect(screen.getByText("Current water level")).toBeInTheDocument();
-    expect(screen.getByText("38mm")).toBeInTheDocument();
+    expect(screen.getByText("38ml")).toBeInTheDocument();
   });
 
   it("keeps preset editing open when saving the slot fails", async () => {
