@@ -626,6 +626,28 @@ textarea {
   color: #ffd9d9 !important;
 }
 
+.settings-draft-status {
+  color: #f7d680 !important;
+  font-weight: 800;
+}
+
+.settings-save-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  margin: 16px -18px -18px;
+  padding: 14px 18px;
+  border-top: 1px solid #263039;
+  border-radius: 0 0 8px 8px;
+  background: rgba(18, 25, 31, 0.96);
+  backdrop-filter: blur(10px);
+}
+
+.settings-save-button {
+  min-width: 160px;
+}
+
 .primary-button,
 .ghost-button {
   min-height: 44px;

@@ -62,6 +62,22 @@ function brightnessValue(value: number | undefined): number {
   return Math.min(100, Math.max(0, Math.round(value)));
 }
 
+function normalizeDraftSettings(settings: SkinSettings): SkinSettings {
+  const next: SkinSettings = {
+    ...settings,
+    skinTitle: settings.skinTitle.trim() || "Workflow",
+    skinUpdateRepo: settings.skinUpdateRepo.trim(),
+    skinUpdateAsset: settings.skinUpdateAsset.trim() || "workflow-skin.zip",
+    keepScreenAwake: settings.keepScreenAwake !== false,
+    screensaverBrightness: brightnessValue(settings.screensaverBrightness),
+    skinAutoUpdateEnabled: Boolean(settings.skinAutoUpdateEnabled),
+    skinUpdatePrerelease: Boolean(settings.skinUpdatePrerelease)
+  };
+
+  if (!next.r2SensorId) delete next.r2SensorId;
+  return next;
+}
+
 function sourceLine(skin: WebUISkin | null | undefined): string {
   const source = skin?.reaMetadata?.sourceUrl;
   return source ? `Remote source: ${source}` : "Remote source not registered";
@@ -96,38 +112,37 @@ export function SettingsPage({
   onCheckSkinUpdates?: () => Promise<void> | void;
   onInstallSkinUpdate?: () => Promise<void> | void;
 }) {
-  const r2Configured = Boolean(settings.r2SensorId);
-  const [title, setTitle] = useState(settings.skinTitle);
-  const [updateRepo, setUpdateRepo] = useState(settings.skinUpdateRepo);
-  const [updateAsset, setUpdateAsset] = useState(settings.skinUpdateAsset);
-  const screensaverBrightness = brightnessValue(settings.screensaverBrightness);
+  const [draftSettings, setDraftSettings] = useState(settings);
+  const [acknowledgedSettings, setAcknowledgedSettings] = useState(settings);
+  const savedSettings = normalizeDraftSettings(acknowledgedSettings);
+  const nextSettings = normalizeDraftSettings(draftSettings);
+  const settingsChanged = JSON.stringify(nextSettings) !== JSON.stringify(savedSettings);
+  const r2Configured = Boolean(draftSettings.r2SensorId);
+  const screensaverBrightness = brightnessValue(draftSettings.screensaverBrightness);
   const workflowSkin = webuiSkins?.find((skin) => skin.id === WORKFLOW_SKIN_ID) ?? (defaultWebuiSkin?.id === WORKFLOW_SKIN_ID ? defaultWebuiSkin : null);
 
   useEffect(() => {
-    setTitle(settings.skinTitle);
-  }, [settings.skinTitle]);
+    setDraftSettings(settings);
+    setAcknowledgedSettings(settings);
+  }, [settings]);
 
-  useEffect(() => {
-    setUpdateRepo(settings.skinUpdateRepo);
-  }, [settings.skinUpdateRepo]);
-
-  useEffect(() => {
-    setUpdateAsset(settings.skinUpdateAsset);
-  }, [settings.skinUpdateAsset]);
-
-  const updateTitle = (value: string) => {
-    setTitle(value);
-    onUpdateSettings({ ...settings, skinTitle: value.trim() || "Workflow" });
+  const updateDraftSettings = (patch: Partial<SkinSettings>) => {
+    setDraftSettings((current) => ({ ...current, ...patch }));
   };
 
-  const updateSkinRepo = (value: string) => {
-    setUpdateRepo(value);
-    onUpdateSettings({ ...settings, skinUpdateRepo: value });
+  const updateR2SensorId = (sensorId: string | undefined) => {
+    setDraftSettings((current) => {
+      if (sensorId) return { ...current, r2SensorId: sensorId };
+      const next = { ...current };
+      delete next.r2SensorId;
+      return next;
+    });
   };
 
-  const updateSkinAsset = (value: string) => {
-    setUpdateAsset(value);
-    onUpdateSettings({ ...settings, skinUpdateAsset: value });
+  const saveSettings = () => {
+    setAcknowledgedSettings(nextSettings);
+    setDraftSettings(nextSettings);
+    onUpdateSettings(nextSettings);
   };
 
   return (
@@ -137,7 +152,7 @@ export function SettingsPage({
         <strong>Skin title</strong>
         <label className="settings-field">
           Skin title
-          <input value={title} onChange={(event) => updateTitle(event.target.value)} />
+          <input value={draftSettings.skinTitle} onChange={(event) => updateDraftSettings({ skinTitle: event.target.value })} />
         </label>
       </div>
       <div className="list-row">
@@ -152,8 +167,8 @@ export function SettingsPage({
         <label className="inline-toggle">
           <input
             type="checkbox"
-            checked={settings.skinAutoUpdateEnabled}
-            onChange={(event) => onUpdateSettings({ ...settings, skinAutoUpdateEnabled: event.target.checked })}
+            checked={draftSettings.skinAutoUpdateEnabled}
+            onChange={(event) => updateDraftSettings({ skinAutoUpdateEnabled: event.target.checked })}
           />
           Auto update this skin on startup
         </label>
@@ -161,24 +176,24 @@ export function SettingsPage({
           <label className="settings-field">
             GitHub repo
             <input
-              value={updateRepo}
+              value={draftSettings.skinUpdateRepo}
               placeholder="owner/repo"
-              onChange={(event) => updateSkinRepo(event.target.value)}
+              onChange={(event) => updateDraftSettings({ skinUpdateRepo: event.target.value })}
             />
           </label>
           <label className="settings-field">
             Release asset
             <input
-              value={updateAsset}
+              value={draftSettings.skinUpdateAsset}
               placeholder="workflow-skin.zip"
-              onChange={(event) => updateSkinAsset(event.target.value)}
+              onChange={(event) => updateDraftSettings({ skinUpdateAsset: event.target.value })}
             />
           </label>
           <label className="inline-toggle settings-update-prerelease">
             <input
               type="checkbox"
-              checked={settings.skinUpdatePrerelease}
-              onChange={(event) => onUpdateSettings({ ...settings, skinUpdatePrerelease: event.target.checked })}
+              checked={draftSettings.skinUpdatePrerelease}
+              onChange={(event) => updateDraftSettings({ skinUpdatePrerelease: event.target.checked })}
             />
             Include prereleases
           </label>
@@ -190,12 +205,13 @@ export function SettingsPage({
           <button
             type="button"
             className="ghost-button"
-            disabled={skinUpdateBusy || !onInstallSkinUpdate || !updateRepo.trim()}
+            disabled={skinUpdateBusy || !onInstallSkinUpdate || !draftSettings.skinUpdateRepo.trim() || settingsChanged}
             onClick={() => void onInstallSkinUpdate?.()}
           >
             Install/update from GitHub release
           </button>
         </div>
+        {settingsChanged && <span className="settings-draft-status">Save settings before installing GitHub release updates.</span>}
         {skinUpdateStatus && <span className={skinUpdateStatus.type === "error" ? "settings-update-status error" : "settings-update-status"}>{skinUpdateStatus.message}</span>}
       </div>
       <div className="list-row">
@@ -205,8 +221,8 @@ export function SettingsPage({
         <label className="inline-toggle">
           <input
             type="checkbox"
-            checked={settings.keepScreenAwake !== false}
-            onChange={(event) => onUpdateSettings({ ...settings, keepScreenAwake: event.target.checked })}
+            checked={draftSettings.keepScreenAwake !== false}
+            onChange={(event) => updateDraftSettings({ keepScreenAwake: event.target.checked })}
           />
           Keep screen awake while the skin is open
         </label>
@@ -220,7 +236,7 @@ export function SettingsPage({
               max={100}
               step={1}
               value={screensaverBrightness}
-              onChange={(event) => onUpdateSettings({ ...settings, screensaverBrightness: Number(event.target.value) })}
+              onChange={(event) => updateDraftSettings({ screensaverBrightness: Number(event.target.value) })}
             />
             <strong className="settings-slider-value">{screensaverBrightness}%</strong>
           </span>
@@ -236,22 +252,27 @@ export function SettingsPage({
       </div>
       <div className="list-row">
         <strong>DiFluid R2 status</strong>
-        <span>{r2Configured ? `Configured sensor: ${settings.r2SensorId}` : "R2 status is hidden until setup."}</span>
+        <span>{r2Configured ? `Configured sensor: ${draftSettings.r2SensorId}` : "R2 status is hidden until setup."}</span>
         <div className="profile-workflow-controls">
           <button
             type="button"
             className="primary-button"
             disabled={!r2Sensor}
-            onClick={() => r2Sensor && onUpdateSettings({ ...settings, r2SensorId: r2Sensor.id })}
+            onClick={() => r2Sensor && updateR2SensorId(r2Sensor.id)}
           >
             {r2Sensor ? "Use detected R2" : "No R2 detected"}
           </button>
           {r2Configured && (
-            <button type="button" className="ghost-button" onClick={() => onUpdateSettings({ ...settings, r2SensorId: undefined })}>
+            <button type="button" className="ghost-button" onClick={() => updateR2SensorId(undefined)}>
               Hide R2 status
             </button>
           )}
         </div>
+      </div>
+      <div className="settings-save-actions">
+        <button type="button" className="primary-button settings-save-button" disabled={!settingsChanged} onClick={saveSettings}>
+          Save settings
+        </button>
       </div>
     </div>
   );

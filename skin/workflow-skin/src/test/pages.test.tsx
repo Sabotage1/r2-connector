@@ -366,6 +366,9 @@ describe("SettingsPage", () => {
     await userEvent.clear(screen.getByLabelText("Skin title"));
     await userEvent.type(screen.getByLabelText("Skin title"), "Roy's DE1");
 
+    expect(onUpdateSettings).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
+
     expect(onUpdateSettings).toHaveBeenLastCalledWith({ ...defaultSkinSettings, skinTitle: "Roy's DE1" });
   });
 
@@ -403,6 +406,10 @@ describe("SettingsPage", () => {
     const brightnessSlider = screen.getByRole("slider", { name: "Screensaver brightness" });
     expect(brightnessSlider).toHaveValue("8");
     fireEvent.change(brightnessSlider, { target: { value: "24" } });
+
+    expect(onUpdateSettings).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
+
     expect(onUpdateSettings).toHaveBeenLastCalledWith(expect.objectContaining({ screensaverBrightness: 24 }));
     expect(screen.getByText("Visualizer upload")).toBeInTheDocument();
     expect(screen.getByText("Loaded · Auto-load on · v1.3.0")).toBeInTheDocument();
@@ -440,17 +447,22 @@ describe("SettingsPage", () => {
     expect(screen.getByText("Skin update check completed.")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("checkbox", { name: "Auto update this skin on startup" }));
-    expect(onUpdateSettings).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        skinAutoUpdateEnabled: true
-      })
-    );
 
     await userEvent.clear(screen.getByLabelText("GitHub repo"));
     await userEvent.type(screen.getByLabelText("GitHub repo"), "roy/new-workflow-skin");
+    await userEvent.clear(screen.getByLabelText("Release asset"));
+    await userEvent.type(screen.getByLabelText("Release asset"), "workflow-skin-v2.zip");
+
+    expect(onUpdateSettings).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Install/update from GitHub release" })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
+
     expect(onUpdateSettings).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        skinUpdateRepo: "roy/new-workflow-skin"
+        skinAutoUpdateEnabled: true,
+        skinUpdateRepo: "roy/new-workflow-skin",
+        skinUpdateAsset: "workflow-skin-v2.zip"
       })
     );
 

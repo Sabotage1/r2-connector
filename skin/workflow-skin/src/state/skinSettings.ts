@@ -37,6 +37,7 @@ export interface SkinSettings {
 
 export const SKIN_NAMESPACE = "workflow-skin";
 export const SETTINGS_KEY = "settings";
+export const DEFAULT_SKIN_UPDATE_REPO = "Sabotage1/r2-connector";
 
 const DEFAULT_PRESET_SLOTS: PresetSlot[] = [
   { label: "Light" },
@@ -64,7 +65,7 @@ export function createDefaultSkinSettings(): SkinSettings {
     keepScreenAwake: true,
     screensaverBrightness: 8,
     skinAutoUpdateEnabled: false,
-    skinUpdateRepo: "",
+    skinUpdateRepo: DEFAULT_SKIN_UPDATE_REPO,
     skinUpdateAsset: "workflow-skin.zip",
     skinUpdatePrerelease: false,
     shownProfileIds: [],

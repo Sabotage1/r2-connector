@@ -20,7 +20,7 @@ describe("skin settings", () => {
     expect(defaultSkinSettings.r2SensorId).toBeUndefined();
     expect(defaultSkinSettings.shownProfileIds).toEqual([]);
     expect(defaultSkinSettings.skinAutoUpdateEnabled).toBe(false);
-    expect(defaultSkinSettings.skinUpdateRepo).toBe("");
+    expect(defaultSkinSettings.skinUpdateRepo).toBe("Sabotage1/r2-connector");
     expect(defaultSkinSettings.skinUpdateAsset).toBe("workflow-skin.zip");
     expect(defaultSkinSettings.skinUpdatePrerelease).toBe(false);
   });

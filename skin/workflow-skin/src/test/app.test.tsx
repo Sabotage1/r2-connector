@@ -34,6 +34,7 @@ function mockReaFetch(
     displayState?: Record<string, unknown>;
     webuiSkins?: WebUISkin[];
     defaultWebuiSkin?: WebUISkin;
+    failGithubReleaseInstall?: boolean;
   } = {}
 ) {
   let savedSettings = initialSettings;
@@ -110,7 +111,13 @@ function mockReaFetch(
       return responseJson({ message: "Skin update check completed" });
     }
     if (method === "POST" && url.pathname === "/api/v1/webui/skins/install/github-release") {
+      if (options.failGithubReleaseInstall) {
+        return Promise.resolve(new Response("error: Exception: Failed to fetch Github release: 404", { status: 500 }));
+      }
       return responseJson({ success: true, repo: JSON.parse(String(init.body)).repo });
+    }
+    if (method === "POST" && url.pathname === "/api/v1/webui/skins/install/url") {
+      return responseJson({ message: "Skin installed from committed workflow zip", url: JSON.parse(String(init.body)).url });
     }
     if (options.settingsStorageMissing && url.pathname === "/api/v1/store/workflow-skin/settings") {
       return Promise.resolve(new Response("Route not found", { status: 404 }));
@@ -445,12 +452,18 @@ describe("App shell", () => {
     expect(screen.queryByText("localhost")).not.toBeInTheDocument();
   });
 
-  it("checks for skin updates on startup when auto-update is enabled", async () => {
+  it("installs the configured skin update on startup when auto-update is enabled", async () => {
     const fetchState = mockReaFetch({ ...initialSettings, skinAutoUpdateEnabled: true });
     render(<App />);
 
     await waitFor(() => {
-      expect(fetchState.fetchMock).toHaveBeenCalledWith("http://localhost:8080/api/v1/webui/skins/update", expect.objectContaining({ method: "POST" }));
+      expect(fetchState.fetchMock).toHaveBeenCalledWith(
+        "http://localhost:8080/api/v1/webui/skins/install/github-release",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ repo: "Sabotage1/r2-connector", asset: "workflow-skin.zip", prerelease: false })
+        })
+      );
     });
   });
 
@@ -477,6 +490,38 @@ describe("App shell", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ repo: "roy/workflow-skin", asset: "workflow-skin.zip", prerelease: false })
+      })
+    );
+  });
+
+  it("falls back to the committed workflow zip when GitHub release install is missing", async () => {
+    const fetchState = mockReaFetch(
+      {
+        ...initialSettings,
+        skinUpdateRepo: "Sabotage1/r2-connector",
+        skinUpdateAsset: "workflow-skin.zip",
+        skinUpdatePrerelease: false
+      },
+      { failGithubReleaseInstall: true }
+    );
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Install/update from GitHub release" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Skin installed from committed workflow zip.");
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/webui/skins/install/github-release",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ repo: "Sabotage1/r2-connector", asset: "workflow-skin.zip", prerelease: false })
+      })
+    );
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/webui/skins/install/url",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ url: "https://raw.githubusercontent.com/Sabotage1/r2-connector/main/skin/workflow-skin/workflow-skin.zip" })
       })
     );
   });

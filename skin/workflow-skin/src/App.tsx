@@ -43,6 +43,25 @@ function statusSentence(message: unknown, fallback: string): string {
   return /[.!?]$/.test(text) ? text : `${text}.`;
 }
 
+function githubReleaseMissing(error: unknown): boolean {
+  const message = errorMessage(error).toLowerCase();
+  return message.includes("github-release") && (message.includes("404") || message.includes("not found") || message.includes("failed to fetch github release"));
+}
+
+function githubWorkflowZipUrl(repo: string, asset: string): string | null {
+  const normalizedRepo = repo
+    .trim()
+    .replace(/^https:\/\/github\.com\//i, "")
+    .replace(/\.git$/i, "")
+    .replace(/^\/+|\/+$/g, "");
+  const cleanAsset = asset.trim() || "workflow-skin.zip";
+
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(normalizedRepo)) return null;
+  if (!/^[A-Za-z0-9_.-]+\.zip$/.test(cleanAsset)) return null;
+
+  return `https://raw.githubusercontent.com/${normalizedRepo}/main/skin/workflow-skin/${encodeURIComponent(cleanAsset)}`;
+}
+
 function dateOnlyToIsoDateTime(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   if (!trimmed) return undefined;
@@ -376,6 +395,19 @@ export function App() {
       await data.refresh();
       if (reportStatus) setStatus({ type: "success", message: statusSentence(result.message, "Skin installed from GitHub release") });
     } catch (error) {
+      const asset = data.settings.skinUpdateAsset.trim();
+      const fallbackUrl = githubReleaseMissing(error) ? githubWorkflowZipUrl(repo, asset) : null;
+      if (fallbackUrl) {
+        try {
+          const result = await api.installSkinFromUrl({ url: fallbackUrl });
+          await data.refresh();
+          if (reportStatus) setStatus({ type: "success", message: statusSentence(result.message, "Skin installed from committed workflow zip") });
+          return;
+        } catch (fallbackError) {
+          setStatus({ type: "error", message: `Could not install skin update: ${errorMessage(fallbackError)}` });
+          throw fallbackError;
+        }
+      }
       setStatus({ type: "error", message: `Could not install skin update: ${errorMessage(error)}` });
       throw error;
     } finally {
