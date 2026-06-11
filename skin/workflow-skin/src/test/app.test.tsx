@@ -229,6 +229,48 @@ describe("App shell", () => {
     expect(screen.getByRole("group", { name: "Blooming profile workflow" })).toBeInTheDocument();
   });
 
+  it("orders grinders below profiles in the default main menu", async () => {
+    mockReaFetch(initialSettings);
+    render(<App />);
+
+    const navigation = await screen.findByRole("navigation", { name: "Workflow navigation" });
+    const labels = Array.from(navigation.querySelectorAll(".nav-button")).map((button) => button.getAttribute("aria-label"));
+
+    expect(labels.indexOf("Profiles")).toBeGreaterThan(-1);
+    expect(labels.indexOf("Grinders")).toBeGreaterThan(-1);
+    expect(labels.indexOf("Profiles")).toBeLessThan(labels.indexOf("Grinders"));
+  });
+
+  it("uses saved main menu visibility and order", async () => {
+    mockReaFetch({
+      ...initialSettings,
+      mainMenuItems: ["brew", "profiles", "grinders", "history", "settings", "live", "review", "steam", "bags"],
+      hiddenMainMenuItemIds: ["history", "steam"]
+    });
+    render(<App />);
+
+    const navigation = await screen.findByRole("navigation", { name: "Workflow navigation" });
+    const labels = Array.from(navigation.querySelectorAll(".nav-button")).map((button) => button.getAttribute("aria-label"));
+
+    expect(labels).toEqual(["Collapse menu", "Brew", "Profiles", "Grinders", "Settings", "Live", "Review", "Bags"]);
+    expect(screen.queryByRole("button", { name: "History" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Steam" })).not.toBeInTheDocument();
+  });
+
+  it("edits main menu visibility and order from the sidebar", async () => {
+    const fetchState = mockReaFetch(initialSettings);
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Edit main menu in sidebar" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Move Grinders up" }));
+    await userEvent.click(screen.getByRole("button", { name: "Hide History" }));
+
+    expect(fetchState.savedSettings.hiddenMainMenuItemIds).toEqual(["history"]);
+    expect(fetchState.savedSettings.mainMenuItems.indexOf("grinders")).toBeLessThan(fetchState.savedSettings.mainMenuItems.indexOf("profiles"));
+    expect(screen.getByRole("button", { name: "Show History" })).toBeInTheDocument();
+  });
+
   it("uses larger icons and a notepad edit icon in the collapsed menu", async () => {
     mockReaFetch({ ...initialSettings, menuCollapsed: true });
     render(<App />);

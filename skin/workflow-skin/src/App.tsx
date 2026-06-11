@@ -1,4 +1,21 @@
-import { Activity, Coffee, Flame, Gauge, History, Moon, NotebookPen, PackageOpen, PanelLeftClose, PanelLeftOpen, Settings, SlidersHorizontal } from "lucide-react";
+import {
+  Activity,
+  ArrowDown,
+  ArrowUp,
+  Coffee,
+  Eye,
+  EyeOff,
+  Flame,
+  Gauge,
+  History,
+  Moon,
+  NotebookPen,
+  PackageOpen,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings,
+  SlidersHorizontal
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiBaseUrl, ReaPrimeApi, ReaPrimeApiError, type CreateGrinderPayload } from "./api/reaprime";
 import { findDifluidR2Sensor } from "./api/sensors";
@@ -18,23 +35,33 @@ import { ReviewPage } from "./pages/ReviewPage";
 import { ScreensaverPage } from "./pages/ScreensaverPage";
 import { SettingsPage, type SkinUpdatePhase } from "./pages/SettingsPage";
 import { SteamPage } from "./pages/SteamPage";
-import { isProfileShown, profileWorkflowFor, type ProfileWorkflowSettings, type SkinSettings } from "./state/skinSettings";
+import {
+  hiddenMainMenuItemIdsForSettings,
+  MAIN_MENU_ITEM_LABELS,
+  mainMenuItemsForSettings,
+  visibleMainMenuItems,
+  isProfileShown,
+  profileWorkflowFor,
+  type MainMenuItemId,
+  type ProfileWorkflowSettings,
+  type SkinSettings
+} from "./state/skinSettings";
 import { useLiveTelemetry } from "./state/useLiveTelemetry";
 import { useReaData } from "./state/useReaData";
 
-type Page = "brew" | "live" | "review" | "steam" | "bags" | "grinders" | "profiles" | "history" | "settings" | "screensaver";
+type Page = MainMenuItemId | "screensaver";
 
-const nav: Array<{ id: Page; label: string; icon: React.ComponentType<{ className?: string; size?: number }> }> = [
-  { id: "brew", label: "Brew", icon: Coffee },
-  { id: "live", label: "Live", icon: Activity },
-  { id: "review", label: "Review", icon: NotebookPen },
-  { id: "steam", label: "Steam", icon: Flame },
-  { id: "bags", label: "Bags", icon: PackageOpen },
-  { id: "grinders", label: "Grinders", icon: Gauge },
-  { id: "profiles", label: "Profiles", icon: SlidersHorizontal },
-  { id: "history", label: "History", icon: History },
-  { id: "settings", label: "Settings", icon: Settings }
-];
+const navById: Record<MainMenuItemId, { label: string; icon: React.ComponentType<{ className?: string; size?: number }> }> = {
+  brew: { label: MAIN_MENU_ITEM_LABELS.brew, icon: Coffee },
+  live: { label: MAIN_MENU_ITEM_LABELS.live, icon: Activity },
+  review: { label: MAIN_MENU_ITEM_LABELS.review, icon: NotebookPen },
+  steam: { label: MAIN_MENU_ITEM_LABELS.steam, icon: Flame },
+  bags: { label: MAIN_MENU_ITEM_LABELS.bags, icon: PackageOpen },
+  profiles: { label: MAIN_MENU_ITEM_LABELS.profiles, icon: SlidersHorizontal },
+  grinders: { label: MAIN_MENU_ITEM_LABELS.grinders, icon: Gauge },
+  history: { label: MAIN_MENU_ITEM_LABELS.history, icon: History },
+  settings: { label: MAIN_MENU_ITEM_LABELS.settings, icon: Settings }
+};
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -206,6 +233,7 @@ export function App() {
   const [brewPending, setBrewPending] = useState(false);
   const [skinUpdateBusy, setSkinUpdateBusy] = useState(false);
   const [skinUpdatePhase, setSkinUpdatePhase] = useState<SkinUpdatePhase>("idle");
+  const [mainMenuEditing, setMainMenuEditing] = useState(false);
   const [expandedStatusId, setExpandedStatusId] = useState<ConnectivityStatus["id"] | null>(null);
   const startupAppliedRef = useRef(false);
   const startupConnectRef = useRef(false);
@@ -243,6 +271,10 @@ export function App() {
       }),
     [data.machineState, data.sensors, data.settings.r2SensorId, liveTelemetry.scaleConnected, liveTelemetry.waterLevels, r2Sensor]
   );
+  const orderedMenuIds = useMemo(() => mainMenuItemsForSettings(data.settings), [data.settings.mainMenuItems]);
+  const visibleMenuIds = useMemo(() => visibleMainMenuItems(data.settings), [data.settings.mainMenuItems, data.settings.hiddenMainMenuItemIds]);
+  const hiddenMenuIds = useMemo(() => new Set(hiddenMainMenuItemIdsForSettings(data.settings)), [data.settings.hiddenMainMenuItemIds]);
+  const renderedMenuIds = mainMenuEditing ? orderedMenuIds : visibleMenuIds;
 
   const applyProfile = async (profile: ProfileRecord) => {
     const extras = data.workflow.context?.extras ?? {};
@@ -357,6 +389,25 @@ export function App() {
       ...data.settings,
       profileWorkflows: { ...data.settings.profileWorkflows, [profileId]: workflow }
     });
+  };
+
+  const moveMainMenuItem = async (itemId: MainMenuItemId, direction: -1 | 1) => {
+    const currentItems = mainMenuItemsForSettings(data.settings);
+    const index = currentItems.indexOf(itemId);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= currentItems.length) return;
+
+    const nextItems = [...currentItems];
+    [nextItems[index], nextItems[nextIndex]] = [nextItems[nextIndex], nextItems[index]];
+    await persistSettings({ ...data.settings, mainMenuItems: nextItems }, "Main menu saved.");
+  };
+
+  const setMainMenuItemVisible = async (itemId: MainMenuItemId, visible: boolean) => {
+    if (itemId === "settings") return;
+    const hidden = new Set(hiddenMainMenuItemIdsForSettings(data.settings));
+    if (visible) hidden.delete(itemId);
+    else hidden.add(itemId);
+    await persistSettings({ ...data.settings, hiddenMainMenuItemIds: Array.from(hidden) }, "Main menu saved.");
   };
 
   const setProfileShown = async (profileId: string, shown: boolean) => {
@@ -685,7 +736,7 @@ export function App() {
 
   return (
     <main className={data.settings.menuCollapsed ? "app-shell menu-collapsed" : "app-shell"}>
-      <nav className="side-nav" aria-label="Workflow navigation">
+      <nav className={mainMenuEditing ? "side-nav menu-editing" : "side-nav"} aria-label="Workflow navigation">
         <SidebarStatus statuses={statuses} expandedStatusId={expandedStatusId} onStatusPress={toggleStatusPopover} />
         <button
           type="button"
@@ -697,21 +748,71 @@ export function App() {
           {data.settings.menuCollapsed ? <PanelLeftOpen className="nav-icon" size={navIconSize} /> : <PanelLeftClose className="nav-icon" size={navIconSize} />}
           <span>{data.settings.menuCollapsed ? "Expand" : "Minimize"}</span>
         </button>
-        {nav.map((item) => {
+        {renderedMenuIds.map((itemId) => {
+          const item = navById[itemId];
           const Icon = item.icon;
-          const isReview = item.id === "review";
-          const className = [page === item.id ? "nav-button active" : "nav-button", isReview ? "review-nav-button" : ""].filter(Boolean).join(" ");
+          const isReview = itemId === "review";
+          const itemIsHidden = hiddenMenuIds.has(itemId);
+          const menuIndex = orderedMenuIds.indexOf(itemId);
+          const className = [
+            page === itemId ? "nav-button active" : "nav-button",
+            isReview ? "review-nav-button" : "",
+            itemIsHidden ? "hidden-menu-item" : ""
+          ]
+            .filter(Boolean)
+            .join(" ");
           return (
-            <button
-              key={item.id}
-              aria-current={page === item.id ? "page" : undefined}
-              aria-label={item.label}
-              className={className}
-              onClick={() => setPage(item.id)}
-            >
-              <Icon className={isReview ? "nav-icon review-nav-icon" : "nav-icon"} size={navIconSize} />
-              <span>{item.label}</span>
-            </button>
+            <div className={mainMenuEditing ? "nav-edit-row" : "nav-edit-row idle"} key={itemId}>
+              <button
+                aria-current={page === itemId ? "page" : undefined}
+                aria-label={item.label}
+                className={className}
+                onClick={() => setPage(itemId)}
+              >
+                <Icon className={isReview ? "nav-icon review-nav-icon" : "nav-icon"} size={navIconSize} />
+                <span>{item.label}</span>
+              </button>
+              {mainMenuEditing && (
+                <div className="nav-edit-controls" aria-label={`${item.label} menu controls`}>
+                  <button
+                    type="button"
+                    className="nav-edit-button"
+                    aria-label={`Move ${item.label} up`}
+                    disabled={menuIndex <= 0}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void moveMainMenuItem(itemId, -1);
+                    }}
+                  >
+                    <ArrowUp size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="nav-edit-button"
+                    aria-label={`Move ${item.label} down`}
+                    disabled={menuIndex === orderedMenuIds.length - 1}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void moveMainMenuItem(itemId, 1);
+                    }}
+                  >
+                    <ArrowDown size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="nav-edit-button"
+                    aria-label={itemIsHidden ? `Show ${item.label}` : `Hide ${item.label}`}
+                    disabled={itemId === "settings"}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void setMainMenuItemVisible(itemId, itemIsHidden);
+                    }}
+                  >
+                    {itemIsHidden ? <Eye size={14} /> : <EyeOff size={14} />}
+                  </button>
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>
@@ -730,7 +831,7 @@ export function App() {
           </button>
         </div>
         <AppHeadline title={data.settings.skinTitle} />
-        <h1>{nav.find((item) => item.id === page)?.label}</h1>
+        <h1>{navById[page].label}</h1>
         {data.error && (
           <p className="muted" role="alert" aria-live="assertive">
             {data.error}
@@ -867,6 +968,8 @@ export function App() {
             skinUpdateStatus={status}
             skinUpdateBusy={skinUpdateBusy}
             skinUpdatePhase={skinUpdatePhase}
+            mainMenuEditing={mainMenuEditing}
+            onToggleMainMenuEditing={setMainMenuEditing}
             onCheckSkinUpdates={() => checkSkinUpdates()}
             onInstallSkinUpdate={() => installSkinUpdate()}
             onUpdateSettings={(next) => void persistSettings(next, "Settings saved.")}

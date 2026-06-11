@@ -4,6 +4,8 @@ import type { DisplayState, JsonMap, PluginManifest, SensorListItem, VisualizerS
 import {
   defaultPresetLabel,
   ensurePresetSlots,
+  hiddenMainMenuItemIdsForSettings,
+  mainMenuItemsForSettings,
   MAX_PRESET_SLOT_COUNT,
   MIN_PRESET_SLOT_COUNT,
   type SkinSettings
@@ -114,6 +116,8 @@ function normalizeDraftSettings(settings: SkinSettings): SkinSettings {
     skinTitle: settings.skinTitle.trim() || "Workflow",
     skinUpdateRepo: settings.skinUpdateRepo.trim(),
     skinUpdateAsset: settings.skinUpdateAsset.trim() || "workflow-skin.zip",
+    mainMenuItems: mainMenuItemsForSettings(settings),
+    hiddenMainMenuItemIds: hiddenMainMenuItemIdsForSettings(settings),
     keepScreenAwake: settings.keepScreenAwake !== false,
     screensaverBrightness: brightnessValue(settings.screensaverBrightness),
     skinAutoUpdateEnabled: Boolean(settings.skinAutoUpdateEnabled),
@@ -142,6 +146,8 @@ export function SettingsPage({
   skinUpdateStatus,
   skinUpdateBusy,
   skinUpdatePhase = "idle",
+  mainMenuEditing = false,
+  onToggleMainMenuEditing,
   onCheckSkinUpdates,
   onInstallSkinUpdate
 }: {
@@ -157,6 +163,8 @@ export function SettingsPage({
   skinUpdateStatus?: SkinUpdateStatus | null;
   skinUpdateBusy?: boolean;
   skinUpdatePhase?: SkinUpdatePhase;
+  mainMenuEditing?: boolean;
+  onToggleMainMenuEditing?: (editing: boolean) => void;
   onCheckSkinUpdates?: () => Promise<void> | void;
   onInstallSkinUpdate?: () => Promise<void> | void;
 }) {
@@ -223,6 +231,15 @@ export function SettingsPage({
       <div className="list-row">
         <strong>Creator</strong>
         <span>Roy Ackerman</span>
+      </div>
+      <div className="list-row settings-update-row">
+        <strong>Main menu</strong>
+        <span>{mainMenuEditing ? "Editing is active in the left menu." : "Start editing to hide or reorder items directly in the left menu."}</span>
+        <div className="profile-workflow-controls">
+          <button type="button" className={mainMenuEditing ? "ghost-button" : "primary-button"} onClick={() => onToggleMainMenuEditing?.(!mainMenuEditing)}>
+            {mainMenuEditing ? "Done editing main menu" : "Edit main menu in sidebar"}
+          </button>
+        </div>
       </div>
       <div className="list-row settings-update-row">
         <strong>Main page presets</strong>

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import skinManifest from "../../skin-manifest.json";
 import { ProfilePresetGrid } from "../components/ProfilePresetGrid";
 import { BagsPage } from "../pages/BagsPage";
 import { BrewPage } from "../pages/BrewPage";
@@ -18,6 +19,7 @@ const profiles: ProfileRecord[] = [
   { id: "p1", profile: { title: "Blooming" } },
   { id: "p2", profile: { title: "Classic" } }
 ];
+const currentSkinVersion = skinManifest.version;
 
 describe("ProfilePresetGrid", () => {
   it("applies a slot profile when selected", async () => {
@@ -527,12 +529,12 @@ describe("SettingsPage", () => {
       settings: defaultSkinSettings,
       r2Sensor: null,
       onUpdateSettings: vi.fn(),
-      defaultWebuiSkin: { id: "workflow-skin", name: "Workflow Skin", version: "0.1.17", path: "/skins/workflow", isBundled: false }
+      defaultWebuiSkin: { id: "workflow-skin", name: "Workflow Skin", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }
     };
     const { rerender } = render(
       <SettingsPage
         {...commonProps}
-        webuiSkins={[{ id: "workflow-skin", name: "Workflow Skin", version: "0.1.17", path: "/skins/workflow", isBundled: false }]}
+        webuiSkins={[{ id: "workflow-skin", name: "Workflow Skin", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }]}
       />
     );
 
@@ -545,7 +547,7 @@ describe("SettingsPage", () => {
       />
     );
 
-    expect(screen.getByText("Update available: v0.1.17 is available (installed v0.1.16).")).toBeInTheDocument();
+    expect(screen.getByText(`Update available: v${currentSkinVersion} is available (installed v0.1.16).`)).toBeInTheDocument();
   });
 
   it("shows the downloading state while a skin update is installing", () => {
@@ -597,6 +599,35 @@ describe("SettingsPage", () => {
         ]
       })
     );
+  });
+
+  it("enables main menu editing in the sidebar from settings", async () => {
+    const onToggleMainMenuEditing = vi.fn();
+    const { rerender } = render(
+      <SettingsPage
+        settings={defaultSkinSettings}
+        r2Sensor={null}
+        onUpdateSettings={vi.fn()}
+        mainMenuEditing={false}
+        onToggleMainMenuEditing={onToggleMainMenuEditing}
+      />
+    );
+
+    expect(screen.getByText("Main menu")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Edit main menu in sidebar" }));
+    expect(onToggleMainMenuEditing).toHaveBeenCalledWith(true);
+
+    rerender(
+      <SettingsPage
+        settings={defaultSkinSettings}
+        r2Sensor={null}
+        onUpdateSettings={vi.fn()}
+        mainMenuEditing
+        onToggleMainMenuEditing={onToggleMainMenuEditing}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Done editing main menu" })).toBeInTheDocument();
   });
 });
 

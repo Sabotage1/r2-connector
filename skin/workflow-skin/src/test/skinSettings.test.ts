@@ -1,13 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  DEFAULT_MAIN_MENU_ITEMS,
   DEFAULT_STEAM_TIMERS,
   defaultSkinSettings,
   isMilkProfile,
   isProfileShown,
   isReviewEnabled,
   loadSkinSettings,
+  mainMenuItemsForSettings,
   profileWorkflowFor,
-  saveSkinSettings
+  saveSkinSettings,
+  visibleMainMenuItems
 } from "../state/skinSettings";
 
 describe("skin settings", () => {
@@ -25,6 +28,9 @@ describe("skin settings", () => {
     expect(defaultSkinSettings.skinUpdatePrerelease).toBe(false);
     expect(defaultSkinSettings.presetSlotCount).toBe(4);
     expect(defaultSkinSettings.menuCollapsed).toBe(false);
+    expect(defaultSkinSettings.mainMenuItems).toEqual(DEFAULT_MAIN_MENU_ITEMS);
+    expect(defaultSkinSettings.hiddenMainMenuItemIds).toEqual([]);
+    expect(mainMenuItemsForSettings(defaultSkinSettings).indexOf("profiles")).toBeLessThan(mainMenuItemsForSettings(defaultSkinSettings).indexOf("grinders"));
   });
 
   it("loads default settings when KV is missing", async () => {
@@ -51,6 +57,8 @@ describe("skin settings", () => {
         skinUpdatePrerelease: true,
         presetSlotCount: 12,
         menuCollapsed: true,
+        mainMenuItems: ["settings", "profiles", "missing", "brew", "profiles"],
+        hiddenMainMenuItemIds: ["history", "settings", "bad"],
         shownProfileIds: ["p1", 42, "p2"],
         profileWorkflows: {
           p2: { milkBased: true, steamTimers: { small: 18, medium: 28, large: 42 } },
@@ -79,6 +87,11 @@ describe("skin settings", () => {
     expect(settings.skinUpdatePrerelease).toBe(true);
     expect(settings.presetSlotCount).toBe(8);
     expect(settings.menuCollapsed).toBe(true);
+    expect(settings.mainMenuItems.slice(0, 3)).toEqual(["settings", "profiles", "brew"]);
+    expect(settings.mainMenuItems).toEqual(expect.arrayContaining([...DEFAULT_MAIN_MENU_ITEMS]));
+    expect(settings.hiddenMainMenuItemIds).toEqual(["history"]);
+    expect(visibleMainMenuItems(settings)).not.toContain("history");
+    expect(visibleMainMenuItems(settings)).toContain("settings");
     expect(settings.shownProfileIds).toEqual(["p1", "p2"]);
     expect(settings.profileWorkflows).toEqual({
       p2: { milkBased: true, steamTimers: { small: 18, medium: 28, large: 42 } }

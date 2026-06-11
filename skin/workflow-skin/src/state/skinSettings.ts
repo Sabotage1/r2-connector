@@ -14,6 +14,21 @@ export interface ProfileWorkflowSettings {
   steamTimers: SteamTimers;
 }
 
+export const DEFAULT_MAIN_MENU_ITEMS = ["brew", "live", "review", "steam", "bags", "profiles", "grinders", "history", "settings"] as const;
+export type MainMenuItemId = (typeof DEFAULT_MAIN_MENU_ITEMS)[number];
+
+export const MAIN_MENU_ITEM_LABELS: Record<MainMenuItemId, string> = {
+  brew: "Brew",
+  live: "Live",
+  review: "Review",
+  steam: "Steam",
+  bags: "Bags",
+  profiles: "Profiles",
+  grinders: "Grinders",
+  history: "History",
+  settings: "Settings"
+};
+
 export interface SkinSettings {
   presetSlots: PresetSlot[];
   presetSlotCount: number;
@@ -21,6 +36,8 @@ export interface SkinSettings {
   reviewEnabledByProfile: Record<string, boolean>;
   skinTitle: string;
   menuCollapsed: boolean;
+  mainMenuItems: MainMenuItemId[];
+  hiddenMainMenuItemIds: MainMenuItemId[];
   startupProfileId?: string;
   r2SensorId?: string;
   shownProfileIds: string[];
@@ -68,6 +85,8 @@ export function createDefaultSkinSettings(): SkinSettings {
     reviewEnabledByProfile: {},
     skinTitle: "Workflow",
     menuCollapsed: false,
+    mainMenuItems: [...DEFAULT_MAIN_MENU_ITEMS],
+    hiddenMainMenuItemIds: [],
     keepScreenAwake: true,
     screensaverBrightness: 8,
     skinAutoUpdateEnabled: false,
@@ -113,6 +132,38 @@ function normalizeReviewEnabledByProfile(value: unknown): Record<string, boolean
 function normalizeStringList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return Array.from(new Set(value.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map((item) => item.trim())));
+}
+
+function isMainMenuItemId(value: string): value is MainMenuItemId {
+  return (DEFAULT_MAIN_MENU_ITEMS as readonly string[]).includes(value);
+}
+
+export function mainMenuItemsForSettings(settings: Pick<SkinSettings, "mainMenuItems"> | { mainMenuItems?: unknown }): MainMenuItemId[] {
+  if (!Array.isArray(settings.mainMenuItems)) return [...DEFAULT_MAIN_MENU_ITEMS];
+
+  const ordered: MainMenuItemId[] = [];
+  for (const item of settings.mainMenuItems) {
+    if (typeof item !== "string" || !isMainMenuItemId(item) || ordered.includes(item)) continue;
+    ordered.push(item);
+  }
+
+  for (const item of DEFAULT_MAIN_MENU_ITEMS) {
+    if (!ordered.includes(item)) ordered.push(item);
+  }
+
+  return ordered;
+}
+
+export function hiddenMainMenuItemIdsForSettings(settings: Pick<SkinSettings, "hiddenMainMenuItemIds"> | { hiddenMainMenuItemIds?: unknown }): MainMenuItemId[] {
+  const hidden = normalizeStringList(settings.hiddenMainMenuItemIds).filter(
+    (item): item is MainMenuItemId => isMainMenuItemId(item) && item !== "settings"
+  );
+  return Array.from(new Set(hidden));
+}
+
+export function visibleMainMenuItems(settings: Pick<SkinSettings, "mainMenuItems" | "hiddenMainMenuItemIds">): MainMenuItemId[] {
+  const hidden = new Set(hiddenMainMenuItemIdsForSettings(settings));
+  return mainMenuItemsForSettings(settings).filter((item) => item === "settings" || !hidden.has(item));
 }
 
 function normalizePresetSlotCount(value: unknown, fallback: number): number {
@@ -179,6 +230,8 @@ export function normalizeSkinSettings(value: unknown): SkinSettings {
     reviewEnabledByProfile: normalizeReviewEnabledByProfile(value.reviewEnabledByProfile),
     skinTitle: typeof value.skinTitle === "string" && value.skinTitle.trim() ? value.skinTitle.trim() : "Workflow",
     menuCollapsed: typeof value.menuCollapsed === "boolean" ? value.menuCollapsed : false,
+    mainMenuItems: mainMenuItemsForSettings({ mainMenuItems: value.mainMenuItems }),
+    hiddenMainMenuItemIds: hiddenMainMenuItemIdsForSettings({ hiddenMainMenuItemIds: value.hiddenMainMenuItemIds }),
     keepScreenAwake: typeof value.keepScreenAwake === "boolean" ? value.keepScreenAwake : true,
     screensaverBrightness:
       typeof value.screensaverBrightness === "number" && Number.isFinite(value.screensaverBrightness)
