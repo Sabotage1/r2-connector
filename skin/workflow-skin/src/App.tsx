@@ -1,4 +1,4 @@
-import { Activity, Coffee, Flame, Gauge, History, Moon, PackageOpen, PanelLeftClose, PanelLeftOpen, Settings, SlidersHorizontal } from "lucide-react";
+import { Activity, Coffee, Flame, Gauge, History, Moon, NotebookPen, PackageOpen, PanelLeftClose, PanelLeftOpen, Settings, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiBaseUrl, ReaPrimeApi, ReaPrimeApiError, type CreateGrinderPayload } from "./api/reaprime";
 import { findDifluidR2Sensor } from "./api/sensors";
@@ -24,10 +24,10 @@ import { useReaData } from "./state/useReaData";
 
 type Page = "brew" | "live" | "review" | "steam" | "bags" | "grinders" | "profiles" | "history" | "settings" | "screensaver";
 
-const nav: Array<{ id: Page; label: string; icon: React.ComponentType<{ size?: number }> }> = [
+const nav: Array<{ id: Page; label: string; icon: React.ComponentType<{ className?: string; size?: number }> }> = [
   { id: "brew", label: "Brew", icon: Coffee },
   { id: "live", label: "Live", icon: Activity },
-  { id: "review", label: "Review", icon: Activity },
+  { id: "review", label: "Review", icon: NotebookPen },
   { id: "steam", label: "Steam", icon: Flame },
   { id: "bags", label: "Bags", icon: PackageOpen },
   { id: "grinders", label: "Grinders", icon: Gauge },
@@ -681,6 +681,8 @@ export function App() {
     return <ScreensaverPage title={data.settings.skinTitle} onWake={() => void wakeScreen()} />;
   }
 
+  const navIconSize = data.settings.menuCollapsed ? 40 : 20;
+
   return (
     <main className={data.settings.menuCollapsed ? "app-shell menu-collapsed" : "app-shell"}>
       <nav className="side-nav" aria-label="Workflow navigation">
@@ -692,20 +694,22 @@ export function App() {
           title={data.settings.menuCollapsed ? "Expand menu" : "Collapse menu"}
           onClick={() => void toggleMenuCollapsed()}
         >
-          {data.settings.menuCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+          {data.settings.menuCollapsed ? <PanelLeftOpen className="nav-icon" size={navIconSize} /> : <PanelLeftClose className="nav-icon" size={navIconSize} />}
           <span>{data.settings.menuCollapsed ? "Expand" : "Minimize"}</span>
         </button>
         {nav.map((item) => {
           const Icon = item.icon;
+          const isReview = item.id === "review";
+          const className = [page === item.id ? "nav-button active" : "nav-button", isReview ? "review-nav-button" : ""].filter(Boolean).join(" ");
           return (
             <button
               key={item.id}
               aria-current={page === item.id ? "page" : undefined}
               aria-label={item.label}
-              className={page === item.id ? "nav-button active" : "nav-button"}
+              className={className}
               onClick={() => setPage(item.id)}
             >
-              <Icon size={20} />
+              <Icon className={isReview ? "nav-icon review-nav-icon" : "nav-icon"} size={navIconSize} />
               <span>{item.label}</span>
             </button>
           );

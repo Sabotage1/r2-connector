@@ -229,6 +229,19 @@ describe("App shell", () => {
     expect(screen.getByRole("group", { name: "Blooming profile workflow" })).toBeInTheDocument();
   });
 
+  it("uses larger icons and a notepad edit icon in the collapsed menu", async () => {
+    mockReaFetch({ ...initialSettings, menuCollapsed: true });
+    render(<App />);
+
+    const reviewButton = await screen.findByRole("button", { name: "Review" });
+    const reviewIcon = reviewButton.querySelector("svg");
+
+    expect(reviewButton).toHaveClass("review-nav-button");
+    expect(reviewIcon).toHaveClass("review-nav-icon");
+    expect(reviewIcon).toHaveAttribute("width", "40");
+    expect(reviewIcon).toHaveAttribute("height", "40");
+  });
+
   it("has a dedicated menu item for grinders", async () => {
     mockReaFetch(initialSettings);
     render(<App />);
