@@ -88,18 +88,24 @@ function compareVersions(left: string, right: string): number | null {
   return 0;
 }
 
-function skinUpdateLine(skin: WebUISkin | null | undefined, phase: SkinUpdatePhase): string {
+function versionLabel(value: string): string {
+  const clean = value.trim().replace(/^v/i, "");
+  return clean ? `v${clean}` : "version unknown";
+}
+
+function skinUpdateLine(skin: WebUISkin | null | undefined, phase: SkinUpdatePhase, availableSkinVersion?: string | null): string {
   if (phase === "checking") return "Checking for skin updates...";
   if (phase === "downloading") return "Downloading update...";
   if (!skin) return "Skin status unavailable.";
 
   const installedVersion = skin.version?.trim();
-  if (!installedVersion || !CURRENT_SKIN_VERSION) return "Skin version unknown.";
+  const referenceVersion = availableSkinVersion?.trim() || CURRENT_SKIN_VERSION;
+  if (!installedVersion || !referenceVersion) return "Skin version unknown.";
 
-  const comparison = compareVersions(installedVersion, CURRENT_SKIN_VERSION);
+  const comparison = compareVersions(installedVersion, referenceVersion);
   if (comparison === null) return `Skin version ${installedVersion} installed.`;
-  if (comparison < 0) return `Update available: v${CURRENT_SKIN_VERSION} is available (installed v${installedVersion}).`;
-  if (comparison > 0) return `Installed skin v${installedVersion} is newer than this build v${CURRENT_SKIN_VERSION}.`;
+  if (comparison < 0) return `Update available: ${versionLabel(referenceVersion)} is available (installed ${versionLabel(installedVersion)}).`;
+  if (comparison > 0) return `Installed skin ${versionLabel(installedVersion)} is newer than this build ${versionLabel(referenceVersion)}.`;
   return "The skin is up-to-date.";
 }
 
@@ -153,6 +159,7 @@ export function SettingsPage({
   skinUpdateStatus,
   skinUpdateBusy,
   skinUpdatePhase = "idle",
+  availableSkinVersion,
   mainMenuEditing = false,
   onToggleMainMenuEditing,
   onCheckSkinUpdates,
@@ -170,6 +177,7 @@ export function SettingsPage({
   skinUpdateStatus?: SkinUpdateStatus | null;
   skinUpdateBusy?: boolean;
   skinUpdatePhase?: SkinUpdatePhase;
+  availableSkinVersion?: string | null;
   mainMenuEditing?: boolean;
   onToggleMainMenuEditing?: (editing: boolean) => void;
   onCheckSkinUpdates?: () => Promise<void> | void;
@@ -280,7 +288,9 @@ export function SettingsPage({
       </div>
       <div className="list-row settings-update-row">
         <strong>Skin updates</strong>
-        <span className={skinUpdatePhase === "idle" ? "settings-update-state" : "settings-update-state busy"}>{skinUpdateLine(workflowSkin, skinUpdatePhase)}</span>
+        <span className={skinUpdatePhase === "idle" ? "settings-update-state" : "settings-update-state busy"}>
+          {skinUpdateLine(workflowSkin, skinUpdatePhase, availableSkinVersion)}
+        </span>
         <span>Installed: {installedSkinLine(workflowSkin)}</span>
         <span>Default skin: {skinName(defaultWebuiSkin)}</span>
         <span>{sourceLine(workflowSkin)}</span>

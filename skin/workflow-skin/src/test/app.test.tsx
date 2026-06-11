@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import skinManifest from "../../skin-manifest.json";
 import { App } from "../App";
 import type { AppInfo, DeviceInfo, MachineState, ProfileRecord, ShotRecord, WebUISkin } from "../api/types";
 import { defaultSkinSettings, type SkinSettings } from "../state/skinSettings";
@@ -36,6 +37,7 @@ function mockReaFetch(
     defaultWebuiSkin?: WebUISkin;
     failGithubReleaseInstall?: boolean;
     githubReleaseInstallWait?: Promise<void>;
+    githubLatestTag?: string;
   } = {}
 ) {
   let savedSettings = initialSettings;
@@ -45,6 +47,10 @@ function mockReaFetch(
   const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init = {}) => {
     const url = new URL(String(input));
     const method = init.method ?? "GET";
+
+    if (method === "GET" && url.hostname === "api.github.com" && url.pathname.startsWith("/repos/")) {
+      return responseJson({ tag_name: options.githubLatestTag ?? "v0.1.20" });
+    }
 
     if (method === "GET" && url.pathname === "/api/v1/profiles") return responseJson(profiles);
     if (method === "PUT" && url.pathname.startsWith("/api/v1/profiles/")) {
@@ -592,11 +598,16 @@ describe("App shell", () => {
   });
 
   it("can check and install skin updates from Settings", async () => {
+    const currentSkinVersion = typeof skinManifest.version === "string" ? skinManifest.version : "0.0.0";
     const fetchState = mockReaFetch({
       ...initialSettings,
       skinUpdateRepo: "roy/workflow-skin",
       skinUpdateAsset: "workflow-skin.zip",
       skinUpdatePrerelease: false
+    }, {
+      webuiSkins: [{ id: "workflow-skin", name: "Workflow Skin", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }],
+      defaultWebuiSkin: { id: "workflow-skin", name: "Workflow Skin", version: currentSkinVersion, path: "/skins/workflow", isBundled: false },
+      githubLatestTag: "v99.0.0"
     });
     render(<App />);
 
@@ -604,6 +615,7 @@ describe("App shell", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Check for skin updates" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Skin update check completed.");
+    expect(screen.getByText(`Update available: v99.0.0 is available (installed v${currentSkinVersion}).`)).toBeInTheDocument();
     expect(fetchState.fetchMock).toHaveBeenCalledWith("http://localhost:8080/api/v1/webui/skins/update", expect.objectContaining({ method: "POST" }));
 
     await userEvent.click(screen.getByRole("button", { name: "Install/update from GitHub release" }));

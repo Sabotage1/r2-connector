@@ -583,6 +583,22 @@ describe("SettingsPage", () => {
     expect(screen.getByText(`Update available: v${currentSkinVersion} is available (installed v0.1.16).`)).toBeInTheDocument();
   });
 
+  it("uses the checked GitHub release version when the installed skin is stale but the running bundle is also stale", () => {
+    render(
+      <SettingsPage
+        settings={defaultSkinSettings}
+        r2Sensor={null}
+        onUpdateSettings={vi.fn()}
+        webuiSkins={[{ id: "workflow-skin", name: "Workflow Skin", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }]}
+        defaultWebuiSkin={{ id: "workflow-skin", name: "Workflow Skin", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }}
+        availableSkinVersion="99.0.0"
+      />
+    );
+
+    expect(screen.queryByText("The skin is up-to-date.")).not.toBeInTheDocument();
+    expect(screen.getByText(`Update available: v99.0.0 is available (installed v${currentSkinVersion}).`)).toBeInTheDocument();
+  });
+
   it("shows the downloading state while a skin update is installing", () => {
     render(
       <SettingsPage

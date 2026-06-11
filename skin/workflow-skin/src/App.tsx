@@ -16,7 +16,7 @@ import {
   Settings,
   SlidersHorizontal
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiBaseUrl, ReaPrimeApi, ReaPrimeApiError, type CreateGrinderPayload } from "./api/reaprime";
 import { findDifluidR2Sensor } from "./api/sensors";
 import type { DeviceInfo, Grinder, MachineState, Profile, ProfileRecord, ShotAnnotations } from "./api/types";
@@ -89,6 +89,45 @@ function githubWorkflowZipUrl(repo: string, asset: string): string | null {
   if (!/^[A-Za-z0-9_.-]+\.zip$/.test(cleanAsset)) return null;
 
   return `https://raw.githubusercontent.com/${normalizedRepo}/main/skin/workflow-skin/${encodeURIComponent(cleanAsset)}`;
+}
+
+function normalizedGithubRepo(repo: string): string | null {
+  const normalizedRepo = repo
+    .trim()
+    .replace(/^https:\/\/github\.com\//i, "")
+    .replace(/\.git$/i, "")
+    .replace(/^\/+|\/+$/g, "");
+
+  return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(normalizedRepo) ? normalizedRepo : null;
+}
+
+function versionFromGithubTag(tag: unknown): string | null {
+  if (typeof tag !== "string") return null;
+  const clean = tag.trim().replace(/^v/i, "");
+  return clean ? clean : null;
+}
+
+function releaseVersionFromPayload(payload: unknown): string | null {
+  const releases = Array.isArray(payload) ? payload : [payload];
+  for (const release of releases) {
+    if (!release || typeof release !== "object") continue;
+    if ((release as { draft?: unknown }).draft === true) continue;
+    const version = versionFromGithubTag((release as { tag_name?: unknown }).tag_name);
+    if (version) return version;
+  }
+  return null;
+}
+
+async function fetchLatestGithubReleaseVersion(repo: string, includePrerelease: boolean): Promise<string | null> {
+  const normalizedRepo = normalizedGithubRepo(repo);
+  if (!normalizedRepo) return null;
+
+  const url = includePrerelease
+    ? `https://api.github.com/repos/${normalizedRepo}/releases`
+    : `https://api.github.com/repos/${normalizedRepo}/releases/latest`;
+  const response = await fetch(url, { headers: { Accept: "application/vnd.github+json" } });
+  if (!response.ok) throw new Error(`GitHub release check failed: ${response.status}`);
+  return releaseVersionFromPayload(await response.json());
 }
 
 function dateOnlyToIsoDateTime(value: string | undefined): string | undefined {
@@ -241,6 +280,7 @@ export function App() {
   const [brewPending, setBrewPending] = useState(false);
   const [skinUpdateBusy, setSkinUpdateBusy] = useState(false);
   const [skinUpdatePhase, setSkinUpdatePhase] = useState<SkinUpdatePhase>("idle");
+  const [availableSkinVersion, setAvailableSkinVersion] = useState<string | null>(null);
   const [mainMenuEditing, setMainMenuEditing] = useState(false);
   const [expandedStatusId, setExpandedStatusId] = useState<ConnectivityStatus["id"] | null>(null);
   const [lastUseAt, setLastUseAt] = useState(() => Date.now());
@@ -447,6 +487,13 @@ export function App() {
     setSkinUpdatePhase("checking");
     try {
       const result = await api.updateWebUISkins();
+      const repo = data.settings.skinUpdateRepo.trim();
+      if (repo) {
+        const remoteVersion = await fetchLatestGithubReleaseVersion(repo, data.settings.skinUpdatePrerelease).catch(() => null);
+        setAvailableSkinVersion(remoteVersion);
+      } else {
+        setAvailableSkinVersion(null);
+      }
       await data.refresh();
       if (reportStatus) setStatus({ type: "success", message: statusSentence(result.message, "Skin update check completed") });
     } catch (error) {
@@ -704,7 +751,7 @@ export function App() {
     }
   };
 
-  const sleepMachine = async () => {
+  const sleepMachine = useCallback(async () => {
     setSleepPending(true);
     try {
       await api.setDisplayBrightness(data.settings.screensaverBrightness ?? 8).catch(() => undefined);
@@ -718,7 +765,7 @@ export function App() {
     } finally {
       setSleepPending(false);
     }
-  };
+  }, [api, data.refresh, data.settings.screensaverBrightness]);
 
   const wakeScreen = async () => {
     await api.setDisplayBrightness(100).catch(() => undefined);
@@ -1019,6 +1066,7 @@ export function App() {
             skinUpdateStatus={status}
             skinUpdateBusy={skinUpdateBusy}
             skinUpdatePhase={skinUpdatePhase}
+            availableSkinVersion={availableSkinVersion}
             mainMenuEditing={mainMenuEditing}
             onToggleMainMenuEditing={setMainMenuEditing}
             onCheckSkinUpdates={() => checkSkinUpdates()}
