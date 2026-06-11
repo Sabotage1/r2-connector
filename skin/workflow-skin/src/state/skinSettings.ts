@@ -48,6 +48,7 @@ export interface SkinSettings {
   preferredEyMax?: number;
   keepScreenAwake?: boolean;
   screensaverBrightness?: number;
+  autoSleepMinutes: number;
   skinAutoUpdateEnabled: boolean;
   skinUpdateRepo: string;
   skinUpdateAsset: string;
@@ -59,6 +60,8 @@ export const SETTINGS_KEY = "settings";
 export const DEFAULT_SKIN_UPDATE_REPO = "Sabotage1/r2-connector";
 export const MIN_PRESET_SLOT_COUNT = 1;
 export const MAX_PRESET_SLOT_COUNT = 8;
+export const DEFAULT_AUTO_SLEEP_MINUTES = 30;
+export const MAX_AUTO_SLEEP_MINUTES = 240;
 
 const DEFAULT_PRESET_SLOTS: PresetSlot[] = [
   { label: "Light" },
@@ -89,6 +92,7 @@ export function createDefaultSkinSettings(): SkinSettings {
     hiddenMainMenuItemIds: [],
     keepScreenAwake: true,
     screensaverBrightness: 8,
+    autoSleepMinutes: DEFAULT_AUTO_SLEEP_MINUTES,
     skinAutoUpdateEnabled: false,
     skinUpdateRepo: DEFAULT_SKIN_UPDATE_REPO,
     skinUpdateAsset: "workflow-skin.zip",
@@ -196,6 +200,11 @@ function normalizeSteamTimer(value: unknown, fallback: number): number {
   return Math.round(value);
 }
 
+function normalizeAutoSleepMinutes(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_AUTO_SLEEP_MINUTES;
+  return Math.min(MAX_AUTO_SLEEP_MINUTES, Math.max(0, value));
+}
+
 function normalizeSteamTimers(value: unknown): SteamTimers {
   if (!isPlainRecord(value)) return cloneSteamTimers(DEFAULT_STEAM_TIMERS);
   return {
@@ -237,6 +246,7 @@ export function normalizeSkinSettings(value: unknown): SkinSettings {
       typeof value.screensaverBrightness === "number" && Number.isFinite(value.screensaverBrightness)
         ? Math.min(100, Math.max(0, Math.round(value.screensaverBrightness)))
         : 8,
+    autoSleepMinutes: normalizeAutoSleepMinutes(value.autoSleepMinutes),
     skinAutoUpdateEnabled: typeof value.skinAutoUpdateEnabled === "boolean" ? value.skinAutoUpdateEnabled : false,
     skinUpdateRepo: normalizeString(value.skinUpdateRepo),
     skinUpdateAsset: normalizeString(value.skinUpdateAsset, "workflow-skin.zip"),

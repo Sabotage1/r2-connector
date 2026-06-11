@@ -117,6 +117,7 @@ export interface ShotSnapshot {
     mixTemperature?: number;
     groupTemperature?: number;
     targetMixTemperature?: number;
+    targetGroupTemperature?: number;
     state?: { state?: string; substate?: string };
   };
   scale?: {

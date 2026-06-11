@@ -6,6 +6,7 @@ import {
   ensurePresetSlots,
   hiddenMainMenuItemIdsForSettings,
   mainMenuItemsForSettings,
+  MAX_AUTO_SLEEP_MINUTES,
   MAX_PRESET_SLOT_COUNT,
   MIN_PRESET_SLOT_COUNT,
   type SkinSettings
@@ -107,6 +108,11 @@ function brightnessValue(value: number | undefined): number {
   return Math.min(100, Math.max(0, Math.round(value)));
 }
 
+function autoSleepValue(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 30;
+  return Math.min(MAX_AUTO_SLEEP_MINUTES, Math.max(0, Math.round(value)));
+}
+
 function normalizeDraftSettings(settings: SkinSettings): SkinSettings {
   const presetSlotCount = Math.min(MAX_PRESET_SLOT_COUNT, Math.max(MIN_PRESET_SLOT_COUNT, Math.round(settings.presetSlotCount || 4)));
   const next: SkinSettings = {
@@ -120,6 +126,7 @@ function normalizeDraftSettings(settings: SkinSettings): SkinSettings {
     hiddenMainMenuItemIds: hiddenMainMenuItemIdsForSettings(settings),
     keepScreenAwake: settings.keepScreenAwake !== false,
     screensaverBrightness: brightnessValue(settings.screensaverBrightness),
+    autoSleepMinutes: autoSleepValue(settings.autoSleepMinutes),
     skinAutoUpdateEnabled: Boolean(settings.skinAutoUpdateEnabled),
     skinUpdatePrerelease: Boolean(settings.skinUpdatePrerelease)
   };
@@ -175,6 +182,7 @@ export function SettingsPage({
   const settingsChanged = JSON.stringify(nextSettings) !== JSON.stringify(savedSettings);
   const r2Configured = Boolean(draftSettings.r2SensorId);
   const screensaverBrightness = brightnessValue(draftSettings.screensaverBrightness);
+  const autoSleepMinutes = autoSleepValue(draftSettings.autoSleepMinutes);
   const workflowSkin = webuiSkins?.find((skin) => skin.id === WORKFLOW_SKIN_ID) ?? (defaultWebuiSkin?.id === WORKFLOW_SKIN_ID ? defaultWebuiSkin : null);
 
   useEffect(() => {
@@ -338,6 +346,19 @@ export function SettingsPage({
           />
           Keep screen awake while the skin is open
         </label>
+        <label className="settings-field">
+          Auto sleep after last use
+          <input
+            aria-label="Auto sleep after last use"
+            type="number"
+            min={0}
+            max={MAX_AUTO_SLEEP_MINUTES}
+            step={1}
+            value={autoSleepMinutes}
+            onChange={(event) => updateDraftSettings({ autoSleepMinutes: Number(event.target.value) })}
+          />
+        </label>
+        <span>Set 0 to disable automatic sleep.</span>
         <label className="settings-field settings-slider-field">
           <span>Screensaver brightness</span>
           <span className="settings-slider-row">

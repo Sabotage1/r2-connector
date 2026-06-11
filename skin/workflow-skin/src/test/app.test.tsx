@@ -41,6 +41,7 @@ function mockReaFetch(
   let savedSettings = initialSettings;
   let workflow = options.workflow ?? { context: { targetDoseWeight: 18, targetYield: 36 } };
   let displayState = options.displayState ?? { brightness: 100, wakeLockOverride: true };
+  let machineState = options.machineState ?? { connected: true, wifi: { connected: true, ipAddress: "192.168.1.20" } };
   const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init = {}) => {
     const url = new URL(String(input));
     const method = init.method ?? "GET";
@@ -66,11 +67,20 @@ function mockReaFetch(
       workflow = JSON.parse(String(init.body));
       return responseJson(workflow);
     }
-    if (method === "PUT" && url.pathname === "/api/v1/machine/state/sleeping") return Promise.resolve(new Response("", { status: 200 }));
-    if (method === "PUT" && url.pathname === "/api/v1/machine/state/idle") return Promise.resolve(new Response("", { status: 200 }));
-    if (method === "PUT" && url.pathname === "/api/v1/machine/state/espresso") return Promise.resolve(new Response("", { status: 200 }));
+    if (method === "PUT" && url.pathname === "/api/v1/machine/state/sleeping") {
+      machineState = { ...machineState, connected: true, state: { state: "sleeping", substate: "idle" } };
+      return Promise.resolve(new Response("", { status: 200 }));
+    }
+    if (method === "PUT" && url.pathname === "/api/v1/machine/state/idle") {
+      machineState = { ...machineState, connected: true, state: { state: "idle" } };
+      return Promise.resolve(new Response("", { status: 200 }));
+    }
+    if (method === "PUT" && url.pathname === "/api/v1/machine/state/espresso") {
+      machineState = { ...machineState, connected: true, state: { state: "espresso", substate: "preinfusion" } };
+      return Promise.resolve(new Response("", { status: 200 }));
+    }
     if (method === "GET" && url.pathname === "/api/v1/machine/state") {
-      return responseJson(options.machineState ?? { connected: true, wifi: { connected: true, ipAddress: "192.168.1.20" } });
+      return responseJson(machineState);
     }
     if (method === "GET" && url.pathname === "/api/v1/info") return responseJson(options.appInfo ?? { localIp: "192.168.1.20", version: "0.7.6" });
     if (method === "GET" && url.pathname === "/api/v1/devices") return responseJson(options.devices ?? []);
@@ -434,27 +444,20 @@ describe("App shell", () => {
     expect(fetchState.fetchMock).toHaveBeenCalledWith("http://localhost:8080/api/v1/machine/state/idle", expect.objectContaining({ method: "PUT" }));
   });
 
-  it("moves to live brew data after a preset is pressed", async () => {
-    mockReaFetch(initialSettings, {
-      shots: [
-        {
-          id: "shot-1",
-          timestamp: "2026-06-11T10:00:00.000Z",
-          workflow: {},
-          measurements: [
-            { machine: { timestamp: "2026-06-11T10:00:00.000Z", pressure: 2, flow: 1 }, scale: { weight: 3 } },
-            { machine: { timestamp: "2026-06-11T10:00:30.000Z", pressure: 8, flow: 2 }, scale: { weight: 36 } }
-          ]
-        }
-      ]
+  it("keeps the brew page after a preset is pressed until brewing starts", async () => {
+    const fetchState = mockReaFetch(initialSettings, {
+      machineState: { connected: true, state: { state: "idle" }, wifi: { connected: true, ipAddress: "192.168.1.20" } }
     });
     render(<App />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Light Blooming" }));
 
-    expect(await screen.findByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Weight: 36.00 g")).toBeInTheDocument();
-    expect(screen.getByLabelText("Brew Time: 30 s")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Brew" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Live Brew" })).not.toBeInTheDocument();
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/workflow",
+      expect.objectContaining({ method: "PUT" })
+    );
   });
 
   it("starts espresso mode and opens live data when Start Brew is pressed", async () => {
@@ -477,6 +480,29 @@ describe("App shell", () => {
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
+  });
+
+  it("auto sleeps the machine after the configured idle timer", async () => {
+    const fetchState = mockReaFetch(
+      { ...initialSettings, autoSleepMinutes: 0.001 },
+      {
+        machineState: { connected: true, state: { state: "idle" }, wifi: { connected: true, ipAddress: "192.168.1.20" } }
+      }
+    );
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Brew" })).toBeInTheDocument();
+
+    await waitFor(
+      () => {
+        expect(fetchState.fetchMock).toHaveBeenCalledWith(
+          "http://localhost:8080/api/v1/machine/state/sleeping",
+          expect.objectContaining({ method: "PUT" })
+        );
+      },
+      { timeout: 1500 }
+    );
+    expect(await screen.findByText("Machine sleeping")).toBeInTheDocument();
   });
 
   it("puts the machine to sleep and moves into screensaver mode", async () => {

@@ -52,6 +52,7 @@ function parseMachineSnapshot(value: unknown): ShotSnapshot["machine"] | null {
     mixTemperature: numberValue(value.mixTemperature),
     groupTemperature: numberValue(value.groupTemperature),
     targetMixTemperature: numberValue(value.targetMixTemperature),
+    targetGroupTemperature: numberValue(value.targetGroupTemperature),
     state: isRecord(value.state)
       ? {
           state: typeof value.state.state === "string" ? value.state.state : undefined,

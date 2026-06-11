@@ -140,8 +140,17 @@ describe("LivePage", () => {
             scale: { weight: 4 }
           },
           {
-            machine: { timestamp: "2026-06-11T10:00:28.000Z", pressure: 8.567, flow: 2.1, groupTemperature: 92.236, mixTemperature: 88.124 },
-            scale: { weight: 36 }
+            machine: {
+              timestamp: "2026-06-11T10:00:28.000Z",
+              pressure: 8.567,
+              targetPressure: 9,
+              flow: 2.1,
+              targetFlow: 2.4,
+              groupTemperature: 92.236,
+              mixTemperature: 88.124,
+              targetMixTemperature: 93
+            },
+            scale: { weight: 36, weightFlow: 1.4 }
           }
         ]}
         scaleSnapshot={{ weight: 36.346, weightFlow: 1.847, timerValue: 28000 }}
@@ -149,7 +158,14 @@ describe("LivePage", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Shot pressure graph" })).toBeInTheDocument();
+    const graph = screen.getByRole("img", { name: "Shot pressure graph" });
+    expect(graph).toBeInTheDocument();
+    expect(graph.querySelectorAll(".shot-graph-series")).toHaveLength(7);
+    expect(within(graph).getByText("Target pressure")).toBeInTheDocument();
+    expect(within(graph).getByText("Target flow")).toBeInTheDocument();
+    expect(within(graph).getByText("Temp / 10")).toBeInTheDocument();
+    expect(within(graph).getByText("Target temp")).toBeInTheDocument();
+    expect(within(graph).getByText("Weight flow")).toBeInTheDocument();
     expect(screen.getByText("Blooming")).toBeInTheDocument();
     expect(screen.getByLabelText("Weight: 36.35 g")).toBeInTheDocument();
     expect(screen.getByLabelText("Pressure: 8.57 bar")).toBeInTheDocument();
@@ -458,6 +474,7 @@ describe("SettingsPage", () => {
     expect(screen.getByText("Native display")).toBeInTheDocument();
     expect(screen.getByText("Brightness 72%")).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Keep screen awake while the skin is open" })).toBeChecked();
+    expect(screen.getByLabelText("Auto sleep after last use")).toHaveValue(30);
     const brightnessSlider = screen.getByRole("slider", { name: "Screensaver brightness" });
     expect(brightnessSlider).toHaveValue("8");
     fireEvent.change(brightnessSlider, { target: { value: "24" } });
@@ -470,6 +487,18 @@ describe("SettingsPage", () => {
     expect(screen.getByText("Loaded · Auto-load on · v1.3.0")).toBeInTheDocument();
     expect(screen.getByText("Credentials configured · Auto upload on · Back-sync on")).toBeInTheDocument();
     expect(screen.getByText("Last upload vis-1 from shot-1")).toBeInTheDocument();
+  });
+
+  it("edits the auto sleep timer before saving settings", async () => {
+    const onUpdateSettings = vi.fn();
+    render(<SettingsPage settings={defaultSkinSettings} r2Sensor={null} onUpdateSettings={onUpdateSettings} />);
+
+    fireEvent.change(screen.getByLabelText("Auto sleep after last use"), { target: { value: "45" } });
+
+    expect(onUpdateSettings).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
+
+    expect(onUpdateSettings).toHaveBeenLastCalledWith(expect.objectContaining({ autoSleepMinutes: 45 }));
   });
 
   it("edits skin updater settings and triggers native update actions", async () => {

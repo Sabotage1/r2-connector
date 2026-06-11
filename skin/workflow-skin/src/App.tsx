@@ -178,6 +178,14 @@ function isSleepingMachine(machineState: MachineState | null): boolean {
   return machineState?.state?.state === "sleeping";
 }
 
+function isBrewingMode(state: string | undefined): boolean {
+  return state === "espresso" || state === "brewing";
+}
+
+function isSleepingMode(state: string | undefined): boolean {
+  return state === "sleeping";
+}
+
 function SidebarStatus({
   statuses,
   expandedStatusId,
@@ -235,6 +243,7 @@ export function App() {
   const [skinUpdatePhase, setSkinUpdatePhase] = useState<SkinUpdatePhase>("idle");
   const [mainMenuEditing, setMainMenuEditing] = useState(false);
   const [expandedStatusId, setExpandedStatusId] = useState<ConnectivityStatus["id"] | null>(null);
+  const [lastUseAt, setLastUseAt] = useState(() => Date.now());
   const startupAppliedRef = useRef(false);
   const startupConnectRef = useRef(false);
   const skinAutoUpdateRef = useRef(false);
@@ -342,8 +351,24 @@ export function App() {
 
   useEffect(() => {
     if (!data.loaded || page === "live" || page === "screensaver") return;
-    if (currentMachineMode === "espresso") setPage("live");
+    if (isBrewingMode(currentMachineMode)) setPage("live");
   }, [currentMachineMode, data.loaded, page]);
+
+  useEffect(() => {
+    if (isBrewingMode(currentMachineMode)) setLastUseAt(Date.now());
+  }, [currentMachineMode]);
+
+  useEffect(() => {
+    const markUse = () => setLastUseAt(Date.now());
+    window.addEventListener("pointerdown", markUse);
+    window.addEventListener("keydown", markUse);
+    window.addEventListener("touchstart", markUse);
+    return () => {
+      window.removeEventListener("pointerdown", markUse);
+      window.removeEventListener("keydown", markUse);
+      window.removeEventListener("touchstart", markUse);
+    };
+  }, []);
 
   useEffect(() => {
     if (!data.loaded) return;
@@ -540,17 +565,24 @@ export function App() {
     }
   };
 
-  const applyProfileAndOpenLive = async (profile: ProfileRecord) => {
+  const applyProfileForBrew = async (profile: ProfileRecord) => {
     await applyProfile(profile);
-    setPage("live");
+    setLastUseAt(Date.now());
   };
 
   const startBrew = async () => {
     setBrewPending(true);
-    setPage("live");
+    setLastUseAt(Date.now());
     try {
       await api.requestMachineState("espresso");
-      setStatus({ type: "success", message: "Brew started." });
+      const latestMachineState = await api.getMachineState().catch(() => null);
+      if (isBrewingMode(latestMachineState?.state?.state)) {
+        setPage("live");
+        setStatus({ type: "success", message: "Brew started." });
+      } else {
+        await data.refresh();
+        setStatus({ type: "success", message: "Brew start requested. Waiting for machine." });
+      }
     } catch (error) {
       setStatus({ type: "error", message: `Could not start brew: ${errorMessage(error)}` });
     } finally {
@@ -696,8 +728,27 @@ export function App() {
     if (isSleepingMachine(data.machineState)) {
       await api.wakeMachine().catch(() => undefined);
     }
+    setLastUseAt(Date.now());
     setPage("brew");
   };
+
+  useEffect(() => {
+    if (!data.loaded || page === "screensaver" || !machineConnected) return;
+    if (isBrewingMode(currentMachineMode) || isSleepingMode(currentMachineMode)) return;
+
+    const autoSleepMinutes = data.settings.autoSleepMinutes;
+    if (!autoSleepMinutes) return;
+
+    const idleLimitMs = autoSleepMinutes * 60_000;
+    const delay = Math.max(50, idleLimitMs - (Date.now() - lastUseAt));
+    const timer = window.setTimeout(() => {
+      if (Date.now() - lastUseAt >= idleLimitMs) {
+        void sleepMachine();
+      }
+    }, delay);
+
+    return () => window.clearTimeout(timer);
+  }, [currentMachineMode, data.loaded, data.settings.autoSleepMinutes, lastUseAt, machineConnected, page, sleepMachine]);
 
   const forceScaleConnection = async () => {
     setStatus({ type: "success", message: "Trying to connect scale." });
@@ -854,7 +905,7 @@ export function App() {
             shots={data.shots}
             settings={data.settings}
             onApplyProfile={(profile) => {
-              void applyProfileAndOpenLive(profile);
+              void applyProfileForBrew(profile);
             }}
             onEditSlot={(index) => {
               setStatus(null);
