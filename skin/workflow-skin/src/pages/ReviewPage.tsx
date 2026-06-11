@@ -30,6 +30,8 @@ export function ReviewPage({
   const [yieldText, setYieldText] = useState(String(shot.annotations?.actualYield ?? stats.finalYield ?? ""));
   const [grindSize, setGrindSize] = useState(grindSizeFromShot(shot) ?? "");
   const [notes, setNotes] = useState(shot.annotations?.espressoNotes ?? "");
+  const [r2Busy, setR2Busy] = useState(false);
+  const [r2Status, setR2Status] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
 
   const ey = useMemo(
     () =>
@@ -66,8 +68,26 @@ export function ReviewPage({
   }
 
   async function readR2() {
-    const value = await onReadR2();
-    if (typeof value === "number") setTdsText(String(value));
+    if (!r2Sensor) {
+      setR2Status({ type: "error", message: "No DiFluid R2 sensor detected." });
+      return;
+    }
+
+    setR2Busy(true);
+    setR2Status({ type: "info", message: "Reading from R2..." });
+    try {
+      const value = await onReadR2();
+      if (typeof value === "number") {
+        setTdsText(String(value));
+        setR2Status({ type: "success", message: `R2 TDS ${value} imported.` });
+      } else {
+        setR2Status({ type: "error", message: "R2 did not return a TDS reading." });
+      }
+    } catch (error) {
+      setR2Status({ type: "error", message: error instanceof Error ? error.message : "Could not read R2." });
+    } finally {
+      setR2Busy(false);
+    }
   }
 
   return (
@@ -97,10 +117,13 @@ export function ReviewPage({
           <input aria-label="TDS" value={tdsText} onChange={(event) => setTdsText(event.target.value)} inputMode="decimal" />
         </label>
         <p>EY: {ey ?? "—"}%</p>
-        {r2Sensor && (
-          <button type="button" className="ghost-button" onClick={readR2}>
-            Read from R2
-          </button>
+        <button type="button" className="ghost-button" disabled={r2Busy} onClick={readR2}>
+          {r2Busy ? "Reading R2" : "Read from R2"}
+        </button>
+        {r2Status && (
+          <p className={r2Status.type === "error" ? "inline-panel-status error" : "inline-panel-status"} role={r2Status.type === "error" ? "alert" : "status"}>
+            {r2Status.message}
+          </p>
         )}
       </section>
       <section className="panel review-form">

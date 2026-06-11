@@ -3,6 +3,7 @@ import {
   DEFAULT_STEAM_TIMERS,
   defaultSkinSettings,
   isMilkProfile,
+  isProfileShown,
   isReviewEnabled,
   loadSkinSettings,
   profileWorkflowFor,
@@ -17,6 +18,11 @@ describe("skin settings", () => {
     expect(defaultSkinSettings.skinTitle).toBe("Workflow");
     expect(defaultSkinSettings.startupProfileId).toBeUndefined();
     expect(defaultSkinSettings.r2SensorId).toBeUndefined();
+    expect(defaultSkinSettings.shownProfileIds).toEqual([]);
+    expect(defaultSkinSettings.skinAutoUpdateEnabled).toBe(false);
+    expect(defaultSkinSettings.skinUpdateRepo).toBe("");
+    expect(defaultSkinSettings.skinUpdateAsset).toBe("workflow-skin.zip");
+    expect(defaultSkinSettings.skinUpdatePrerelease).toBe(false);
   });
 
   it("loads default settings when KV is missing", async () => {
@@ -37,6 +43,11 @@ describe("skin settings", () => {
         skinTitle: "Roy's Decent",
         startupProfileId: "p2",
         r2SensorId: "sensor-r2",
+        skinAutoUpdateEnabled: true,
+        skinUpdateRepo: " roy/workflow-skin ",
+        skinUpdateAsset: " workflow-skin.zip ",
+        skinUpdatePrerelease: true,
+        shownProfileIds: ["p1", 42, "p2"],
         profileWorkflows: {
           p2: { milkBased: true, steamTimers: { small: 18, medium: 28, large: 42 } },
           bad: { milkBased: "yes", steamTimers: { small: "soon" } }
@@ -58,6 +69,11 @@ describe("skin settings", () => {
     expect(settings.skinTitle).toBe("Roy's Decent");
     expect(settings.startupProfileId).toBe("p2");
     expect(settings.r2SensorId).toBe("sensor-r2");
+    expect(settings.skinAutoUpdateEnabled).toBe(true);
+    expect(settings.skinUpdateRepo).toBe("roy/workflow-skin");
+    expect(settings.skinUpdateAsset).toBe("workflow-skin.zip");
+    expect(settings.skinUpdatePrerelease).toBe(true);
+    expect(settings.shownProfileIds).toEqual(["p1", "p2"]);
     expect(settings.profileWorkflows).toEqual({
       p2: { milkBased: true, steamTimers: { small: 18, medium: 28, large: 42 } }
     });
@@ -81,12 +97,17 @@ describe("skin settings", () => {
 
   it("saves settings to workflow-skin namespace", async () => {
     const api = { getKv: vi.fn(), putKv: vi.fn().mockResolvedValue(undefined) };
-    await saveSkinSettings(api, { ...defaultSkinSettings, presetSlots: [{ label: "Light", profileId: "p1" }] });
+    await saveSkinSettings(api, { ...defaultSkinSettings, presetSlots: [{ label: "Light", profileId: "p1" }], shownProfileIds: ["p1"] });
     expect(api.putKv).toHaveBeenCalledWith(
       "workflow-skin",
       "settings",
-      expect.objectContaining({ presetSlots: [{ label: "Light", profileId: "p1" }] })
+      expect.objectContaining({ presetSlots: [{ label: "Light", profileId: "p1" }], shownProfileIds: ["p1"] })
     );
+  });
+
+  it("hides all profiles from the skin by default", () => {
+    expect(isProfileShown(defaultSkinSettings, "p1")).toBe(false);
+    expect(isProfileShown({ ...defaultSkinSettings, shownProfileIds: ["p1"] }, "p1")).toBe(true);
   });
 
   it("uses the default review setting for unknown profiles", () => {

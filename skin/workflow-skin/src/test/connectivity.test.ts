@@ -39,8 +39,77 @@ describe("buildConnectivityStatuses", () => {
     ).toEqual([
       { id: "machine", label: "Machine", detail: "Connected", connected: true },
       { id: "wifi", label: "WiFi", detail: "192.168.1.88", connected: true },
-      { id: "scale", label: "Scale", detail: "Connected", connected: true }
+      { id: "scale", label: "Scale", detail: "Connected", connected: true },
+      { id: "water", label: "Water", detail: "Unknown", connected: false }
     ]);
+  });
+
+  it("marks scale connected from live scale status and shows water level", () => {
+    const statuses = buildConnectivityStatuses({
+      apiHost: "192.168.1.88",
+      machineState: { connected: true },
+      sensors: [],
+      r2SensorId: undefined,
+      r2Sensor: null,
+      scaleConnected: true,
+      waterLevels: { currentLevel: 42, refillLevel: 15 }
+    });
+
+    expect(statuses.find((status) => status.id === "scale")).toEqual({
+      id: "scale",
+      label: "Scale",
+      detail: "Connected",
+      connected: true
+    });
+    expect(statuses.find((status) => status.id === "water")).toEqual({
+      id: "water",
+      label: "Water",
+      detail: "42mm",
+      connected: true
+    });
+  });
+
+  it("uses the app local IP instead of localhost and connected scale devices", () => {
+    const statuses = buildConnectivityStatuses({
+      apiHost: "localhost",
+      appInfo: { localIp: "10.0.0.200" },
+      machineState: { connected: true },
+      sensors: [],
+      devices: [{ id: "scale-1", name: "Acaia", type: "scale", state: "connected" }],
+      r2SensorId: undefined,
+      r2Sensor: null
+    } as any);
+
+    expect(statuses.find((status) => status.id === "wifi")).toEqual({
+      id: "wifi",
+      label: "WiFi",
+      detail: "10.0.0.200",
+      connected: true
+    });
+    expect(statuses.find((status) => status.id === "scale")).toEqual({
+      id: "scale",
+      label: "Scale",
+      detail: "Connected",
+      connected: true
+    });
+  });
+
+  it("marks water red when it is at or below the refill level", () => {
+    const statuses = buildConnectivityStatuses({
+      apiHost: "192.168.1.88",
+      machineState: { connected: true },
+      sensors: [],
+      r2SensorId: undefined,
+      r2Sensor: null,
+      waterLevels: { currentLevel: 12, refillLevel: 15 }
+    });
+
+    expect(statuses.find((status) => status.id === "water")).toEqual({
+      id: "water",
+      label: "Water",
+      detail: "Low 12mm",
+      connected: false
+    });
   });
 
   it("hides R2 status until it is configured in settings", () => {

@@ -1,8 +1,8 @@
-import { Activity, Coffee, Flame, History, PackageOpen, Settings, SlidersHorizontal } from "lucide-react";
+import { Activity, Coffee, Flame, History, Moon, PackageOpen, Settings, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { apiBaseUrl, ReaPrimeApi } from "./api/reaprime";
-import { findDifluidR2Sensor, r2SocketUrl } from "./api/sensors";
-import type { ProfileRecord, ShotAnnotations } from "./api/types";
+import { apiBaseUrl, ReaPrimeApi, ReaPrimeApiError } from "./api/reaprime";
+import { findDifluidR2Sensor } from "./api/sensors";
+import type { DeviceInfo, Grinder, MachineState, Profile, ProfileRecord, ShotAnnotations } from "./api/types";
 import { uploadShotToVisualizer } from "./api/visualizer";
 import type { Bag } from "./lib/bags";
 import { buildConnectivityStatuses } from "./lib/connectivity";
@@ -11,27 +11,36 @@ import { postShotPageForShot, selectedProfileIdFromWorkflow } from "./lib/workfl
 import { BagsPage } from "./pages/BagsPage";
 import { BrewPage } from "./pages/BrewPage";
 import { HistoryPage } from "./pages/HistoryPage";
+import { LivePage } from "./pages/LivePage";
 import { ProfilesPage } from "./pages/ProfilesPage";
 import { ReviewPage } from "./pages/ReviewPage";
+import { ScreensaverPage } from "./pages/ScreensaverPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SteamPage } from "./pages/SteamPage";
-import { profileWorkflowFor, type ProfileWorkflowSettings, type SkinSettings } from "./state/skinSettings";
+import { isProfileShown, profileWorkflowFor, type ProfileWorkflowSettings, type SkinSettings } from "./state/skinSettings";
+import { useLiveTelemetry } from "./state/useLiveTelemetry";
 import { useReaData } from "./state/useReaData";
 
-type Page = "brew" | "review" | "steam" | "bags" | "editProfiles" | "history" | "settings";
+type Page = "brew" | "live" | "review" | "steam" | "bags" | "profiles" | "history" | "settings" | "screensaver";
 
 const nav: Array<{ id: Page; label: string; icon: React.ComponentType<{ size?: number }> }> = [
   { id: "brew", label: "Brew", icon: Coffee },
+  { id: "live", label: "Live", icon: Activity },
   { id: "review", label: "Review", icon: Activity },
   { id: "steam", label: "Steam", icon: Flame },
   { id: "bags", label: "Bags", icon: PackageOpen },
-  { id: "editProfiles", label: "Edit Profiles", icon: SlidersHorizontal },
+  { id: "profiles", label: "Profiles", icon: SlidersHorizontal },
   { id: "history", label: "History", icon: History },
   { id: "settings", label: "Settings", icon: Settings }
 ];
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function statusSentence(message: unknown, fallback: string): string {
+  const text = typeof message === "string" && message.trim() ? message.trim() : fallback;
+  return /[.!?]$/.test(text) ? text : `${text}.`;
 }
 
 function dateOnlyToIsoDateTime(value: string | undefined): string | undefined {
@@ -68,46 +77,94 @@ function extractNumericTds(value: unknown): number | null {
   return null;
 }
 
-function waitForR2Tds(apiBase: string, sensorId: string): Promise<number | null> {
-  if (typeof WebSocket === "undefined") return Promise.resolve(null);
-
-  return new Promise((resolve) => {
-    let settled = false;
-    const socket = new WebSocket(r2SocketUrl(apiBase, sensorId));
-    const timeout = window.setTimeout(() => finish(null), 2500);
-
-    function finish(value: number | null) {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timeout);
-      socket.close();
-      resolve(value);
-    }
-
-    socket.onmessage = (event) => {
-      try {
-        const tds = extractNumericTds(JSON.parse(String(event.data)));
-        if (tds !== null) finish(tds);
-      } catch {
-        return;
-      }
-    };
-    socket.onerror = () => finish(null);
-    socket.onclose = () => finish(null);
-  });
+function extractR2Tds(value: unknown): number | null {
+  if (!value || typeof value !== "object") return null;
+  const result = (value as { result?: unknown }).result;
+  if (result && typeof result === "object") {
+    const tds = extractR2Tds(result);
+    if (tds !== null) return tds;
+  }
+  const reading = (value as { reading?: unknown }).reading;
+  if (reading && typeof reading === "object") {
+    return extractNumericTds((reading as { tds?: unknown }).tds);
+  }
+  return extractNumericTds(value);
 }
 
-function SidebarStatus({ statuses }: { statuses: ConnectivityStatus[] }) {
+function replaceProfileIdInSettings(settings: SkinSettings, fromId: string, toId: string): SkinSettings {
+  if (fromId === toId) return settings;
+
+  const reviewEnabledByProfile = { ...settings.reviewEnabledByProfile };
+  if (Object.prototype.hasOwnProperty.call(reviewEnabledByProfile, fromId)) {
+    reviewEnabledByProfile[toId] = reviewEnabledByProfile[fromId];
+    delete reviewEnabledByProfile[fromId];
+  }
+
+  const profileWorkflows = { ...settings.profileWorkflows };
+  if (Object.prototype.hasOwnProperty.call(profileWorkflows, fromId)) {
+    profileWorkflows[toId] = profileWorkflows[fromId];
+    delete profileWorkflows[fromId];
+  }
+
+  return {
+    ...settings,
+    presetSlots: settings.presetSlots.map((slot) => (slot.profileId === fromId ? { ...slot, profileId: toId } : slot)),
+    startupProfileId: settings.startupProfileId === fromId ? toId : settings.startupProfileId,
+    shownProfileIds: Array.from(new Set(settings.shownProfileIds.map((id) => (id === fromId ? toId : id)))),
+    reviewEnabledByProfile,
+    profileWorkflows
+  };
+}
+
+function statusPopoverTitle(status: ConnectivityStatus): string {
+  if (status.id === "wifi") return "Machine IP address";
+  if (status.id === "water") return "Current water level";
+  return `${status.label} status`;
+}
+
+function isDisconnectedDevice(device: DeviceInfo): boolean {
+  return (device.type === "machine" || device.type === "scale") && device.state !== "connected";
+}
+
+function isSleepingMachine(machineState: MachineState | null): boolean {
+  return machineState?.state?.state === "sleeping";
+}
+
+function SidebarStatus({
+  statuses,
+  expandedStatusId,
+  onStatusPress
+}: {
+  statuses: ConnectivityStatus[];
+  expandedStatusId: ConnectivityStatus["id"] | null;
+  onStatusPress: (status: ConnectivityStatus) => void;
+}) {
+  const expandedStatus = statuses.find((status) => status.id === expandedStatusId);
+
   return (
     <div className="sidebar-header">
       <div className="compact-status-bar" aria-label="Connection status">
         {statuses.map((status) => (
-          <div className="compact-status-chip" key={status.id} title={`${status.label}: ${status.detail}`}>
+          <button
+            type="button"
+            className="compact-status-chip"
+            key={status.id}
+            title={`${status.label}: ${status.detail}`}
+            aria-label={status.label}
+            aria-expanded={expandedStatusId === status.id}
+            onClick={() => onStatusPress(status)}
+          >
             <span className={status.connected ? "status-dot connected" : "status-dot disconnected"} aria-hidden="true" />
             <span>{status.label}</span>
-          </div>
+          </button>
         ))}
       </div>
+      {expandedStatus && (
+        <div className="status-popover" role="status">
+          <span>{statusPopoverTitle(expandedStatus)}</span>
+          <strong>{expandedStatus.detail}</strong>
+        </div>
+      )}
     </div>
   );
 }
@@ -124,25 +181,45 @@ export function App() {
   const [page, setPage] = useState<Page>("brew");
   const [editingSlotIndex, setEditingSlotIndex] = useState<number | null>(null);
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [sleepPending, setSleepPending] = useState(false);
+  const [brewPending, setBrewPending] = useState(false);
+  const [skinUpdateBusy, setSkinUpdateBusy] = useState(false);
+  const [expandedStatusId, setExpandedStatusId] = useState<ConnectivityStatus["id"] | null>(null);
   const startupAppliedRef = useRef(false);
+  const startupConnectRef = useRef(false);
+  const skinAutoUpdateRef = useRef(false);
   const knownLatestShotIdRef = useRef<string | null | undefined>(undefined);
   const api = useMemo(() => new ReaPrimeApi(), []);
   const data = useReaData(api);
+  const liveTelemetry = useLiveTelemetry(undefined, { recordIdle: page === "live" });
   const latestShot = data.shots[0] ?? null;
-  const r2Sensor = findDifluidR2Sensor(data.sensors);
+  const detectedR2Sensor = findDifluidR2Sensor(data.sensors);
+  const configuredR2Sensor = data.settings.r2SensorId ? data.sensors.find((sensor) => sensor.id === data.settings.r2SensorId) ?? null : null;
+  const r2Sensor = configuredR2Sensor ?? detectedR2Sensor;
   const selectedProfileId = selectedProfileIdFromWorkflow(data.workflow, data.profiles);
   const activeProfile = data.profiles.find((profile) => profile.id === selectedProfileId);
   const activeProfileWorkflow = profileWorkflowFor(data.settings, selectedProfileId);
+  const visualizerPlugin = data.plugins?.find((plugin) => plugin.id === "visualizer.reaplugin") ?? null;
+  const shownProfiles = useMemo(
+    () => data.profiles.filter((profile) => isProfileShown(data.settings, profile.id)),
+    [data.profiles, data.settings.shownProfileIds]
+  );
+  const machineConnected = Boolean(data.machineState && data.machineState.connected !== false);
+  const currentMachineMode = liveTelemetry.machineMode?.state ?? data.machineState?.state?.state;
   const statuses = useMemo(
     () =>
       buildConnectivityStatuses({
         apiHost: new URL(apiBaseUrl()).hostname,
+        appInfo: data.appInfo,
         machineState: data.machineState,
         sensors: data.sensors,
+        devices: data.devices,
+        scaleConnected: liveTelemetry.scaleConnected,
+        waterLevels: liveTelemetry.waterLevels,
         r2SensorId: data.settings.r2SensorId,
         r2Sensor
       }),
-    [data.machineState, data.sensors, data.settings.r2SensorId, r2Sensor]
+    [data.machineState, data.sensors, data.settings.r2SensorId, liveTelemetry.scaleConnected, liveTelemetry.waterLevels, r2Sensor]
   );
 
   const applyProfile = async (profile: ProfileRecord) => {
@@ -173,6 +250,46 @@ export function App() {
       setStatus({ type: "error", message: `Could not apply startup profile: ${errorMessage(error)}` });
     });
   }, [data.loaded, data.settings.startupProfileId, data.profiles]);
+
+  useEffect(() => {
+    if (startupConnectRef.current || !data.loaded) return;
+    startupConnectRef.current = true;
+
+    const connectAndWake = async () => {
+      await api.scanDevices({ connect: true, quick: true }).catch(() => undefined);
+      const devices = await api.listDevices().catch(() => data.devices ?? []);
+
+      for (const device of devices.filter(isDisconnectedDevice)) {
+        await api.connectDevice(device.id).catch(() => undefined);
+      }
+
+      const latestMachineState = await api.getMachineState().catch(() => data.machineState);
+      if (isSleepingMachine(latestMachineState)) {
+        await api.wakeMachine().catch(() => undefined);
+      }
+
+      await data.refresh();
+      window.setTimeout(() => {
+        void data.refresh();
+      }, 1500);
+    };
+
+    void connectAndWake();
+  }, [api, data.loaded]);
+
+  useEffect(() => {
+    if (!data.loaded || page === "screensaver") return;
+
+    const request = data.settings.keepScreenAwake !== false ? api.requestWakeLock() : api.releaseWakeLock();
+    request.catch(() => {
+      // Optional tablet display APIs are absent on some ReaPrime builds/platforms.
+    });
+  }, [api, data.loaded, data.settings.keepScreenAwake, page]);
+
+  useEffect(() => {
+    if (!data.loaded || page === "live" || page === "screensaver") return;
+    if (currentMachineMode === "espresso") setPage("live");
+  }, [currentMachineMode, data.loaded, page]);
 
   useEffect(() => {
     if (!data.loaded) return;
@@ -220,6 +337,102 @@ export function App() {
     });
   };
 
+  const setProfileShown = async (profileId: string, shown: boolean) => {
+    const shownProfileIds = shown
+      ? Array.from(new Set([...data.settings.shownProfileIds, profileId]))
+      : data.settings.shownProfileIds.filter((id) => id !== profileId);
+    await persistSettings({ ...data.settings, shownProfileIds }, "Profile visibility saved.");
+  };
+
+  const checkSkinUpdates = async (reportStatus = true) => {
+    setSkinUpdateBusy(true);
+    try {
+      const result = await api.updateWebUISkins();
+      await data.refresh();
+      if (reportStatus) setStatus({ type: "success", message: statusSentence(result.message, "Skin update check completed") });
+    } catch (error) {
+      setStatus({ type: "error", message: `Could not check skin updates: ${errorMessage(error)}` });
+      throw error;
+    } finally {
+      setSkinUpdateBusy(false);
+    }
+  };
+
+  const installSkinUpdate = async (reportStatus = true) => {
+    const repo = data.settings.skinUpdateRepo.trim();
+    if (!repo) {
+      setStatus({ type: "error", message: "Add a GitHub repo before installing skin updates." });
+      return;
+    }
+
+    setSkinUpdateBusy(true);
+    try {
+      const asset = data.settings.skinUpdateAsset.trim();
+      const result = await api.installSkinFromGithubRelease({
+        repo,
+        ...(asset ? { asset } : {}),
+        prerelease: data.settings.skinUpdatePrerelease
+      });
+      await data.refresh();
+      if (reportStatus) setStatus({ type: "success", message: statusSentence(result.message, "Skin installed from GitHub release") });
+    } catch (error) {
+      setStatus({ type: "error", message: `Could not install skin update: ${errorMessage(error)}` });
+      throw error;
+    } finally {
+      setSkinUpdateBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (skinAutoUpdateRef.current || !data.loaded || !data.settings.skinAutoUpdateEnabled) return;
+    skinAutoUpdateRef.current = true;
+
+    const runAutoUpdate = async () => {
+      try {
+        if (data.settings.skinUpdateRepo.trim()) {
+          await installSkinUpdate(false);
+          setStatus({ type: "success", message: "Skin auto-update checked from GitHub release." });
+        } else {
+          await checkSkinUpdates(false);
+          setStatus({ type: "success", message: "Skin auto-update checked." });
+        }
+      } catch {
+        // The action helper already writes a user-visible error.
+      }
+    };
+
+    void runAutoUpdate();
+  }, [data.loaded, data.settings.skinAutoUpdateEnabled]);
+
+  const saveProfile = async (profileId: string, profile: Profile) => {
+    try {
+      const savedProfile = await api.updateProfile(profileId, { profile });
+      if (savedProfile.id !== profileId) {
+        await data.persistSettings(replaceProfileIdInSettings(data.settings, profileId, savedProfile.id));
+      }
+      await data.refresh();
+      setStatus({ type: "success", message: "Profile saved." });
+    } catch (error) {
+      if (error instanceof ReaPrimeApiError && error.status === 400 && error.message.includes("Cannot modify default profile content")) {
+        try {
+          const createdProfile = await api.createProfile({ profile, parentId: profileId });
+          await data.persistSettings({
+            ...data.settings,
+            shownProfileIds: Array.from(new Set([...data.settings.shownProfileIds, createdProfile.id]))
+          });
+          await data.refresh();
+          setStatus({ type: "success", message: "Profile saved." });
+          return;
+        } catch (createError) {
+          setStatus({ type: "error", message: `Could not save profile: ${errorMessage(createError)}` });
+          throw createError;
+        }
+      }
+      setStatus({ type: "error", message: `Could not save profile: ${errorMessage(error)}` });
+      throw error;
+    }
+  };
+
   const assignPresetProfile = async (profile: ProfileRecord) => {
     if (editingSlotIndex === null) return;
     const slot = data.settings.presetSlots[editingSlotIndex];
@@ -234,6 +447,24 @@ export function App() {
       setEditingSlotIndex(null);
     } catch (error) {
       setStatus({ type: "error", message: `Could not save preset: ${errorMessage(error)}` });
+    }
+  };
+
+  const applyProfileAndOpenLive = async (profile: ProfileRecord) => {
+    await applyProfile(profile);
+    setPage("live");
+  };
+
+  const startBrew = async () => {
+    setBrewPending(true);
+    setPage("live");
+    try {
+      await api.requestMachineState("espresso");
+      setStatus({ type: "success", message: "Brew started." });
+    } catch (error) {
+      setStatus({ type: "error", message: `Could not start brew: ${errorMessage(error)}` });
+    } finally {
+      setBrewPending(false);
     }
   };
 
@@ -266,6 +497,45 @@ export function App() {
     await data.refresh();
   };
 
+  const updateBag = async (bag: Bag) => {
+    await Promise.all([
+      api.updateBean(bag.beanId, {
+        roaster: bag.roaster?.trim() ?? "",
+        name: bag.bean?.trim() ?? "",
+        country: bag.country?.trim() || undefined,
+        region: bag.region?.trim() || undefined,
+        processing: bag.process?.trim() || undefined,
+        notes: bag.notes?.trim() || undefined
+      }),
+      api.updateBatch(bag.id, {
+        roastDate: dateOnlyToIsoDateTime(bag.roastDate),
+        roastLevel: bag.roastLevel?.trim() || undefined,
+        notes: bag.notes?.trim() || undefined
+      })
+    ]);
+    await data.refresh();
+  };
+
+  const archiveBag = async (bag: Bag) => {
+    await api.updateBatch(bag.id, { archived: true });
+    await data.refresh();
+  };
+
+  const createGrinder = async (payload: Pick<Grinder, "model" | "settingType" | "notes">) => {
+    await api.createGrinder(payload);
+    await data.refresh();
+  };
+
+  const updateGrinder = async (id: string, payload: Pick<Grinder, "model" | "settingType" | "notes">) => {
+    await api.updateGrinder(id, payload);
+    await data.refresh();
+  };
+
+  const archiveGrinder = async (grinder: Grinder) => {
+    await api.updateGrinder(grinder.id, { archived: true });
+    await data.refresh();
+  };
+
   const saveReview = async (shotId: string, annotations: ShotAnnotations) => {
     try {
       await api.updateShot(shotId, { annotations });
@@ -287,16 +557,19 @@ export function App() {
   };
 
   const readR2 = async () => {
-    if (!r2Sensor) return null;
+    if (!r2Sensor) {
+      setStatus({ type: "error", message: "No DiFluid R2 sensor detected." });
+      return null;
+    }
+
     try {
-      const tdsPromise = waitForR2Tds(apiBaseUrl(), r2Sensor.id).catch(() => null);
-      const result = await api.executeSensor(r2Sensor.id, "measure");
+      const result = await api.executeSensor(r2Sensor.id, "measure", { timeout: 30 });
       if (result.status === "error") {
         setStatus({ type: "error", message: `Could not read R2: ${result.message ?? "Measurement command failed."}` });
         return null;
       }
 
-      const tds = await tdsPromise;
+      const tds = extractR2Tds(result.result);
       if (tds === null) {
         setStatus({ type: "error", message: "R2 did not return a TDS reading." });
         return null;
@@ -308,12 +581,47 @@ export function App() {
     }
   };
 
+  const sleepMachine = async () => {
+    setSleepPending(true);
+    try {
+      await api.setDisplayBrightness(data.settings.screensaverBrightness ?? 8).catch(() => undefined);
+      await api.releaseWakeLock().catch(() => undefined);
+      await api.sleepMachine();
+      await data.refresh();
+      setStatus({ type: "success", message: "Machine sleep requested." });
+      setPage("screensaver");
+    } catch (error) {
+      setStatus({ type: "error", message: `Could not sleep machine: ${errorMessage(error)}` });
+    } finally {
+      setSleepPending(false);
+    }
+  };
+
+  const wakeScreen = async () => {
+    await api.setDisplayBrightness(100).catch(() => undefined);
+    if (data.settings.keepScreenAwake !== false) {
+      await api.requestWakeLock().catch(() => undefined);
+    }
+    if (isSleepingMachine(data.machineState)) {
+      await api.wakeMachine().catch(() => undefined);
+    }
+    setPage("brew");
+  };
+
+  const toggleStatusPopover = (nextStatus: ConnectivityStatus) => {
+    setExpandedStatusId((current) => (current === nextStatus.id ? null : nextStatus.id));
+  };
+
   const editingSlot = editingSlotIndex === null ? undefined : data.settings.presetSlots[editingSlotIndex];
+
+  if (page === "screensaver") {
+    return <ScreensaverPage title={data.settings.skinTitle} onWake={() => void wakeScreen()} />;
+  }
 
   return (
     <main className="app-shell">
       <nav className="side-nav" aria-label="Workflow navigation">
-        <SidebarStatus statuses={statuses} />
+        <SidebarStatus statuses={statuses} expandedStatusId={expandedStatusId} onStatusPress={toggleStatusPopover} />
         {nav.map((item) => {
           const Icon = item.icon;
           return (
@@ -331,6 +639,19 @@ export function App() {
         })}
       </nav>
       <section className="page-surface">
+        <div className="page-top-actions">
+          <button
+            type="button"
+            className="sleep-button"
+            aria-label="Sleep machine"
+            title={machineConnected ? "Sleep machine" : "Machine is not connected"}
+            disabled={!machineConnected || sleepPending}
+            onClick={() => void sleepMachine()}
+          >
+            <Moon size={17} />
+            <span>{sleepPending ? "Sleeping" : "Sleep"}</span>
+          </button>
+        </div>
         <AppHeadline title={data.settings.skinTitle} />
         <h1>{nav.find((item) => item.id === page)?.label}</h1>
         {data.error && (
@@ -354,11 +675,26 @@ export function App() {
             bags={data.bags}
             shots={data.shots}
             settings={data.settings}
-            onApplyProfile={applyProfile}
+            onApplyProfile={(profile) => {
+              void applyProfileAndOpenLive(profile);
+            }}
             onEditSlot={(index) => {
               setStatus(null);
               setEditingSlotIndex(index);
             }}
+            onStartBrew={() => {
+              void startBrew();
+            }}
+            brewPending={brewPending}
+          />
+        )}
+        {page === "live" && (
+          <LivePage
+            workflow={data.workflow}
+            activeProfile={activeProfile}
+            latestShot={latestShot}
+            liveMeasurements={liveTelemetry.measurements}
+            scaleSnapshot={liveTelemetry.scaleSnapshot}
           />
         )}
         {page === "review" &&
@@ -383,21 +719,49 @@ export function App() {
             profileTitle={activeProfile?.profile.title ?? data.workflow.profile?.title ?? "Milk profile"}
             timers={activeProfileWorkflow.steamTimers}
             onReview={() => setPage("review")}
+            steamHistory={data.steams ?? []}
           />
         )}
-        {page === "bags" && <BagsPage bags={data.bags} onSaveBag={saveBag} />}
-        {page === "editProfiles" && (
+        {page === "bags" && (
+          <BagsPage
+            bags={data.bags}
+            grinders={data.grinders ?? []}
+            onSaveBag={saveBag}
+            onUpdateBag={updateBag}
+            onArchiveBag={archiveBag}
+            onCreateGrinder={createGrinder}
+            onUpdateGrinder={updateGrinder}
+            onArchiveGrinder={archiveGrinder}
+          />
+        )}
+        {page === "profiles" && (
           <ProfilesPage
             profiles={data.profiles}
             settings={data.settings}
             onToggleReview={toggleReview}
             onSetStartupProfile={setStartupProfile}
+            onSetProfileShown={setProfileShown}
             onUpdateProfileWorkflow={updateProfileWorkflow}
+            onSaveProfile={saveProfile}
           />
         )}
         {page === "history" && <HistoryPage shots={data.shots} bags={data.bags} />}
         {page === "settings" && (
-          <SettingsPage settings={data.settings} r2Sensor={r2Sensor} onUpdateSettings={(next) => void persistSettings(next, "Settings saved.")} />
+          <SettingsPage
+            settings={data.settings}
+            r2Sensor={r2Sensor}
+            displayState={data.displayState}
+            visualizerPlugin={visualizerPlugin}
+            visualizerSettings={data.visualizerSettings}
+            visualizerStatus={data.visualizerStatus}
+            webuiSkins={data.webuiSkins}
+            defaultWebuiSkin={data.defaultWebuiSkin}
+            skinUpdateStatus={status}
+            skinUpdateBusy={skinUpdateBusy}
+            onCheckSkinUpdates={() => checkSkinUpdates()}
+            onInstallSkinUpdate={() => installSkinUpdate()}
+            onUpdateSettings={(next) => void persistSettings(next, "Settings saved.")}
+          />
         )}
         {editingSlot && (
           <div className="preset-editor" role="dialog" aria-modal="true" aria-labelledby="preset-editor-title">
@@ -421,7 +785,8 @@ export function App() {
                 </p>
               )}
               <div className="profile-picker" aria-label={`Choose a profile for ${editingSlot.label}`}>
-                {data.profiles.map((profile) => (
+                {shownProfiles.length === 0 && <p className="muted">No profiles are shown. Enable profiles from the Profiles page.</p>}
+                {shownProfiles.map((profile) => (
                   <button
                     key={profile.id}
                     type="button"

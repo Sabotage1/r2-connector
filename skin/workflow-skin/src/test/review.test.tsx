@@ -29,6 +29,7 @@ const appMocks = vi.hoisted(() => ({
 
 vi.mock("../api/reaprime", () => ({
   apiBaseUrl: () => "http://machine:8080",
+  apiWebSocketBaseUrl: () => "ws://machine:8080",
   ReaPrimeApi: class {
     executeSensor = appMocks.executeSensor;
     getShot = appMocks.getShot;
@@ -82,49 +83,6 @@ function appData(overrides: Partial<NonNullable<typeof appMocks.data>> = {}) {
     refresh: vi.fn(),
     persistSettings: vi.fn(),
     ...overrides
-  };
-}
-
-function stubClosingWebSocket() {
-  class ClosingWebSocket {
-    onclose: (() => void) | null = null;
-
-    constructor() {
-      window.setTimeout(() => this.onclose?.(), 0);
-    }
-
-    close() {}
-  }
-
-  vi.stubGlobal("WebSocket", ClosingWebSocket);
-}
-
-function stubMeasurementWebSocket() {
-  let activeSocket: MeasurementWebSocket | null = null;
-  let measurementRanBeforeSocket = false;
-
-  class MeasurementWebSocket {
-    onmessage: ((event: { data: string }) => void) | null = null;
-    onclose: (() => void) | null = null;
-
-    constructor() {
-      activeSocket = this;
-      if (measurementRanBeforeSocket) window.setTimeout(() => this.onclose?.(), 0);
-    }
-
-    close() {}
-  }
-
-  vi.stubGlobal("WebSocket", MeasurementWebSocket);
-
-  return {
-    emitDuringMeasure(tds: number) {
-      if (activeSocket?.onmessage) {
-        activeSocket.onmessage({ data: JSON.stringify({ tds }) });
-        return;
-      }
-      measurementRanBeforeSocket = true;
-    }
   };
 }
 
@@ -262,26 +220,37 @@ describe("ReviewPage", () => {
     expect(screen.getByLabelText("Dose")).toHaveValue("20");
   });
 
-  it("shows the R2 command error message when measurement fails", async () => {
-    stubClosingWebSocket();
-    appMocks.data = appData({ sensors: [r2Sensor] });
-    appMocks.executeSensor.mockResolvedValue({ status: "error", message: "Sensor busy" });
+  it("shows an error when no native R2 sensor is detected", async () => {
+    appMocks.data = appData();
 
     render(<App />);
 
     await userEvent.click(screen.getByRole("button", { name: "Review" }));
     await userEvent.click(screen.getByRole("button", { name: "Read from R2" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Sensor busy");
-    expect(appMocks.executeSensor).toHaveBeenCalledWith("sensor-r2", "measure");
+    expect(await screen.findByRole("alert")).toHaveTextContent("No DiFluid R2 sensor detected.");
+    expect(appMocks.executeSensor).not.toHaveBeenCalled();
   });
 
-  it("imports an R2 TDS reading emitted during the measurement command", async () => {
-    const socket = stubMeasurementWebSocket();
+  it("shows the native R2 sensor error message when measurement fails", async () => {
     appMocks.data = appData({ sensors: [r2Sensor] });
-    appMocks.executeSensor.mockImplementation(async () => {
-      socket.emitDuringMeasure(9.7);
-      return { status: "ok" };
+    appMocks.executeSensor.mockResolvedValue({ status: "error", message: "R2 is not connected" });
+
+    render(<App />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Review" }));
+    await userEvent.click(screen.getByRole("button", { name: "Read from R2" }));
+
+    expect(await screen.findByText("Could not read R2: R2 is not connected")).toBeInTheDocument();
+    expect(screen.getByText("R2 did not return a TDS reading.")).toBeInTheDocument();
+    expect(appMocks.executeSensor).toHaveBeenCalledWith("sensor-r2", "measure", { timeout: 30 });
+  });
+
+  it("imports an R2 TDS reading from the native sensor endpoint", async () => {
+    appMocks.data = appData({ sensors: [r2Sensor] });
+    appMocks.executeSensor.mockResolvedValue({
+      status: "ok",
+      result: { reading: { tds: 9.7, temperatureC: 27.2, refractiveIndex: 1.3332 } }
     });
 
     render(<App />);
@@ -293,16 +262,51 @@ describe("ReviewPage", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("shows local R2 reading feedback in the extraction panel", async () => {
+    const onReadR2 = vi.fn().mockResolvedValue(9.7);
+    render(
+      <ReviewPage
+        shot={shot}
+        previousShots={[]}
+        onSaveAnnotations={vi.fn()}
+        onUploadVisualizer={vi.fn()}
+        r2Sensor={r2Sensor}
+        onReadR2={onReadR2}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Read from R2" }));
+
+    expect(await screen.findByText("R2 TDS 9.7 imported.")).toBeInTheDocument();
+    expect(screen.getByLabelText("TDS")).toHaveValue("9.7");
+  });
+
+  it("shows local feedback when R2 is unavailable", async () => {
+    render(
+      <ReviewPage
+        shot={shot}
+        previousShots={[]}
+        onSaveAnnotations={vi.fn()}
+        onUploadVisualizer={vi.fn()}
+        r2Sensor={null}
+        onReadR2={vi.fn()}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Read from R2" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("No DiFluid R2 sensor detected.");
+  });
+
   it("shows an error when R2 does not return a TDS reading", async () => {
-    stubClosingWebSocket();
     appMocks.data = appData({ sensors: [r2Sensor] });
-    appMocks.executeSensor.mockResolvedValue({ status: "ok" });
+    appMocks.executeSensor.mockResolvedValue({ status: "ok", result: { reading: {} } });
 
     render(<App />);
 
     await userEvent.click(screen.getByRole("button", { name: "Review" }));
     await userEvent.click(screen.getByRole("button", { name: "Read from R2" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("R2 did not return a TDS reading.");
+    expect(await screen.findAllByText("R2 did not return a TDS reading.")).toHaveLength(2);
   });
 });

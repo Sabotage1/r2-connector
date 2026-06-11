@@ -2,7 +2,7 @@
 
 This skin targets ReaPrime/Decent.app v0.7.6 or newer. It adds editable profile presets, valid bag tracking, bag-aware history, profile recommendations, and a post-shot review page with manual TDS/EY entry.
 
-Version: 0.1.5. Creator: Roy Ackerman.
+Version: 0.1.6. Creator: Roy Ackerman.
 
 ## Build
 
@@ -53,8 +53,8 @@ The skin title is a centered top-middle app headline above the active page. It c
 
 ## DiFluid R2
 
-Manual TDS/EY entry is always available. The R2 button only appears when the running ReaPrime build exposes a DiFluid R2 through `/api/v1/sensors`, with a TDS data channel and a `measure` command.
+Manual TDS/EY entry is always available. The R2 button uses the running ReaPrime app's native sensor API when it exposes a DiFluid R2 through `/api/v1/sensors`, with a TDS data channel and a `measure` command.
 
 Use Settings to save the detected R2 as the configured reflectometer. This makes the R2 status appear on the Brew page.
 
-This repository does not add a native DiFluid R2 adapter to ReaPrime itself. If ReaPrime does not expose the R2 as a sensor, use the manual TDS field and the EY calculation still works.
+For the native Android build, the R2 connects directly to the Android tablet over BLE. There is no Mac bridge in the middle. If ReaPrime does not detect the R2, run a device scan with the R2 powered on and nearby; the manual TDS field and EY calculation still work while it is absent.

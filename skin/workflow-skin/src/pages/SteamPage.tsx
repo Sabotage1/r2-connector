@@ -1,5 +1,6 @@
 import { Pause, Play, RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import type { SteamRecord } from "../api/types";
 import type { SteamTimers } from "../state/skinSettings";
 
 const jugLabels: Array<{ key: keyof SteamTimers; label: string }> = [
@@ -15,14 +16,27 @@ function formatSeconds(seconds: number): string {
   return `${minutes}:${String(remainder).padStart(2, "0")}`;
 }
 
+function steamRecordTitle(record: SteamRecord): string {
+  const date = new Date(record.timestamp);
+  if (Number.isNaN(date.getTime())) return record.id;
+  return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function steamNotes(record: SteamRecord): string {
+  const notes = record.annotations?.notes ?? record.annotations?.steamNotes ?? record.annotations?.milkNotes;
+  return typeof notes === "string" && notes.trim() ? notes : "No notes";
+}
+
 export function SteamPage({
   profileTitle,
   timers,
-  onReview
+  onReview,
+  steamHistory = []
 }: {
   profileTitle: string;
   timers: SteamTimers;
   onReview: () => void;
+  steamHistory?: SteamRecord[];
 }) {
   const [selectedJug, setSelectedJug] = useState<keyof SteamTimers>("medium");
   const [remaining, setRemaining] = useState(timers.medium);
@@ -87,6 +101,23 @@ export function SteamPage({
             Shot Review
           </button>
         </div>
+      </section>
+      <section className="panel wide">
+        <h2>Steam History</h2>
+        {steamHistory.length === 0 ? (
+          <p className="muted">No steam sessions recorded yet.</p>
+        ) : (
+          steamHistory.slice(0, 5).map((record) => {
+            const sampleCount = record.measurements?.length ?? 0;
+            return (
+              <div className="list-row" key={record.id}>
+                <strong>{steamRecordTitle(record)}</strong>
+                <span>{steamNotes(record)}</span>
+                <span>{sampleCount} samples</span>
+              </div>
+            );
+          })
+        )}
       </section>
     </div>
   );

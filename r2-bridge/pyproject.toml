@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "difluid-r2-bridge"
+version = "0.1.0"
+description = "Local HTTP/WebSocket bridge for the DiFluid R2 BLE refractometer."
+requires-python = ">=3.9"
+dependencies = [
+  "aiohttp>=3.9,<4",
+  "bleak>=0.22,<1",
+]
+
+[project.scripts]
+r2-bridge = "r2_bridge.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

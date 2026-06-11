@@ -9,11 +9,13 @@ function profileTitle(profile: ProfileRecord | undefined): string {
 export function ProfilePresetGrid({
   slots,
   profiles,
+  selectedProfileId,
   onApply,
   onEditSlot
 }: {
   slots: PresetSlot[];
   profiles: ProfileRecord[];
+  selectedProfileId?: string;
   onApply: (profile: ProfileRecord) => void;
   onEditSlot: (index: number) => void;
 }) {
@@ -21,11 +23,13 @@ export function ProfilePresetGrid({
     <div className="preset-grid">
       {slots.map((slot, index) => {
         const profile = profiles.find((item) => item.id === slot.profileId);
+        const isSelected = Boolean(profile && selectedProfileId && slot.profileId === selectedProfileId);
         return (
-          <div className="preset-button" key={`${slot.label}-${index}`}>
+          <div className={isSelected ? "preset-button selected" : "preset-button"} key={`${slot.label}-${index}`}>
             <button
               type="button"
               aria-label={`${slot.label} ${profileTitle(profile)}`}
+              aria-current={isSelected ? "true" : undefined}
               disabled={!profile}
               onClick={() => profile && onApply(profile)}
             >

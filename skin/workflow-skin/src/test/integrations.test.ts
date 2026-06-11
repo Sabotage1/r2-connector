@@ -46,7 +46,7 @@ describe("uploadShotToVisualizer", () => {
     await expect(uploadShotToVisualizer(api, { id: "shot-1" })).resolves.toEqual({ id: "vis-1" });
     expect(fetch).toHaveBeenCalledWith(
       "http://machine:8080/api/v1/plugins/visualizer.reaplugin/upload",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ shotId: "shot-1" }) })
     );
   });
 });

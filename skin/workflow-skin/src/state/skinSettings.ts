@@ -21,11 +21,18 @@ export interface SkinSettings {
   skinTitle: string;
   startupProfileId?: string;
   r2SensorId?: string;
+  shownProfileIds: string[];
   profileWorkflows: Record<string, ProfileWorkflowSettings>;
   lastBeanBatchId?: string;
   lastGrinderId?: string;
   preferredEyMin?: number;
   preferredEyMax?: number;
+  keepScreenAwake?: boolean;
+  screensaverBrightness?: number;
+  skinAutoUpdateEnabled: boolean;
+  skinUpdateRepo: string;
+  skinUpdateAsset: string;
+  skinUpdatePrerelease: boolean;
 }
 
 export const SKIN_NAMESPACE = "workflow-skin";
@@ -54,6 +61,13 @@ export function createDefaultSkinSettings(): SkinSettings {
     defaultReviewEnabled: true,
     reviewEnabledByProfile: {},
     skinTitle: "Workflow",
+    keepScreenAwake: true,
+    screensaverBrightness: 8,
+    skinAutoUpdateEnabled: false,
+    skinUpdateRepo: "",
+    skinUpdateAsset: "workflow-skin.zip",
+    skinUpdatePrerelease: false,
+    shownProfileIds: [],
     profileWorkflows: {}
   };
 }
@@ -87,6 +101,15 @@ function normalizePresetSlots(value: unknown): PresetSlot[] {
 function normalizeReviewEnabledByProfile(value: unknown): Record<string, boolean> {
   if (!isPlainRecord(value)) return {};
   return Object.fromEntries(Object.entries(value).filter(([, enabled]) => typeof enabled === "boolean")) as Record<string, boolean>;
+}
+
+function normalizeStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map((item) => item.trim())));
+}
+
+function normalizeString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value.trim() : fallback;
 }
 
 function normalizeSteamTimer(value: unknown, fallback: number): number {
@@ -126,6 +149,16 @@ export function normalizeSkinSettings(value: unknown): SkinSettings {
     defaultReviewEnabled: typeof value.defaultReviewEnabled === "boolean" ? value.defaultReviewEnabled : true,
     reviewEnabledByProfile: normalizeReviewEnabledByProfile(value.reviewEnabledByProfile),
     skinTitle: typeof value.skinTitle === "string" && value.skinTitle.trim() ? value.skinTitle.trim() : "Workflow",
+    keepScreenAwake: typeof value.keepScreenAwake === "boolean" ? value.keepScreenAwake : true,
+    screensaverBrightness:
+      typeof value.screensaverBrightness === "number" && Number.isFinite(value.screensaverBrightness)
+        ? Math.min(100, Math.max(0, Math.round(value.screensaverBrightness)))
+        : 8,
+    skinAutoUpdateEnabled: typeof value.skinAutoUpdateEnabled === "boolean" ? value.skinAutoUpdateEnabled : false,
+    skinUpdateRepo: normalizeString(value.skinUpdateRepo),
+    skinUpdateAsset: normalizeString(value.skinUpdateAsset, "workflow-skin.zip"),
+    skinUpdatePrerelease: typeof value.skinUpdatePrerelease === "boolean" ? value.skinUpdatePrerelease : false,
+    shownProfileIds: normalizeStringList(value.shownProfileIds),
     profileWorkflows: normalizeProfileWorkflows(value.profileWorkflows)
   };
 
@@ -160,6 +193,10 @@ export function profileWorkflowFor(settings: SkinSettings, profileId?: string): 
   return workflow
     ? { milkBased: workflow.milkBased, steamTimers: cloneSteamTimers(workflow.steamTimers) }
     : { milkBased: false, steamTimers: cloneSteamTimers(DEFAULT_STEAM_TIMERS) };
+}
+
+export function isProfileShown(settings: SkinSettings, profileId?: string): boolean {
+  return Boolean(profileId && settings.shownProfileIds.includes(profileId));
 }
 
 export function isMilkProfile(settings: SkinSettings, profileId?: string): boolean {

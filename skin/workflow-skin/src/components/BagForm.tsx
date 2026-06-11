@@ -14,16 +14,19 @@ export function BagForm({
   value,
   onChange,
   onCancel,
-  onSave
+  onSave,
+  mode = "create"
 }: {
   value: Bag;
   onChange: (value: Bag) => void;
   onCancel: () => void;
   onSave: () => void;
+  mode?: "create" | "edit";
 }) {
+  const editing = mode === "edit";
   return (
     <form
-      aria-label="Add a bag"
+      aria-label={editing ? "Edit a bag" : "Add a bag"}
       className="bag-form"
       onSubmit={(event) => {
         event.preventDefault();
@@ -32,8 +35,8 @@ export function BagForm({
     >
       <div className="form-header">
         <div>
-          <span className="eyebrow">New Bean</span>
-          <h2>Add a bag</h2>
+          <span className="eyebrow">{editing ? "Bean Library" : "New Bean"}</span>
+          <h2>{editing ? "Edit a bag" : "Add a bag"}</h2>
         </div>
         <div className="form-actions">
           <button type="button" className="ghost-button" onClick={onCancel}>
