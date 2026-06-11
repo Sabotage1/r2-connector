@@ -830,7 +830,7 @@ export function App() {
     return <ScreensaverPage title={data.settings.skinTitle} onWake={() => void wakeScreen()} />;
   }
 
-  const navIconSize = data.settings.menuCollapsed ? 40 : 20;
+  const navIconSize = 20;
 
   return (
     <main className={data.settings.menuCollapsed ? "app-shell menu-collapsed" : "app-shell"}>

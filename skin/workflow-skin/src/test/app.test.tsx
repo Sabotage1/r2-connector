@@ -287,7 +287,7 @@ describe("App shell", () => {
     expect(screen.getByRole("button", { name: "Show History" })).toBeInTheDocument();
   });
 
-  it("uses larger icons and a notepad edit icon in the collapsed menu", async () => {
+  it("uses compact icons and a notepad edit icon in the collapsed menu", async () => {
     mockReaFetch({ ...initialSettings, menuCollapsed: true });
     render(<App />);
 
@@ -296,8 +296,8 @@ describe("App shell", () => {
 
     expect(reviewButton).toHaveClass("review-nav-button");
     expect(reviewIcon).toHaveClass("review-nav-icon");
-    expect(reviewIcon).toHaveAttribute("width", "40");
-    expect(reviewIcon).toHaveAttribute("height", "40");
+    expect(reviewIcon).toHaveAttribute("width", "20");
+    expect(reviewIcon).toHaveAttribute("height", "20");
   });
 
   it("has a dedicated menu item for grinders", async () => {
