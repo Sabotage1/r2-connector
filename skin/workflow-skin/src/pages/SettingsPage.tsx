@@ -162,6 +162,8 @@ export function SettingsPage({
   availableSkinVersion,
   mainMenuEditing = false,
   onToggleMainMenuEditing,
+  r2RefreshBusy = false,
+  onRefreshR2,
   onCheckSkinUpdates,
   onInstallSkinUpdate
 }: {
@@ -180,6 +182,8 @@ export function SettingsPage({
   availableSkinVersion?: string | null;
   mainMenuEditing?: boolean;
   onToggleMainMenuEditing?: (editing: boolean) => void;
+  r2RefreshBusy?: boolean;
+  onRefreshR2?: () => Promise<void> | void;
   onCheckSkinUpdates?: () => Promise<void> | void;
   onInstallSkinUpdate?: () => Promise<void> | void;
 }) {
@@ -397,10 +401,13 @@ export function SettingsPage({
         <strong>DiFluid R2 status</strong>
         <span>{r2Configured ? `Configured sensor: ${draftSettings.r2SensorId}` : "R2 status is hidden until setup."}</span>
         <div className="profile-workflow-controls">
+          <button type="button" className="ghost-button" disabled={r2RefreshBusy || !onRefreshR2} onClick={() => void onRefreshR2?.()}>
+            {r2RefreshBusy ? "Refreshing R2" : "Refresh R2"}
+          </button>
           <button
             type="button"
             className="primary-button"
-            disabled={!r2Sensor}
+            disabled={!r2Sensor || r2RefreshBusy}
             onClick={() => r2Sensor && updateR2SensorId(r2Sensor.id)}
           >
             {r2Sensor ? "Use detected R2" : "No R2 detected"}

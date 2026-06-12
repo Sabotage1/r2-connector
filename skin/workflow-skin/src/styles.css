@@ -641,6 +641,18 @@ textarea {
   align-content: start;
 }
 
+.review-graph-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.review-graph-header h2 {
+  margin: 0;
+}
+
 .review-form label {
   display: grid;
   gap: 8px;
@@ -1275,6 +1287,11 @@ textarea {
 
   .form-header {
     align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .review-graph-header {
+    align-items: stretch;
     flex-direction: column;
   }
 }

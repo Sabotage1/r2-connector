@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { SensorListItem, ShotAnnotations, ShotRecord } from "../api/types";
 import { ShotGraph } from "../components/ShotGraph";
 import { calculateEy, cleanNumber } from "../lib/ey";
@@ -14,7 +14,9 @@ export function ReviewPage({
   onSaveAnnotations,
   onUploadVisualizer,
   r2Sensor,
-  onReadR2
+  onReadR2,
+  autoReadR2 = false,
+  onBackToGraph
 }: {
   shot: ShotRecord;
   previousShots: ShotRecord[];
@@ -22,6 +24,8 @@ export function ReviewPage({
   onUploadVisualizer: () => Promise<void> | void;
   r2Sensor: SensorListItem | null;
   onReadR2: () => Promise<number | null> | number | null;
+  autoReadR2?: boolean;
+  onBackToGraph?: () => void;
 }) {
   const stats = shotStats(shot);
   const context = shotContext(shot);
@@ -32,6 +36,7 @@ export function ReviewPage({
   const [notes, setNotes] = useState(shot.annotations?.espressoNotes ?? "");
   const [r2Busy, setR2Busy] = useState(false);
   const [r2Status, setR2Status] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
+  const autoReadShotRef = useRef<string | null>(null);
 
   const ey = useMemo(
     () =>
@@ -90,10 +95,23 @@ export function ReviewPage({
     }
   }
 
+  useEffect(() => {
+    if (!autoReadR2 || !r2Sensor || autoReadShotRef.current === shot.id) return;
+    autoReadShotRef.current = shot.id;
+    void readR2();
+  }, [autoReadR2, r2Sensor, shot.id]);
+
   return (
     <div className="workflow-grid">
       <section className="panel wide">
-        <h2>Shot Review</h2>
+        <div className="review-graph-header">
+          <h2>Shot Review</h2>
+          {onBackToGraph && (
+            <button type="button" className="ghost-button compact-button" onClick={onBackToGraph}>
+              Back to graph
+            </button>
+          )}
+        </div>
         <ShotGraph measurements={shot.measurements ?? []} />
       </section>
       <section className="panel">

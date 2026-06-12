@@ -113,6 +113,25 @@ describe("ReviewPage", () => {
     expect(onSave).toHaveBeenCalledWith("s1", expect.objectContaining({ drinkTds: 9.5, drinkEy: 21.11 }));
   });
 
+  it("can return to the live graph from review", async () => {
+    const onBackToGraph = vi.fn();
+    render(
+      <ReviewPage
+        shot={shot}
+        previousShots={[]}
+        onSaveAnnotations={vi.fn()}
+        onUploadVisualizer={vi.fn()}
+        r2Sensor={null}
+        onReadR2={vi.fn()}
+        onBackToGraph={onBackToGraph}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Back to graph" }));
+
+    expect(onBackToGraph).toHaveBeenCalledTimes(1);
+  });
+
   it("preserves unrelated annotation extras when saving review fields", async () => {
     const onSave = vi.fn();
     render(
@@ -279,6 +298,25 @@ describe("ReviewPage", () => {
 
     expect(await screen.findByText("R2 TDS 9.7 imported.")).toBeInTheDocument();
     expect(screen.getByLabelText("TDS")).toHaveValue("9.7");
+  });
+
+  it("automatically reads R2 when review opens after a brew", async () => {
+    const onReadR2 = vi.fn().mockResolvedValue(9.8);
+    render(
+      <ReviewPage
+        shot={shot}
+        previousShots={[]}
+        onSaveAnnotations={vi.fn()}
+        onUploadVisualizer={vi.fn()}
+        r2Sensor={r2Sensor}
+        onReadR2={onReadR2}
+        autoReadR2
+      />
+    );
+
+    expect(await screen.findByText("R2 TDS 9.8 imported.")).toBeInTheDocument();
+    expect(screen.getByLabelText("TDS")).toHaveValue("9.8");
+    expect(onReadR2).toHaveBeenCalledTimes(1);
   });
 
   it("shows local feedback when R2 is unavailable", async () => {

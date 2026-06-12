@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import skinManifest from "../../skin-manifest.json";
 import { App } from "../App";
-import type { AppInfo, DeviceInfo, MachineState, ProfileRecord, ShotRecord, WebUISkin } from "../api/types";
+import type { AppInfo, DeviceInfo, MachineState, ProfileRecord, SensorListItem, ShotRecord, WebUISkin } from "../api/types";
 import { defaultSkinSettings, type SkinSettings } from "../state/skinSettings";
 
 let profiles: ProfileRecord[] = [
@@ -26,8 +26,12 @@ function mockReaFetch(
     machineState?: MachineState;
     appInfo?: AppInfo;
     devices?: DeviceInfo[];
+    devicesAfterScan?: DeviceInfo[];
+    sensors?: SensorListItem[];
+    sensorsAfterScan?: SensorListItem[];
     shots?: ShotRecord[];
     workflow?: unknown;
+    workflowUpdateStaleCount?: number;
     steams?: unknown[];
     plugins?: unknown[];
     pluginSettings?: unknown;
@@ -42,8 +46,11 @@ function mockReaFetch(
 ) {
   let savedSettings = initialSettings;
   let workflow = options.workflow ?? { context: { targetDoseWeight: 18, targetYield: 36 } };
+  let workflowUpdateCount = 0;
   let displayState = options.displayState ?? { brightness: 100, wakeLockOverride: true };
   let machineState = options.machineState ?? { connected: true, wifi: { connected: true, ipAddress: "192.168.1.20" } };
+  let devices = options.devices ?? [];
+  let sensors = options.sensors ?? [];
   const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init = {}) => {
     const url = new URL(String(input));
     const method = init.method ?? "GET";
@@ -70,7 +77,9 @@ function mockReaFetch(
     }
     if (method === "GET" && url.pathname === "/api/v1/workflow") return responseJson(workflow);
     if (method === "PUT" && url.pathname === "/api/v1/workflow") {
-      workflow = JSON.parse(String(init.body));
+      workflowUpdateCount += 1;
+      const nextWorkflow = JSON.parse(String(init.body));
+      if (workflowUpdateCount > (options.workflowUpdateStaleCount ?? 0)) workflow = nextWorkflow;
       return responseJson(workflow);
     }
     if (method === "PUT" && url.pathname === "/api/v1/machine/state/sleeping") {
@@ -89,8 +98,12 @@ function mockReaFetch(
       return responseJson(machineState);
     }
     if (method === "GET" && url.pathname === "/api/v1/info") return responseJson(options.appInfo ?? { localIp: "192.168.1.20", version: "0.7.6" });
-    if (method === "GET" && url.pathname === "/api/v1/devices") return responseJson(options.devices ?? []);
-    if (method === "GET" && url.pathname === "/api/v1/devices/scan") return responseJson([]);
+    if (method === "GET" && url.pathname === "/api/v1/devices") return responseJson(devices);
+    if (method === "GET" && url.pathname === "/api/v1/devices/scan") {
+      devices = options.devicesAfterScan ?? devices;
+      sensors = options.sensorsAfterScan ?? sensors;
+      return responseJson(devices);
+    }
     if (method === "PUT" && url.pathname === "/api/v1/devices/connect") return Promise.resolve(new Response("", { status: 200 }));
     if (method === "GET" && url.pathname === "/api/v1/display") return responseJson(displayState);
     if (method === "PUT" && url.pathname === "/api/v1/display/brightness") {
@@ -109,7 +122,7 @@ function mockReaFetch(
     if (method === "GET" && url.pathname === "/api/v1/grinders") return responseJson([]);
     if (method === "GET" && url.pathname === "/api/v1/shots") return responseJson({ items: options.shots ?? [], total: options.shots?.length ?? 0, limit: 100, offset: 0 });
     if (method === "GET" && url.pathname === "/api/v1/steams") return responseJson(options.steams ?? []);
-    if (method === "GET" && url.pathname === "/api/v1/sensors") return responseJson([]);
+    if (method === "GET" && url.pathname === "/api/v1/sensors") return responseJson(sensors);
     if (method === "GET" && url.pathname === "/api/v1/plugins") return responseJson(options.plugins ?? []);
     if (method === "GET" && url.pathname === "/api/v1/plugins/visualizer.reaplugin/settings") return responseJson(options.pluginSettings ?? {});
     if (method === "GET" && url.pathname.startsWith("/api/v1/plugins/visualizer.reaplugin/")) {
@@ -178,6 +191,9 @@ function mockReaFetch(
     get workflow() {
       return workflow;
     },
+    get workflowUpdateCount() {
+      return workflowUpdateCount;
+    },
     get displayState() {
       return displayState;
     }
@@ -197,6 +213,16 @@ const initialSettings: SkinSettings = {
   skinTitle: "Workflow",
   shownProfileIds: ["p1", "p2"],
   profileWorkflows: {}
+};
+
+const detectedR2Sensor: SensorListItem = {
+  id: "F4:12:FA:FA:AC:E3",
+  info: {
+    name: "DiFluid R2",
+    vendor: "DiFluid",
+    data: [{ key: "tds", type: "number", unit: "%" }],
+    commands: [{ id: "measure" }]
+  }
 };
 
 describe("App shell", () => {
@@ -423,6 +449,29 @@ describe("App shell", () => {
     });
   });
 
+  it("re-applies the startup profile when the first startup refresh does not confirm it", async () => {
+    const fetchState = mockReaFetch(
+      {
+        ...initialSettings,
+        startupProfileId: "p2",
+        presetSlots: [
+          { label: "Light", profileId: "p1" },
+          { label: "Sweet", profileId: "p2" },
+          { label: "Turbo" },
+          { label: "Classic" }
+        ]
+      },
+      {
+        workflow: { context: { extras: { workflowSkin: { selectedProfileId: "p1" } } } },
+        workflowUpdateStaleCount: 1
+      }
+    );
+    render(<App />);
+
+    await waitFor(() => expect(fetchState.workflowUpdateCount).toBeGreaterThanOrEqual(2));
+    expect(await screen.findByRole("button", { name: "Sweet Classic" })).toHaveAttribute("aria-current", "true");
+  });
+
   it("wakes the machine and auto-connects machine and scale devices on startup", async () => {
     const fetchState = mockReaFetch(initialSettings, {
       machineState: { connected: true, state: { state: "sleeping", substate: "idle" } },
@@ -583,6 +632,28 @@ describe("App shell", () => {
     expect(topbar).toContainElement(title);
     expect(topbar).toContainElement(actions);
     expect(within(actions).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Sleep machine", "Enter fullscreen"]);
+  });
+
+  it("refreshes and connects the R2 sensor from settings", async () => {
+    const fetchState = mockReaFetch(initialSettings, {
+      sensors: [],
+      sensorsAfterScan: [detectedR2Sensor],
+      devicesAfterScan: [{ id: "F4:12:FA:FA:AC:E3", name: "DiFluid R2", type: "sensor", state: "discovered" }]
+    });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Refresh R2" }));
+
+    await waitFor(() => expect(fetchState.savedSettings.r2SensorId).toBe("F4:12:FA:FA:AC:E3"));
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/devices/scan?connect=true&quick=false",
+      expect.objectContaining({ method: "GET" })
+    );
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/devices/connect",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "F4:12:FA:FA:AC:E3" }) })
+    );
   });
 
   it("reveals the machine IP when the WiFi status is pressed", async () => {

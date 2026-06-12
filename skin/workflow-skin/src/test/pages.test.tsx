@@ -205,7 +205,7 @@ describe("LivePage", () => {
     expect(screen.getByLabelText("Flow: 1.85 g/s")).toBeInTheDocument();
     expect(screen.getByLabelText("Group Temp: 92.24 °C")).toBeInTheDocument();
     expect(screen.getByLabelText("Mix Temp: 88.12 °C")).toBeInTheDocument();
-    expect(screen.getByLabelText("Brew Time: 28 s")).toBeInTheDocument();
+    expect(screen.getByLabelText("Shot Timer: 28 s")).toBeInTheDocument();
   });
 });
 

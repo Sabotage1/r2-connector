@@ -143,7 +143,7 @@ export function LivePage({
         </div>
         <div className="live-primary-stats">
           <MetricTile label="Weight" value={formatLiveNumber(weight)} unit="g" />
-          <MetricTile label="Brew Time" value={formatSeconds(time)} unit="s" />
+          <MetricTile label="Shot Timer" value={formatSeconds(time)} unit="s" />
         </div>
       </section>
       {stepInfo && (

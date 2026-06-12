@@ -20,12 +20,24 @@ function shotWithProfile(profileId: string): ShotRecord {
 }
 
 describe("postShotPageForShot", () => {
-  it("routes milk profiles to the steam page", () => {
+  it("routes milk profiles to review first when review is enabled", () => {
     const settings = {
       ...defaultSkinSettings,
       profileWorkflows: {
         milk: { milkBased: true, steamTimers: { small: 22, medium: 34, large: 48 } }
       }
+    };
+
+    expect(postShotPageForShot(shotWithProfile("milk"), settings, profiles)).toBe("review");
+  });
+
+  it("routes milk profiles to steam when review is disabled", () => {
+    const settings = {
+      ...defaultSkinSettings,
+      profileWorkflows: {
+        milk: { milkBased: true, steamTimers: { small: 22, medium: 34, large: 48 } }
+      },
+      reviewEnabledByProfile: { milk: false }
     };
 
     expect(postShotPageForShot(shotWithProfile("milk"), settings, profiles)).toBe("steam");

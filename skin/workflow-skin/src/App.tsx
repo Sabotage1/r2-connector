@@ -215,6 +215,11 @@ function isDisconnectedDevice(device: DeviceInfo): boolean {
   return (device.type === "machine" || device.type === "scale") && device.state !== "connected";
 }
 
+function isR2Device(device: DeviceInfo): boolean {
+  const label = `${device.name ?? ""} ${device.id}`.toLowerCase();
+  return label.includes("difluid") || label.includes("r2");
+}
+
 function isSleepingMachine(machineState: MachineState | null): boolean {
   return machineState?.state?.state === "sleeping";
 }
@@ -315,10 +320,14 @@ export function App() {
   const [expandedStatusId, setExpandedStatusId] = useState<ConnectivityStatus["id"] | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [lastUseAt, setLastUseAt] = useState(() => Date.now());
-  const startupAppliedRef = useRef(false);
+  const [startupApplyTick, setStartupApplyTick] = useState(0);
+  const [r2RefreshBusy, setR2RefreshBusy] = useState(false);
+  const startupProfileApplyRef = useRef<{ profileId: string | null; attempts: number; pending: boolean }>({ profileId: null, attempts: 0, pending: false });
   const startupConnectRef = useRef(false);
   const skinAutoUpdateRef = useRef(false);
   const knownLatestShotIdRef = useRef<string | null | undefined>(undefined);
+  const autoReadR2ShotIdRef = useRef<string | null>(null);
+  const [autoReadR2ShotId, setAutoReadR2ShotId] = useState<string | null>(null);
   const sleepMachineRef = useRef<(() => Promise<void>) | null>(null);
   const api = useMemo(() => new ReaPrimeApi(), []);
   const data = useReaData(api);
@@ -377,14 +386,35 @@ export function App() {
   };
 
   useEffect(() => {
-    if (startupAppliedRef.current || !data.loaded || !data.settings.startupProfileId) return;
-    const startupProfile = data.profiles.find((profile) => profile.id === data.settings.startupProfileId);
+    const startupProfileId = data.settings.startupProfileId;
+    if (!data.loaded || !startupProfileId) {
+      startupProfileApplyRef.current = { profileId: null, attempts: 0, pending: false };
+      return;
+    }
+
+    if (startupProfileApplyRef.current.profileId !== startupProfileId) {
+      startupProfileApplyRef.current = { profileId: startupProfileId, attempts: 0, pending: false };
+    }
+
+    if (selectedProfileId === startupProfileId) {
+      startupProfileApplyRef.current.pending = false;
+      return;
+    }
+
+    if (startupProfileApplyRef.current.pending || startupProfileApplyRef.current.attempts >= 3) return;
+
+    const startupProfile = data.profiles.find((profile) => profile.id === startupProfileId);
     if (!startupProfile) return;
-    startupAppliedRef.current = true;
+
+    startupProfileApplyRef.current.attempts += 1;
+    startupProfileApplyRef.current.pending = true;
     applyProfile(startupProfile).catch((error) => {
       setStatus({ type: "error", message: `Could not apply startup profile: ${errorMessage(error)}` });
+    }).finally(() => {
+      startupProfileApplyRef.current.pending = false;
+      setStartupApplyTick((tick) => tick + 1);
     });
-  }, [data.loaded, data.settings.startupProfileId, data.profiles]);
+  }, [data.loaded, data.settings.startupProfileId, data.profiles, selectedProfileId, startupApplyTick]);
 
   useEffect(() => {
     if (startupConnectRef.current || !data.loaded) return;
@@ -465,8 +495,12 @@ export function App() {
     if (!latestShot) return;
 
     const nextPage = postShotPageForShot(latestShot, data.settings, data.profiles);
+    if (r2Sensor && autoReadR2ShotIdRef.current !== latestShot.id) {
+      autoReadR2ShotIdRef.current = latestShot.id;
+      setAutoReadR2ShotId(latestShot.id);
+    }
     if (nextPage) setPage(nextPage);
-  }, [data.loaded, latestShot, data.settings, data.profiles]);
+  }, [data.loaded, latestShot, data.settings, data.profiles, r2Sensor]);
 
   const toggleReview = async (profileId: string, enabled: boolean) => {
     try {
@@ -523,6 +557,35 @@ export function App() {
       ? Array.from(new Set([...data.settings.shownProfileIds, profileId]))
       : data.settings.shownProfileIds.filter((id) => id !== profileId);
     await persistSettings({ ...data.settings, shownProfileIds }, "Profile visibility saved.");
+  };
+
+  const refreshR2Sensor = async () => {
+    setR2RefreshBusy(true);
+    setStatus({ type: "success", message: "Looking for DiFluid R2." });
+    try {
+      const scannedDevices = await api.scanDevices({ connect: true, quick: false }).catch(() => [] as DeviceInfo[]);
+      const devices = await api.listDevices().catch(() => scannedDevices.length ? scannedDevices : data.devices);
+
+      for (const device of devices.filter(isR2Device).filter((device) => device.state !== "connected")) {
+        await api.connectDevice(device.id).catch(() => undefined);
+      }
+
+      const sensors = await api.listSensors().catch(() => [] as typeof data.sensors);
+      const sensor = findDifluidR2Sensor(sensors);
+      if (!sensor) {
+        await data.refresh();
+        setStatus({ type: "error", message: "No DiFluid R2 detected after refresh." });
+        return;
+      }
+
+      await data.persistSettings({ ...data.settings, r2SensorId: sensor.id });
+      await data.refresh();
+      setStatus({ type: "success", message: `R2 connected: ${sensor.id}.` });
+    } catch (error) {
+      setStatus({ type: "error", message: `Could not refresh R2: ${errorMessage(error)}` });
+    } finally {
+      setR2RefreshBusy(false);
+    }
   };
 
   const checkSkinUpdates = async (reportStatus = true) => {
@@ -1078,6 +1141,8 @@ export function App() {
               onUploadVisualizer={uploadReviewToVisualizer}
               r2Sensor={r2Sensor}
               onReadR2={readR2}
+              autoReadR2={autoReadR2ShotId === latestShot.id}
+              onBackToGraph={() => setPage("live")}
             />
           ) : (
             <div className="panel wide">
@@ -1141,6 +1206,8 @@ export function App() {
             availableSkinVersion={availableSkinVersion}
             mainMenuEditing={mainMenuEditing}
             onToggleMainMenuEditing={setMainMenuEditing}
+            r2RefreshBusy={r2RefreshBusy}
+            onRefreshR2={refreshR2Sensor}
             onCheckSkinUpdates={() => checkSkinUpdates()}
             onInstallSkinUpdate={() => installSkinUpdate()}
             onUpdateSettings={(next) => void persistSettings(next, "Settings saved.")}

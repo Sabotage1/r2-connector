@@ -22,7 +22,7 @@ export function selectedProfileIdFromWorkflow(workflow: Workflow | undefined, pr
 
 export function postShotPageForShot(shot: ShotRecord, settings: SkinSettings, profiles: ProfileRecord[]): PostShotPage {
   const profileId = selectedProfileIdFromWorkflow(shot.workflow, profiles);
-  if (isMilkProfile(settings, profileId)) return "steam";
   if (isReviewEnabled(settings, profileId)) return "review";
+  if (isMilkProfile(settings, profileId)) return "steam";
   return null;
 }
