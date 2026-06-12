@@ -43,6 +43,9 @@ function mockReaFetch(
     failGithubReleaseInstall?: boolean;
     githubReleaseInstallWait?: Promise<void>;
     githubLatestTag?: string;
+    githubReleaseStatus?: number;
+    githubManifestVersion?: string;
+    githubManifestStatus?: number;
   } = {}
 ) {
   let savedSettings = initialSettings;
@@ -57,7 +60,13 @@ function mockReaFetch(
     const method = init.method ?? "GET";
 
     if (method === "GET" && url.hostname === "api.github.com" && url.pathname.startsWith("/repos/")) {
+      if (options.githubReleaseStatus) return Promise.resolve(new Response("release unavailable", { status: options.githubReleaseStatus }));
       return responseJson({ tag_name: options.githubLatestTag ?? "v0.1.20" });
+    }
+
+    if (method === "GET" && url.hostname === "raw.githubusercontent.com" && url.pathname.endsWith("/skin/workflow-skin/skin-manifest.json")) {
+      if (options.githubManifestStatus) return Promise.resolve(new Response("manifest unavailable", { status: options.githubManifestStatus }));
+      return responseJson({ id: "workflow-skin", name: "WorkFlow", version: options.githubManifestVersion ?? skinManifest.version });
     }
 
     if (method === "GET" && url.pathname === "/api/v1/profiles") return responseJson(profiles);
@@ -814,6 +823,36 @@ describe("App shell", () => {
     );
   });
 
+  it("finds git-committed skin updates from the configured branch when no GitHub release exists", async () => {
+    const fetchState = mockReaFetch(
+      {
+        ...initialSettings,
+        skinUpdateRepo: "Sabotage1/r2-connector",
+        skinUpdateBranch: "codex/reaprime-workflow-skin",
+        skinUpdateAsset: "workflow-skin.zip",
+        skinUpdatePrerelease: false
+      },
+      {
+        webuiSkins: [{ id: "workflow-skin", name: "WorkFlow", version: "0.1.25", path: "/skins/workflow", isBundled: false }],
+        defaultWebuiSkin: { id: "workflow-skin", name: "WorkFlow", version: "0.1.25", path: "/skins/workflow", isBundled: false },
+        githubReleaseStatus: 404,
+        githubManifestVersion: "0.1.28"
+      }
+    );
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "Skin settings" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Check for skin updates" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Skin update check completed.");
+    expect(screen.getByText("Update available: v0.1.28 is available (installed v0.1.25).")).toBeInTheDocument();
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "https://raw.githubusercontent.com/Sabotage1/r2-connector/codex/reaprime-workflow-skin/skin/workflow-skin/skin-manifest.json",
+      expect.objectContaining({ headers: { Accept: "application/json" } })
+    );
+  });
+
   it("shows downloading update while the configured skin update is installing", async () => {
     let finishInstall!: () => void;
     const installWait = new Promise<void>((resolve) => {
@@ -869,7 +908,7 @@ describe("App shell", () => {
       "http://localhost:8080/api/v1/webui/skins/install/url",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ url: "https://raw.githubusercontent.com/Sabotage1/r2-connector/main/skin/workflow-skin/workflow-skin.zip" })
+        body: JSON.stringify({ url: "https://raw.githubusercontent.com/Sabotage1/r2-connector/codex/reaprime-workflow-skin/skin/workflow-skin/workflow-skin.zip" })
       })
     );
   });

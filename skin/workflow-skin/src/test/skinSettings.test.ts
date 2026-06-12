@@ -24,6 +24,7 @@ describe("skin settings", () => {
     expect(defaultSkinSettings.shownProfileIds).toEqual([]);
     expect(defaultSkinSettings.skinAutoUpdateEnabled).toBe(false);
     expect(defaultSkinSettings.skinUpdateRepo).toBe("Sabotage1/r2-connector");
+    expect(defaultSkinSettings.skinUpdateBranch).toBe("codex/reaprime-workflow-skin");
     expect(defaultSkinSettings.skinUpdateAsset).toBe("workflow-skin.zip");
     expect(defaultSkinSettings.skinUpdatePrerelease).toBe(false);
     expect(defaultSkinSettings.autoSleepMinutes).toBe(30);
@@ -55,6 +56,7 @@ describe("skin settings", () => {
         r2SensorId: "sensor-r2",
         skinAutoUpdateEnabled: true,
         skinUpdateRepo: " roy/workflow-skin ",
+        skinUpdateBranch: " release/candidate ",
         skinUpdateAsset: " workflow-skin.zip ",
         skinUpdatePrerelease: true,
         autoSleepMinutes: 999,
@@ -87,6 +89,7 @@ describe("skin settings", () => {
     expect(settings.r2SensorId).toBe("sensor-r2");
     expect(settings.skinAutoUpdateEnabled).toBe(true);
     expect(settings.skinUpdateRepo).toBe("roy/workflow-skin");
+    expect(settings.skinUpdateBranch).toBe("release/candidate");
     expect(settings.skinUpdateAsset).toBe("workflow-skin.zip");
     expect(settings.skinUpdatePrerelease).toBe(true);
     expect(settings.autoSleepMinutes).toBe(240);

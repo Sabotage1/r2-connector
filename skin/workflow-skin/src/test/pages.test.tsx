@@ -707,6 +707,8 @@ describe("SettingsPage", () => {
 
     await userEvent.clear(screen.getByLabelText("GitHub repo"));
     await userEvent.type(screen.getByLabelText("GitHub repo"), "roy/new-workflow-skin");
+    await userEvent.clear(screen.getByLabelText("GitHub branch"));
+    await userEvent.type(screen.getByLabelText("GitHub branch"), "release/test-skin");
     await userEvent.clear(screen.getByLabelText("Release asset"));
     await userEvent.type(screen.getByLabelText("Release asset"), "workflow-skin-v2.zip");
 
@@ -719,6 +721,7 @@ describe("SettingsPage", () => {
       expect.objectContaining({
         skinAutoUpdateEnabled: true,
         skinUpdateRepo: "roy/new-workflow-skin",
+        skinUpdateBranch: "release/test-skin",
         skinUpdateAsset: "workflow-skin-v2.zip"
       })
     );

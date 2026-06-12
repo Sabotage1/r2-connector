@@ -83,18 +83,32 @@ function githubReleaseMissing(error: unknown): boolean {
   return message.includes("github-release") && (message.includes("404") || message.includes("not found") || message.includes("failed to fetch github release"));
 }
 
-function githubWorkflowZipUrl(repo: string, asset: string): string | null {
-  const normalizedRepo = repo
-    .trim()
-    .replace(/^https:\/\/github\.com\//i, "")
-    .replace(/\.git$/i, "")
-    .replace(/^\/+|\/+$/g, "");
+function rawGithubBranchPath(branch: string): string | null {
+  const cleanBranch = branch.trim().replace(/^\/+|\/+$/g, "");
+  if (!cleanBranch || cleanBranch.includes("..") || !/^[A-Za-z0-9._/-]+$/.test(cleanBranch)) return null;
+  return cleanBranch
+    .split("/")
+    .filter(Boolean)
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+}
+
+function githubWorkflowSkinFileUrl(repo: string, branch: string, path: string): string | null {
+  const normalizedRepo = normalizedGithubRepo(repo);
+  const branchPath = rawGithubBranchPath(branch);
+  if (!normalizedRepo || !branchPath || !path) return null;
+  return `https://raw.githubusercontent.com/${normalizedRepo}/${branchPath}/skin/workflow-skin/${path
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/")}`;
+}
+
+function githubWorkflowZipUrl(repo: string, branch: string, asset: string): string | null {
   const cleanAsset = asset.trim() || "workflow-skin.zip";
 
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(normalizedRepo)) return null;
   if (!/^[A-Za-z0-9_.-]+\.zip$/.test(cleanAsset)) return null;
 
-  return `https://raw.githubusercontent.com/${normalizedRepo}/main/skin/workflow-skin/${encodeURIComponent(cleanAsset)}`;
+  return githubWorkflowSkinFileUrl(repo, branch, cleanAsset);
 }
 
 function normalizedGithubRepo(repo: string): string | null {
@@ -134,6 +148,48 @@ async function fetchLatestGithubReleaseVersion(repo: string, includePrerelease: 
   const response = await fetch(url, { headers: { Accept: "application/vnd.github+json" } });
   if (!response.ok) throw new Error(`GitHub release check failed: ${response.status}`);
   return releaseVersionFromPayload(await response.json());
+}
+
+function manifestVersionFromPayload(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const version = (payload as { version?: unknown }).version;
+  return typeof version === "string" && version.trim() ? version.trim() : null;
+}
+
+async function fetchGithubSkinManifestVersion(repo: string, branch: string): Promise<string | null> {
+  const url = githubWorkflowSkinFileUrl(repo, branch, "skin-manifest.json");
+  if (!url) return null;
+  const response = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!response.ok) throw new Error(`GitHub skin manifest check failed: ${response.status}`);
+  return manifestVersionFromPayload(await response.json());
+}
+
+function versionPartsForBest(value: string): number[] | null {
+  const clean = value.trim().replace(/^v/i, "").split("-", 1)[0];
+  if (!/^\d+(?:\.\d+)*$/.test(clean)) return null;
+  return clean.split(".").map((part) => Number(part));
+}
+
+function compareVersionStrings(left: string, right: string): number | null {
+  const leftParts = versionPartsForBest(left);
+  const rightParts = versionPartsForBest(right);
+  if (!leftParts || !rightParts) return null;
+  const length = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftPart = leftParts[index] ?? 0;
+    const rightPart = rightParts[index] ?? 0;
+    if (leftPart !== rightPart) return leftPart > rightPart ? 1 : -1;
+  }
+  return 0;
+}
+
+function newestVersion(...versions: Array<string | null | undefined>): string | null {
+  const validVersions = versions.filter((version): version is string => Boolean(version?.trim()));
+  if (validVersions.length === 0) return null;
+  return validVersions.reduce((best, version) => {
+    const comparison = compareVersionStrings(version, best);
+    return comparison === null || comparison <= 0 ? best : version;
+  });
 }
 
 function dateOnlyToIsoDateTime(value: string | undefined): string | undefined {
@@ -692,9 +748,13 @@ export function App() {
     try {
       const result = await api.updateWebUISkins();
       const repo = data.settings.skinUpdateRepo.trim();
+      const branch = data.settings.skinUpdateBranch.trim();
       if (repo) {
-        const remoteVersion = await fetchLatestGithubReleaseVersion(repo, data.settings.skinUpdatePrerelease).catch(() => null);
-        setAvailableSkinVersion(remoteVersion);
+        const [releaseVersion, manifestVersion] = await Promise.all([
+          fetchLatestGithubReleaseVersion(repo, data.settings.skinUpdatePrerelease).catch(() => null),
+          fetchGithubSkinManifestVersion(repo, branch).catch(() => null)
+        ]);
+        setAvailableSkinVersion(newestVersion(releaseVersion, manifestVersion));
       } else {
         setAvailableSkinVersion(null);
       }
@@ -729,7 +789,8 @@ export function App() {
       if (reportStatus) setStatus({ type: "success", message: statusSentence(result.message, "Skin installed from GitHub release") });
     } catch (error) {
       const asset = data.settings.skinUpdateAsset.trim();
-      const fallbackUrl = githubReleaseMissing(error) ? githubWorkflowZipUrl(repo, asset) : null;
+      const branch = data.settings.skinUpdateBranch.trim();
+      const fallbackUrl = githubReleaseMissing(error) ? githubWorkflowZipUrl(repo, branch, asset) : null;
       if (fallbackUrl) {
         try {
           const result = await api.installSkinFromUrl({ url: fallbackUrl });

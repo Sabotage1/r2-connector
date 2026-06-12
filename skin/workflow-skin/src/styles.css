@@ -1090,7 +1090,7 @@ textarea {
 
 .settings-update-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.95fr) minmax(0, 1fr) auto;
   align-items: end;
   gap: 12px;
 }

@@ -67,6 +67,7 @@ export interface SkinSettings {
   autoSleepMinutes: number;
   skinAutoUpdateEnabled: boolean;
   skinUpdateRepo: string;
+  skinUpdateBranch: string;
   skinUpdateAsset: string;
   skinUpdatePrerelease: boolean;
   skinFontScale: number;
@@ -78,6 +79,7 @@ export interface SkinSettings {
 export const SKIN_NAMESPACE = "workflow-skin";
 export const SETTINGS_KEY = "settings";
 export const DEFAULT_SKIN_UPDATE_REPO = "Sabotage1/r2-connector";
+export const DEFAULT_SKIN_UPDATE_BRANCH = "codex/reaprime-workflow-skin";
 export const MIN_PRESET_SLOT_COUNT = 1;
 export const MAX_PRESET_SLOT_COUNT = 8;
 export const DEFAULT_AUTO_SLEEP_MINUTES = 30;
@@ -166,6 +168,7 @@ export function createDefaultSkinSettings(): SkinSettings {
     autoSleepMinutes: DEFAULT_AUTO_SLEEP_MINUTES,
     skinAutoUpdateEnabled: false,
     skinUpdateRepo: DEFAULT_SKIN_UPDATE_REPO,
+    skinUpdateBranch: DEFAULT_SKIN_UPDATE_BRANCH,
     skinUpdateAsset: "workflow-skin.zip",
     skinUpdatePrerelease: false,
     skinFontScale: 100,
@@ -374,6 +377,7 @@ export function normalizeSkinSettings(value: unknown): SkinSettings {
     autoSleepMinutes: normalizeAutoSleepMinutes(value.autoSleepMinutes),
     skinAutoUpdateEnabled: typeof value.skinAutoUpdateEnabled === "boolean" ? value.skinAutoUpdateEnabled : false,
     skinUpdateRepo: normalizeString(value.skinUpdateRepo),
+    skinUpdateBranch: normalizeString(value.skinUpdateBranch, DEFAULT_SKIN_UPDATE_BRANCH),
     skinUpdateAsset: normalizeString(value.skinUpdateAsset, "workflow-skin.zip"),
     skinUpdatePrerelease: typeof value.skinUpdatePrerelease === "boolean" ? value.skinUpdatePrerelease : false,
     skinFontScale: normalizeSkinFontScale(value.skinFontScale),

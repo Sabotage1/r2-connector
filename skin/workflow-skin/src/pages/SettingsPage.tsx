@@ -3,6 +3,7 @@ import skinManifest from "../../skin-manifest.json";
 import type { DisplayState, JsonMap, PluginManifest, SensorListItem, VisualizerStatus, WebUISkin } from "../api/types";
 import {
   DEFAULT_SKIN_THEMES,
+  DEFAULT_SKIN_UPDATE_BRANCH,
   EDITABLE_SKIN_THEME_IDS,
   defaultPresetLabel,
   ensurePresetSlots,
@@ -163,6 +164,7 @@ function normalizeDraftSettings(settings: SkinSettings): SkinSettings {
     autoSleepMinutes: autoSleepValue(settings.autoSleepMinutes),
     skinAutoUpdateEnabled: Boolean(settings.skinAutoUpdateEnabled),
     skinUpdatePrerelease: Boolean(settings.skinUpdatePrerelease),
+    skinUpdateBranch: settings.skinUpdateBranch.trim() || DEFAULT_SKIN_UPDATE_BRANCH,
     skinFontScale: skinFontScaleValue(settings.skinFontScale),
     skinThemeId: settings.skinThemeId,
     customSkinThemes: settings.customSkinThemes,
@@ -544,6 +546,14 @@ export function SettingsPage({
               <label className="settings-field">
                 GitHub repo
                 <input value={draftSettings.skinUpdateRepo} placeholder="owner/repo" onChange={(event) => updateDraftSettings({ skinUpdateRepo: event.target.value })} />
+              </label>
+              <label className="settings-field">
+                GitHub branch
+                <input
+                  value={draftSettings.skinUpdateBranch}
+                  placeholder="main"
+                  onChange={(event) => updateDraftSettings({ skinUpdateBranch: event.target.value })}
+                />
               </label>
               <label className="settings-field">
                 Release asset
