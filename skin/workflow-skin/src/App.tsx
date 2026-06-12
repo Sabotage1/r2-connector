@@ -17,7 +17,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { apiBaseUrl, ReaPrimeApi, ReaPrimeApiError, type CreateGrinderPayload } from "./api/reaprime";
 import { findDifluidR2Sensor } from "./api/sensors";
-import type { DeviceInfo, Grinder, MachineState, Profile, ProfileRecord, ShotAnnotations, ShotSnapshot, Workflow } from "./api/types";
+import type { DeviceInfo, Grinder, MachineState, Profile, ProfileRecord, ShotAnnotations, ShotRecord, ShotSnapshot, Workflow } from "./api/types";
 import { uploadShotToVisualizer } from "./api/visualizer";
 import type { Bag } from "./lib/bags";
 import { buildConnectivityStatuses } from "./lib/connectivity";
@@ -297,15 +297,21 @@ function isScaleDeviceCandidate(device: DeviceInfo): boolean {
 }
 
 function isConnectedDevice(device: DeviceInfo): boolean {
-  return device.state?.toLowerCase() === "connected";
+  return ["connected", "ready", "online"].includes(device.state?.trim().toLowerCase() ?? "");
 }
 
 function hasConnectedScale(devices: DeviceInfo[]): boolean {
   return devices.some((device) => isScaleDeviceCandidate(device) && isConnectedDevice(device) && !isR2Device(device));
 }
 
-function isConnectableStartupDevice(device: DeviceInfo): boolean {
-  return (device.type === "machine" || isScaleDeviceCandidate(device)) && !isConnectedDevice(device);
+function isConfiguredR2Device(device: DeviceInfo, configuredR2DeviceId: string | undefined): boolean {
+  return Boolean(configuredR2DeviceId && device.id === configuredR2DeviceId);
+}
+
+function isConnectableStartupDevice(device: DeviceInfo, configuredR2DeviceId: string | undefined): boolean {
+  const isScale = isScaleDeviceCandidate(device) && !isR2Device(device);
+  const shouldConnectR2 = Boolean(configuredR2DeviceId && (isConfiguredR2Device(device, configuredR2DeviceId) || isR2Device(device)));
+  return (device.type === "machine" || isScale || shouldConnectR2) && !isConnectedDevice(device);
 }
 
 function uniqueDevices(devices: DeviceInfo[]): DeviceInfo[] {
@@ -366,6 +372,25 @@ function autoSleepCheckIntervalMs(idleLimitMs: number): number {
 
 function latestMachineSnapshot(measurements: ShotSnapshot[]): ShotSnapshot["machine"] | undefined {
   return measurements.length > 0 ? measurements[measurements.length - 1]?.machine : undefined;
+}
+
+function shotWithFallbackMeasurements(shot: ShotRecord, fallbackMeasurements: ShotSnapshot[]): ShotRecord {
+  if ((shot.measurements?.length ?? 0) > 0 || fallbackMeasurements.length === 0) return shot;
+  return { ...shot, measurements: fallbackMeasurements };
+}
+
+function mergeReviewShot(cachedShot: ShotRecord | null, refreshedShot: ShotRecord | undefined): ShotRecord | null {
+  if (!cachedShot) return refreshedShot ?? null;
+  if (!refreshedShot) return cachedShot;
+
+  const cachedMeasurements = cachedShot.measurements ?? [];
+  const refreshedMeasurements = refreshedShot.measurements ?? [];
+  return {
+    ...cachedShot,
+    ...refreshedShot,
+    annotations: { ...cachedShot.annotations, ...refreshedShot.annotations },
+    measurements: refreshedMeasurements.length >= cachedMeasurements.length ? refreshedMeasurements : cachedMeasurements
+  };
 }
 
 function formatTopNumber(value: number | null | undefined, unit: string): string {
@@ -492,6 +517,7 @@ export function App() {
   const [r2RefreshBusy, setR2RefreshBusy] = useState(false);
   const [lastCompletedProfileId, setLastCompletedProfileId] = useState<string | undefined>();
   const [fastMachineState, setFastMachineState] = useState<MachineState | null>(null);
+  const [completedReviewShot, setCompletedReviewShot] = useState<ShotRecord | null>(null);
   const startupProfileApplyRef = useRef<{ profileId: string | null; attempts: number; pending: boolean; complete: boolean }>({
     profileId: null,
     attempts: 0,
@@ -518,6 +544,8 @@ export function App() {
   const selectedProfileId = selectedProfileIdFromWorkflow(data.workflow, data.profiles);
   const workflowPageProfileId = selectedProfileId ?? (page === "steam" || page === "review" ? lastCompletedProfileId : undefined);
   const activeProfile = data.profiles.find((profile) => profile.id === workflowPageProfileId);
+  const refreshedCompletedReviewShot = completedReviewShot ? data.shots.find((shot) => shot.id === completedReviewShot.id) : undefined;
+  const reviewShot = completedReviewShot ? mergeReviewShot(completedReviewShot, refreshedCompletedReviewShot) : latestShot;
   const activeProfileWorkflow = profileWorkflowFor(data.settings, workflowPageProfileId);
   const visualizerPlugin = data.plugins?.find((plugin) => plugin.id === "visualizer.reaplugin") ?? null;
   const shownProfiles = useMemo(
@@ -637,12 +665,21 @@ export function App() {
     startupConnectRef.current = true;
 
     const connectAndWake = async () => {
-      const scannedDevices = await api.scanDevices({ connect: true, quick: true }).catch(() => [] as DeviceInfo[]);
-      const devices = uniqueDevices([...scannedDevices, ...(await api.listDevices().catch(() => data.devices ?? []))]);
+      const attemptedDeviceIds = new Set<string>();
+      const connectStartupDevices = async (quick: boolean) => {
+        const scannedDevices = await api.scanDevices({ connect: true, quick }).catch(() => [] as DeviceInfo[]);
+        const listedDevices = await api.listDevices().catch(() => data.devices ?? []);
+        const devices = uniqueDevices([...scannedDevices, ...listedDevices]);
 
-      for (const device of devices.filter(isConnectableStartupDevice)) {
-        await api.connectDevice(device.id).catch(() => undefined);
-      }
+        for (const device of devices.filter((item) => isConnectableStartupDevice(item, data.settings.r2SensorId))) {
+          if (attemptedDeviceIds.has(device.id)) continue;
+          attemptedDeviceIds.add(device.id);
+          await api.connectDevice(device.id).catch(() => undefined);
+        }
+      };
+
+      await connectStartupDevices(true);
+      if (data.settings.r2SensorId) await connectStartupDevices(false);
 
       const latestMachineState = await api.getMachineState().catch(() => data.machineState);
       if (isSleepingMachine(latestMachineState)) {
@@ -656,7 +693,7 @@ export function App() {
     };
 
     void connectAndWake();
-  }, [api, data.loaded]);
+  }, [api, data.devices, data.loaded, data.machineState, data.refresh, data.settings.r2SensorId]);
 
   useEffect(() => {
     if (!data.loaded || page === "screensaver") return;
@@ -701,12 +738,15 @@ export function App() {
       await data.refresh();
       if (completed.activity === "brew") {
         const latestCompletedShot = await api.getLatestShot().catch(() => latestShot);
-        if (latestCompletedShot && r2Sensor && autoReadR2ShotIdRef.current !== latestCompletedShot.id) {
-          autoReadR2ShotIdRef.current = latestCompletedShot.id;
-          setAutoReadR2ShotId(latestCompletedShot.id);
+        const completedShotForReview = latestCompletedShot ? shotWithFallbackMeasurements(latestCompletedShot, liveTelemetry.measurements) : null;
+        if (completedShotForReview) setCompletedReviewShot(completedShotForReview);
+
+        if (completedShotForReview && r2Sensor && autoReadR2ShotIdRef.current !== completedShotForReview.id) {
+          autoReadR2ShotIdRef.current = completedShotForReview.id;
+          setAutoReadR2ShotId(completedShotForReview.id);
         }
 
-        const completedProfileId = completed.profileId ?? selectedProfileIdFromWorkflow(latestCompletedShot?.workflow, data.profiles);
+        const completedProfileId = completed.profileId ?? selectedProfileIdFromWorkflow(completedShotForReview?.workflow, data.profiles);
         setLastCompletedProfileId(completedProfileId);
         const nextPage = postActivityPage("brew", completedProfileId, data.settings);
         setPage(nextPage ?? "brew");
@@ -715,7 +755,7 @@ export function App() {
 
       setPage("review");
     },
-    [api, data.profiles, data.refresh, data.settings, latestShot, r2Sensor]
+    [api, data.profiles, data.refresh, data.settings, latestShot, liveTelemetry.measurements, r2Sensor]
   );
 
   useEffect(() => {
@@ -845,9 +885,10 @@ export function App() {
     setStatus({ type: "success", message: "Looking for DiFluid R2." });
     try {
       const scannedDevices = await api.scanDevices({ connect: true, quick: false }).catch(() => [] as DeviceInfo[]);
-      const devices = await api.listDevices().catch(() => scannedDevices.length ? scannedDevices : data.devices);
+      const listedDevices = await api.listDevices().catch(() => data.devices ?? []);
+      const devices = uniqueDevices([...scannedDevices, ...listedDevices]);
 
-      for (const device of devices.filter(isR2Device).filter((device) => device.state !== "connected")) {
+      for (const device of devices.filter((item) => isR2Device(item) || isConfiguredR2Device(item, data.settings.r2SensorId)).filter((device) => !isConnectedDevice(device))) {
         await api.connectDevice(device.id).catch(() => undefined);
       }
 
@@ -1114,9 +1155,9 @@ export function App() {
   };
 
   const uploadReviewToVisualizer = async () => {
-    if (!latestShot) return;
+    if (!reviewShot) return;
     try {
-      await uploadShotToVisualizer({ baseUrl: apiBaseUrl() }, await api.getShot(latestShot.id));
+      await uploadShotToVisualizer({ baseUrl: apiBaseUrl() }, await api.getShot(reviewShot.id));
       setStatus({ type: "success", message: "Shot uploaded to Visualizer." });
     } catch (error) {
       setStatus({ type: "error", message: `Could not upload to Visualizer: ${errorMessage(error)}` });
@@ -1441,22 +1482,22 @@ export function App() {
           <LivePage
             workflow={data.workflow}
             activeProfile={activeProfile}
-            latestShot={latestShot}
+            latestShot={reviewShot ?? latestShot}
             liveMeasurements={liveTelemetry.measurements}
             scaleSnapshot={liveTelemetry.scaleSnapshot}
           />
         )}
         {page === "review" &&
-          (latestShot ? (
+          (reviewShot ? (
             <ReviewPage
-              key={latestShot.id}
-              shot={latestShot}
+              key={reviewShot.id}
+              shot={reviewShot}
               previousShots={data.shots}
               onSaveAnnotations={saveReview}
               onUploadVisualizer={uploadReviewToVisualizer}
               r2Sensor={r2Sensor}
               onReadR2={readR2}
-              autoReadR2={autoReadR2ShotId === latestShot.id}
+              autoReadR2={autoReadR2ShotId === reviewShot.id}
               onBackToGraph={() => setPage("live")}
             />
           ) : (

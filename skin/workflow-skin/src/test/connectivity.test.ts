@@ -94,6 +94,27 @@ describe("buildConnectivityStatuses", () => {
     });
   });
 
+  it("marks BooKoo and Decent scale sensors connected when native state is ready", () => {
+    const statuses = buildConnectivityStatuses({
+      apiHost: "192.168.1.88",
+      machineState: { connected: true },
+      sensors: [],
+      devices: [
+        { id: "bookoo", name: "BooKoo Themis", type: "sensor", state: "ready" },
+        { id: "decent", name: "Decent Scale", type: "sensor", state: "online" }
+      ],
+      r2SensorId: undefined,
+      r2Sensor: null
+    } as any);
+
+    expect(statuses.find((status) => status.id === "scale")).toEqual({
+      id: "scale",
+      label: "Scale",
+      detail: "Connected",
+      connected: true
+    });
+  });
+
   it("marks water red when it is at or below the refill level", () => {
     const statuses = buildConnectivityStatuses({
       apiHost: "192.168.1.88",

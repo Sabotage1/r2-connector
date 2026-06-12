@@ -36,7 +36,7 @@ export function machineStateLabel(rawState: string | undefined, rawSubstate?: st
   if (!state) return "Idle";
   if (isHeating(rawState, rawSubstate, telemetry)) return "Heating";
 
-  if (state === "preparingforshot") return "Preparing";
+  if (state === "preparingforshot") return "Heating";
   if (state === "espresso" || state === "brewing") return "Brew";
   if (state === "steam" || state === "steaming") return "Steam";
   if (state === "sleeping") return "Sleep";

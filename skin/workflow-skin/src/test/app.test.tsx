@@ -137,6 +137,11 @@ function mockReaFetch(
     if (method === "GET" && url.pathname === "/api/v1/grinders") return responseJson([]);
     if (method === "GET" && url.pathname === "/api/v1/shots") return responseJson({ items: shots, total: shots.length, limit: 100, offset: 0 });
     if (method === "GET" && url.pathname === "/api/v1/shots/latest") return responseJson(shots[0] ?? null);
+    if (method === "GET" && url.pathname.startsWith("/api/v1/shots/")) {
+      const shotId = decodeURIComponent(url.pathname.split("/").pop() ?? "");
+      const shot = shots.find((item) => item.id === shotId);
+      return shot ? responseJson(shot) : Promise.resolve(new Response("Shot not found", { status: 404 }));
+    }
     if (method === "GET" && url.pathname === "/api/v1/steams") return responseJson(options.steams ?? []);
     if (method === "GET" && url.pathname === "/api/v1/sensors") return responseJson(sensors);
     if (method === "GET" && url.pathname === "/api/v1/plugins") return responseJson(options.plugins ?? []);
@@ -293,7 +298,7 @@ describe("App shell", () => {
     expect(screen.queryByLabelText("App title")).not.toBeInTheDocument();
   });
 
-  it("shortens PreparingForShot in the machine header", async () => {
+  it("shows PreparingForShot as Heating in the machine header", async () => {
     mockReaFetch(initialSettings, {
       machineState: { connected: true, state: { state: "PreparingForShot" }, groupTemperature: 88.3 }
     });
@@ -301,20 +306,20 @@ describe("App shell", () => {
 
     const topbar = await screen.findByRole("banner", { name: "Machine status bar" });
 
-    expect(topbar).toHaveTextContent("Preparing");
+    expect(topbar).toHaveTextContent("Heating");
     expect(topbar).not.toHaveTextContent("PreparingForShot");
   });
 
-  it("shows PreparingForShot as Heating when the machine is warming up", async () => {
+  it("shows spaced Preparing for shot as Heating when the machine is warming up", async () => {
     mockReaFetch(initialSettings, {
-      machineState: { connected: true, state: { state: "PreparingForShot", substate: "heating" }, groupTemperature: 88.3, targetGroupTemperature: 93 }
+      machineState: { connected: true, state: { state: "Preparing for shot", substate: "heating" }, groupTemperature: 88.3, targetGroupTemperature: 93 }
     });
     render(<App />);
 
     const topbar = await screen.findByRole("banner", { name: "Machine status bar" });
 
     expect(topbar).toHaveTextContent("Heating");
-    expect(topbar).not.toHaveTextContent("PreparingForShot");
+    expect(topbar).not.toHaveTextContent("Preparing for shot");
   });
 
   it("renders on older WebViews without Array.prototype.at", async () => {
@@ -609,6 +614,28 @@ describe("App shell", () => {
     expect(fetchState.fetchMock).toHaveBeenCalledWith("http://localhost:8080/api/v1/machine/state/idle", expect.objectContaining({ method: "PUT" }));
   });
 
+  it("auto-connects a configured R2 on startup using the full scan when needed", async () => {
+    const fetchState = mockReaFetch(
+      { ...initialSettings, r2SensorId: "F4:12:FA:FA:AC:E3" },
+      {
+        devices: [],
+        scanDevicesResult: [{ id: "F4:12:FA:FA:AC:E3", name: "DiFluid R2", type: "sensor", state: "discovered" }]
+      }
+    );
+    render(<App />);
+
+    await waitFor(() => {
+      expect(fetchState.fetchMock).toHaveBeenCalledWith(
+        "http://localhost:8080/api/v1/devices/scan?connect=true&quick=false",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/devices/connect",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "F4:12:FA:FA:AC:E3" }) })
+    );
+  });
+
   it("keeps the brew page after a preset is pressed until brewing starts", async () => {
     const fetchState = mockReaFetch(initialSettings, {
       machineState: { connected: true, state: { state: "idle" }, wifi: { connected: true, ipAddress: "192.168.1.20" } }
@@ -697,6 +724,61 @@ describe("App shell", () => {
 
     expect(screen.getByRole("heading", { name: "Brew" })).toBeInTheDocument();
     expect(screen.queryByText("Steam Workflow")).not.toBeInTheDocument();
+  });
+
+  it("reviews the completed latest shot with the captured live graph after brew returns idle", async () => {
+    vi.useFakeTimers();
+    const previousShot: ShotRecord = {
+      id: "previous-shot",
+      timestamp: "2026-06-12T09:30:00.000Z",
+      workflow: { context: { extras: { workflowSkin: { selectedProfileId: "p1" } } } },
+      measurements: [
+        { machine: { timestamp: "2026-06-12T09:30:00.000Z", pressure: 1, flow: 1 }, scale: { weight: 2 } },
+        { machine: { timestamp: "2026-06-12T09:30:20.000Z", pressure: 7, flow: 2 }, scale: { weight: 30 } }
+      ]
+    };
+    const completedShot: ShotRecord = {
+      id: "completed-shot",
+      timestamp: "2026-06-12T10:00:00.000Z",
+      workflow: {
+        profile: profiles[0].profile,
+        context: { extras: { workflowSkin: { selectedProfileId: "p1" } } }
+      },
+      measurements: [
+        { machine: { timestamp: "2026-06-12T10:00:00.000Z", pressure: 2, flow: 1 }, scale: { weight: 5 } },
+        { machine: { timestamp: "2026-06-12T10:00:28.000Z", pressure: 9, flow: 2 }, scale: { weight: 40 } }
+      ]
+    };
+    const fetchState = mockReaFetch(initialSettings, {
+      machineState: { connected: true, state: { state: "espresso", substate: "pouring" } },
+      shots: [previousShot]
+    });
+    render(<App />);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    fetchState.setShots([completedShot, previousShot]);
+    fetchState.setMachineState({ connected: true, state: { state: "idle" } });
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(1_000);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("heading", { name: "Shot Review" })).toBeInTheDocument();
+    expect(screen.getByText("Duration: 28s")).toBeInTheDocument();
+    expect(screen.getByText("Yield: 40 g")).toBeInTheDocument();
+    expect(screen.queryByText("Duration: 20s")).not.toBeInTheDocument();
   });
 
   it("routes milk profiles to steam one second after espresso returns idle when review is disabled", async () => {
@@ -867,6 +949,24 @@ describe("App shell", () => {
       "http://localhost:8080/api/v1/devices/scan?connect=true&quick=false",
       expect.objectContaining({ method: "GET" })
     );
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/devices/connect",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "F4:12:FA:FA:AC:E3" }) })
+    );
+  });
+
+  it("connects an R2 device returned only by the scan response from settings refresh", async () => {
+    const fetchState = mockReaFetch(initialSettings, {
+      sensors: [],
+      sensorsAfterScan: [detectedR2Sensor],
+      scanDevicesResult: [{ id: "F4:12:FA:FA:AC:E3", name: "DiFluid R2", type: "sensor", state: "discovered" }]
+    });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Refresh R2" }));
+
+    await waitFor(() => expect(fetchState.savedSettings.r2SensorId).toBe("F4:12:FA:FA:AC:E3"));
     expect(fetchState.fetchMock).toHaveBeenCalledWith(
       "http://localhost:8080/api/v1/devices/connect",
       expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "F4:12:FA:FA:AC:E3" }) })

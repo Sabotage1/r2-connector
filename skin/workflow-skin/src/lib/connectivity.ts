@@ -19,7 +19,19 @@ function isScaleSensor(sensor: SensorListItem): boolean {
     const key = channel.key.toLowerCase();
     return key === "weight" || key === "mass" || key.includes("weight");
   });
-  return hasWeightChannel || name.includes("scale") || name.includes("microbalance") || name.includes("acaia") || name.includes("hiroia");
+  return (
+    hasWeightChannel ||
+    name.includes("scale") ||
+    name.includes("microbalance") ||
+    name.includes("acaia") ||
+    name.includes("hiroia") ||
+    name.includes("bookoo") ||
+    name.includes("boo koo") ||
+    name.includes("decent") ||
+    name.includes("lunar") ||
+    name.includes("pearl") ||
+    name.includes("felicita")
+  );
 }
 
 function usableIp(value: string | undefined): string | undefined {
@@ -56,6 +68,31 @@ function connectedText(value: unknown): boolean | undefined {
   return undefined;
 }
 
+function deviceLabel(device: DeviceInfo): string {
+  return `${device.type ?? ""} ${device.name ?? ""} ${device.id}`.toLowerCase();
+}
+
+function isScaleDevice(device: DeviceInfo): boolean {
+  const label = deviceLabel(device);
+  return (
+    device.type === "scale" ||
+    label.includes("scale") ||
+    label.includes("microbalance") ||
+    label.includes("acaia") ||
+    label.includes("hiroia") ||
+    label.includes("lunar") ||
+    label.includes("pearl") ||
+    label.includes("felicita") ||
+    label.includes("bookoo") ||
+    label.includes("boo koo") ||
+    label.includes("decent scale")
+  );
+}
+
+function isConnectedDeviceState(state: unknown): boolean {
+  return connectedText(state) === true;
+}
+
 function scaleConnectedFromMachineState(machineState: MachineState | null): boolean {
   if (!machineState) return false;
   const direct =
@@ -70,7 +107,7 @@ function scaleConnectedFromMachineState(machineState: MachineState | null): bool
 }
 
 function scaleConnectedFromDevices(devices: DeviceInfo[] | undefined): boolean {
-  return Boolean(devices?.some((device) => device.type === "scale" && device.state === "connected"));
+  return Boolean(devices?.some((device) => isScaleDevice(device) && isConnectedDeviceState(device.state)));
 }
 
 function waterTankFullLevel(waterLevels: WaterLevels | null | undefined): number {
