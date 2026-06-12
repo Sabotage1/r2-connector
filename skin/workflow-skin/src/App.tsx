@@ -17,11 +17,12 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { apiBaseUrl, ReaPrimeApi, ReaPrimeApiError, type CreateGrinderPayload } from "./api/reaprime";
 import { findDifluidR2Sensor } from "./api/sensors";
-import type { DeviceInfo, Grinder, MachineState, Profile, ProfileRecord, ShotAnnotations, ShotSnapshot } from "./api/types";
+import type { DeviceInfo, Grinder, MachineState, Profile, ProfileRecord, ShotAnnotations, ShotSnapshot, Workflow } from "./api/types";
 import { uploadShotToVisualizer } from "./api/visualizer";
 import type { Bag } from "./lib/bags";
 import { buildConnectivityStatuses } from "./lib/connectivity";
 import type { ConnectivityStatus } from "./lib/connectivity";
+import { machineModeLabel, machineTemperature } from "./lib/machineState";
 import { postActivityPage, selectedProfileIdFromWorkflow, type CompletedWorkflowActivity } from "./lib/workflowRouting";
 import { BagsPage } from "./pages/BagsPage";
 import { BrewPage } from "./pages/BrewPage";
@@ -333,6 +334,10 @@ function isSleepingMachine(machineState: MachineState | null): boolean {
   return machineState?.state?.state === "sleeping";
 }
 
+function screensaverBrightnessValue(value: number | undefined): number {
+  return Math.min(100, Math.max(0, Math.round(value ?? 8)));
+}
+
 function isBrewingMode(state: string | undefined): boolean {
   return state === "espresso" || state === "brewing";
 }
@@ -365,21 +370,6 @@ function latestMachineSnapshot(measurements: ShotSnapshot[]): ShotSnapshot["mach
 
 function formatTopNumber(value: number | null | undefined, unit: string): string {
   return typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(1)}${unit}` : "—";
-}
-
-function machineModeLabel(machineState: MachineState | null, liveMachine: ShotSnapshot["machine"] | undefined): string {
-  const state = liveMachine?.state?.state ?? machineState?.state?.state;
-  const substate = liveMachine?.state?.substate ?? machineState?.state?.substate;
-  if (!state) return machineState?.connected === false ? "Disconnected" : "Idle";
-  const compactState = state.replace(/[\s_-]/g, "").toLowerCase();
-  if (compactState === "preparingforshot") return "Preparing";
-  const title = state.replace(/_/g, " ");
-  const cased = `${title.charAt(0).toUpperCase()}${title.slice(1)}`;
-  return substate ? `${cased} · ${substate.replace(/_/g, " ")}` : cased;
-}
-
-function machineTemperature(machineState: MachineState | null, liveMachine: ShotSnapshot["machine"] | undefined): number | null {
-  return liveMachine?.groupTemperature ?? machineState?.groupTemperature ?? liveMachine?.mixTemperature ?? machineState?.mixTemperature ?? machineState?.steamTemperature ?? null;
 }
 
 function buildTopStatusIndicators({
@@ -502,7 +492,12 @@ export function App() {
   const [r2RefreshBusy, setR2RefreshBusy] = useState(false);
   const [lastCompletedProfileId, setLastCompletedProfileId] = useState<string | undefined>();
   const [fastMachineState, setFastMachineState] = useState<MachineState | null>(null);
-  const startupProfileApplyRef = useRef<{ profileId: string | null; attempts: number; pending: boolean }>({ profileId: null, attempts: 0, pending: false });
+  const startupProfileApplyRef = useRef<{ profileId: string | null; attempts: number; pending: boolean; complete: boolean }>({
+    profileId: null,
+    attempts: 0,
+    pending: false,
+    complete: false
+  });
   const startupConnectRef = useRef(false);
   const skinAutoUpdateRef = useRef(false);
   const knownLatestShotIdRef = useRef<string | null | undefined>(undefined);
@@ -571,10 +566,10 @@ export function App() {
   const topMachineTemperature = machineTemperature(data.machineState, topLiveMachine);
   const topMachineSummary = `${topMachineStatus}${topMachineTemperature === null ? "" : ` · ${topMachineTemperature.toFixed(1)}°C`}`;
 
-  const applyProfile = async (profile: ProfileRecord) => {
+  const applyProfile = async (profile: ProfileRecord, options: { optimistic?: boolean } = {}) => {
     const extras = data.workflow.context?.extras ?? {};
     const workflowSkin = extras.workflowSkin && typeof extras.workflowSkin === "object" && !Array.isArray(extras.workflowSkin) ? extras.workflowSkin : {};
-    await api.updateWorkflow({
+    const nextWorkflow: Workflow = {
       profile: profile.profile,
       context: {
         ...data.workflow.context,
@@ -586,27 +581,43 @@ export function App() {
           }
         }
       }
-    });
-    await data.refresh();
+    };
+    const previousWorkflow = data.workflow;
+    if (options.optimistic) data.setWorkflow(nextWorkflow);
+
+    try {
+      const updatedWorkflow = await api.updateWorkflow(nextWorkflow);
+      data.setWorkflow(updatedWorkflow);
+    } catch (error) {
+      if (options.optimistic) data.setWorkflow(previousWorkflow);
+      throw error;
+    }
   };
 
   useEffect(() => {
     const startupProfileId = data.settings.startupProfileId;
     if (!data.loaded || !startupProfileId) {
-      startupProfileApplyRef.current = { profileId: null, attempts: 0, pending: false };
+      startupProfileApplyRef.current = { profileId: null, attempts: 0, pending: false, complete: false };
       return;
     }
 
     if (startupProfileApplyRef.current.profileId !== startupProfileId) {
-      startupProfileApplyRef.current = { profileId: startupProfileId, attempts: 0, pending: false };
+      startupProfileApplyRef.current = { profileId: startupProfileId, attempts: 0, pending: false, complete: false };
     }
+
+    if (startupProfileApplyRef.current.complete) return;
 
     if (selectedProfileId === startupProfileId) {
       startupProfileApplyRef.current.pending = false;
+      startupProfileApplyRef.current.complete = true;
       return;
     }
 
-    if (startupProfileApplyRef.current.pending || startupProfileApplyRef.current.attempts >= 3) return;
+    if (startupProfileApplyRef.current.pending) return;
+    if (startupProfileApplyRef.current.attempts >= 3) {
+      startupProfileApplyRef.current.complete = true;
+      return;
+    }
 
     const startupProfile = data.profiles.find((profile) => profile.id === startupProfileId);
     if (!startupProfile) return;
@@ -999,7 +1010,7 @@ export function App() {
   };
 
   const applyProfileForBrew = async (profile: ProfileRecord) => {
-    await applyProfile(profile);
+    await applyProfile(profile, { optimistic: true });
     setLastUseAt(Date.now());
   };
 
@@ -1137,13 +1148,21 @@ export function App() {
     }
   };
 
+  const applyScreensaverDisplay = useCallback(async () => {
+    const brightness = screensaverBrightnessValue(data.settings.screensaverBrightness);
+    await Promise.all([
+      api.setDisplayBrightness(brightness).catch(() => undefined),
+      api.releaseWakeLock().catch(() => undefined)
+    ]);
+  }, [api, data.settings.screensaverBrightness]);
+
   const sleepMachine = useCallback(async () => {
     setSleepPending(true);
     try {
-      await api.setDisplayBrightness(data.settings.screensaverBrightness ?? 8).catch(() => undefined);
-      await api.releaseWakeLock().catch(() => undefined);
+      await applyScreensaverDisplay();
       await api.sleepMachine();
       await data.refresh();
+      await applyScreensaverDisplay();
       setStatus({ type: "success", message: "Machine sleep requested." });
       setPage("screensaver");
     } catch (error) {
@@ -1151,7 +1170,7 @@ export function App() {
     } finally {
       setSleepPending(false);
     }
-  }, [api, data.refresh, data.settings.screensaverBrightness]);
+  }, [api, applyScreensaverDisplay, data.refresh]);
 
   useEffect(() => {
     sleepMachineRef.current = sleepMachine;

@@ -169,8 +169,10 @@ describe("LivePage", () => {
               flow: 2.1,
               targetFlow: 2.4,
               groupTemperature: 92.236,
+              targetGroupTemperature: 93,
               mixTemperature: 88.124,
-              targetMixTemperature: 93
+              targetMixTemperature: 93,
+              state: { state: "PreparingForShot", substate: "heating" }
             },
             scale: { weight: 36, weightFlow: 1.4 }
           }
@@ -207,6 +209,9 @@ describe("LivePage", () => {
     expect(screen.getByLabelText("Flow: 1.85 g/s")).toBeInTheDocument();
     expect(screen.getByLabelText("Group Temp: 92.24 °C")).toBeInTheDocument();
     expect(screen.getByLabelText("Mix Temp: 88.12 °C")).toBeInTheDocument();
+    expect(screen.getByLabelText("State: Heating")).toBeInTheDocument();
+    expect(screen.getByLabelText("Substate: Heating")).toBeInTheDocument();
+    expect(screen.queryByText("PreparingForShot")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Shot Timer: 28 s")).toBeInTheDocument();
   });
 });

@@ -145,6 +145,10 @@ export function useReaData(api: ReaPrimeApi) {
     [api]
   );
 
+  const setWorkflowData = useCallback((next: Workflow) => {
+    setWorkflow(next);
+  }, []);
+
   return {
     api,
     profiles,
@@ -169,6 +173,7 @@ export function useReaData(api: ReaPrimeApi) {
     error,
     loaded,
     refresh,
+    setWorkflow: setWorkflowData,
     persistSettings
   };
 }

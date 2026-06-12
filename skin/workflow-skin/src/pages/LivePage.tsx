@@ -1,5 +1,6 @@
 import type { JsonMap, ProfileRecord, ShotRecord, ShotSnapshot, WeightSnapshot, Workflow } from "../api/types";
 import { MetricTile } from "../components/MetricTile";
+import { machineStateLabel } from "../lib/machineState";
 import { ShotGraph } from "../components/ShotGraph";
 import { shotStats } from "../lib/shotStats";
 
@@ -179,8 +180,8 @@ export function LivePage({
       </section>
       <section className="panel">
         <h2>Machine</h2>
-        <MetricTile label="State" value={latest?.machine?.state?.state ?? "Waiting"} />
-        <MetricTile label="Substate" value={latest?.machine?.state?.substate ?? "—"} />
+        <MetricTile label="State" value={latest?.machine?.state?.state ? machineStateLabel(latest.machine.state.state, latest.machine.state.substate, latest.machine) : "Waiting"} />
+        <MetricTile label="Substate" value={latest?.machine?.state?.substate ? machineStateLabel(latest.machine.state.substate) : "—"} />
         <MetricTile label="Group Temp" value={formatLiveNumber(latest?.machine?.groupTemperature)} unit="°C" />
         <MetricTile label="Mix Temp" value={formatLiveNumber(latest?.machine?.mixTemperature)} unit="°C" />
       </section>

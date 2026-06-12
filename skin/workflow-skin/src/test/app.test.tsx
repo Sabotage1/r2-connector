@@ -305,6 +305,18 @@ describe("App shell", () => {
     expect(topbar).not.toHaveTextContent("PreparingForShot");
   });
 
+  it("shows PreparingForShot as Heating when the machine is warming up", async () => {
+    mockReaFetch(initialSettings, {
+      machineState: { connected: true, state: { state: "PreparingForShot", substate: "heating" }, groupTemperature: 88.3, targetGroupTemperature: 93 }
+    });
+    render(<App />);
+
+    const topbar = await screen.findByRole("banner", { name: "Machine status bar" });
+
+    expect(topbar).toHaveTextContent("Heating");
+    expect(topbar).not.toHaveTextContent("PreparingForShot");
+  });
+
   it("renders on older WebViews without Array.prototype.at", async () => {
     const originalAtDescriptor = Object.getOwnPropertyDescriptor(Array.prototype, "at");
     Object.defineProperty(Array.prototype, "at", { configurable: true, value: undefined });
@@ -543,6 +555,33 @@ describe("App shell", () => {
     expect(await screen.findByRole("button", { name: "Sweet Classic" })).toHaveAttribute("aria-current", "true");
   });
 
+  it("does not re-apply the startup profile after a manual preset change", async () => {
+    const fetchState = mockReaFetch(
+      {
+        ...initialSettings,
+        startupProfileId: "p2",
+        presetSlots: [
+          { label: "Light", profileId: "p1" },
+          { label: "Sweet", profileId: "p2" },
+          { label: "Turbo" },
+          { label: "Classic" }
+        ]
+      },
+      {
+        workflow: { context: { extras: { workflowSkin: { selectedProfileId: "p2" } } } }
+      }
+    );
+    render(<App />);
+
+    expect(await screen.findByRole("button", { name: "Sweet Classic" })).toHaveAttribute("aria-current", "true");
+
+    await userEvent.click(screen.getByRole("button", { name: "Light Blooming" }));
+
+    await waitFor(() => expect(fetchState.workflowUpdateCount).toBe(1));
+    expect(await screen.findByRole("button", { name: "Light Blooming" })).toHaveAttribute("aria-current", "true");
+    expect(screen.getByRole("button", { name: "Sweet Classic" })).not.toHaveAttribute("aria-current");
+  });
+
   it("wakes the machine and auto-connects machine and scale devices on startup", async () => {
     const fetchState = mockReaFetch(initialSettings, {
       machineState: { connected: true, state: { state: "sleeping", substate: "idle" } },
@@ -709,7 +748,7 @@ describe("App shell", () => {
 
   it("auto sleeps the machine after the configured idle timer", async () => {
     const fetchState = mockReaFetch(
-      { ...initialSettings, autoSleepMinutes: 0.001 },
+      { ...initialSettings, autoSleepMinutes: 0.001, screensaverBrightness: 13 },
       {
         machineState: { connected: true, state: { state: "idle" }, wifi: { connected: true, ipAddress: "192.168.1.20" } }
       }
@@ -727,6 +766,11 @@ describe("App shell", () => {
       },
       { timeout: 1500 }
     );
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/display/brightness",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ brightness: 13 }) })
+    );
+    expect(fetchState.displayState).toEqual(expect.objectContaining({ brightness: 13, wakeLockOverride: false }));
     expect(await screen.findByText("Machine sleeping")).toBeInTheDocument();
   });
 
