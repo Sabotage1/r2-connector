@@ -8,14 +8,39 @@ export interface R2Reading {
   error?: string;
 }
 
-export function findDifluidR2Sensor(sensors: SensorListItem[]): SensorListItem | null {
+function sensorSearchText(sensor: SensorListItem): string {
+  return [sensor.id, sensor.info.vendor, sensor.info.name].filter(Boolean).join(" ").toLowerCase();
+}
+
+function hasTdsChannel(sensor: SensorListItem): boolean {
+  return sensor.info.data.some((channel) => {
+    const key = channel.key.toLowerCase();
+    return key === "tds" || key.includes("tds") || key.includes("dissolved");
+  });
+}
+
+function hasMeasureCommand(sensor: SensorListItem): boolean {
   return (
-    sensors.find((sensor) => {
-      const name = `${sensor.info.vendor} ${sensor.info.name}`.toLowerCase();
-      const hasTds = sensor.info.data.some((channel) => channel.key.toLowerCase() === "tds");
-      const hasMeasureCommand = sensor.info.commands?.some((command) => command.id === "measure") ?? false;
-      return name.includes("difluid") && name.includes("r2") && hasTds && hasMeasureCommand;
-    }) ?? null
+    sensor.info.commands?.some((command) => {
+      const label = `${command.id} ${command.name ?? ""}`.toLowerCase();
+      return label.includes("measure") || label.includes("read");
+    }) ?? false
+  );
+}
+
+function isDifluidR2Candidate(sensor: SensorListItem): boolean {
+  const label = sensorSearchText(sensor);
+  return (label.includes("difluid") && label.includes("r2")) || (label.includes("r2") && (hasTdsChannel(sensor) || hasMeasureCommand(sensor)));
+}
+
+export function findDifluidR2Sensor(sensors: SensorListItem[]): SensorListItem | null {
+  const candidates = sensors.filter(isDifluidR2Candidate);
+  return (
+    candidates.find((sensor) => hasTdsChannel(sensor) && hasMeasureCommand(sensor)) ??
+    candidates.find(hasMeasureCommand) ??
+    candidates.find(hasTdsChannel) ??
+    candidates[0] ??
+    null
   );
 }
 

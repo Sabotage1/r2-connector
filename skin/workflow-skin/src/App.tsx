@@ -17,7 +17,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { apiBaseUrl, ReaPrimeApi, ReaPrimeApiError, type CreateGrinderPayload } from "./api/reaprime";
 import { findDifluidR2Sensor } from "./api/sensors";
-import type { DeviceInfo, Grinder, MachineState, Profile, ProfileRecord, ShotAnnotations, ShotRecord, ShotSnapshot, Workflow } from "./api/types";
+import type { DeviceInfo, Grinder, MachineState, Profile, ProfileRecord, SensorListItem, ShotAnnotations, ShotRecord, ShotSnapshot, Workflow } from "./api/types";
 import { uploadShotToVisualizer } from "./api/visualizer";
 import type { Bag } from "./lib/bags";
 import { buildConnectivityStatuses } from "./lib/connectivity";
@@ -336,6 +336,23 @@ function isR2Device(device: DeviceInfo): boolean {
   return label.includes("difluid") || label.includes("r2");
 }
 
+function waitForNativeUpdate(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+async function findR2SensorWithRetry(api: ReaPrimeApi, fallbackSensors: SensorListItem[]): Promise<SensorListItem | null> {
+  let latestSensors = fallbackSensors;
+  for (const delay of [0, 450, 1200]) {
+    if (delay > 0) await waitForNativeUpdate(delay);
+    latestSensors = await api.listSensors().catch(() => latestSensors);
+    const sensor = findDifluidR2Sensor(latestSensors);
+    if (sensor) return sensor;
+  }
+  return findDifluidR2Sensor(latestSensors);
+}
+
 function isSleepingMachine(machineState: MachineState | null): boolean {
   return machineState?.state?.state === "sleeping";
 }
@@ -541,6 +558,12 @@ export function App() {
   const detectedR2Sensor = findDifluidR2Sensor(data.sensors);
   const configuredR2Sensor = data.settings.r2SensorId ? data.sensors.find((sensor) => sensor.id === data.settings.r2SensorId) ?? null : null;
   const r2Sensor = configuredR2Sensor ?? detectedR2Sensor;
+  const r2Available = Boolean(r2Sensor || data.settings.r2SensorId);
+  const nativeDevices = data.devices ?? [];
+  const r2DeviceConnected = Boolean(
+    data.settings.r2SensorId &&
+      nativeDevices.some((device) => (isConfiguredR2Device(device, data.settings.r2SensorId) || isR2Device(device)) && isConnectedDevice(device))
+  );
   const selectedProfileId = selectedProfileIdFromWorkflow(data.workflow, data.profiles);
   const workflowPageProfileId = selectedProfileId ?? (page === "steam" || page === "review" ? lastCompletedProfileId : undefined);
   const activeProfile = data.profiles.find((profile) => profile.id === workflowPageProfileId);
@@ -570,13 +593,14 @@ export function App() {
         appInfo: data.appInfo,
         machineState: data.machineState,
         sensors: data.sensors,
-        devices: data.devices,
+        devices: nativeDevices,
         scaleConnected: liveTelemetry.scaleConnected,
         waterLevels: liveTelemetry.waterLevels,
         r2SensorId: data.settings.r2SensorId,
-        r2Sensor
+        r2Sensor,
+        r2Connected: r2DeviceConnected
       }),
-    [data.machineState, data.sensors, data.settings.r2SensorId, liveTelemetry.scaleConnected, liveTelemetry.waterLevels, r2Sensor]
+    [nativeDevices, data.machineState, data.sensors, data.settings.r2SensorId, liveTelemetry.scaleConnected, liveTelemetry.waterLevels, r2DeviceConnected, r2Sensor]
   );
   const visibleMenuIds = useMemo(() => visibleMainMenuItems(data.settings), [data.settings.mainMenuItems, data.settings.hiddenMainMenuItemIds]);
   const topStatusIndicators = useMemo(
@@ -741,7 +765,7 @@ export function App() {
         const completedShotForReview = latestCompletedShot ? shotWithFallbackMeasurements(latestCompletedShot, liveTelemetry.measurements) : null;
         if (completedShotForReview) setCompletedReviewShot(completedShotForReview);
 
-        if (completedShotForReview && r2Sensor && autoReadR2ShotIdRef.current !== completedShotForReview.id) {
+        if (completedShotForReview && r2Available && autoReadR2ShotIdRef.current !== completedShotForReview.id) {
           autoReadR2ShotIdRef.current = completedShotForReview.id;
           setAutoReadR2ShotId(completedShotForReview.id);
         }
@@ -755,7 +779,7 @@ export function App() {
 
       setPage("review");
     },
-    [api, data.profiles, data.refresh, data.settings, latestShot, liveTelemetry.measurements, r2Sensor]
+    [api, data.profiles, data.refresh, data.settings, latestShot, liveTelemetry.measurements, r2Available]
   );
 
   useEffect(() => {
@@ -836,11 +860,11 @@ export function App() {
     knownLatestShotIdRef.current = latestShotId;
     if (!latestShot) return;
 
-    if (r2Sensor && autoReadR2ShotIdRef.current !== latestShot.id) {
+    if (r2Available && autoReadR2ShotIdRef.current !== latestShot.id) {
       autoReadR2ShotIdRef.current = latestShot.id;
       setAutoReadR2ShotId(latestShot.id);
     }
-  }, [data.loaded, latestShot, r2Sensor]);
+  }, [data.loaded, latestShot, r2Available]);
 
   const toggleReview = async (profileId: string, enabled: boolean) => {
     try {
@@ -887,22 +911,23 @@ export function App() {
       const scannedDevices = await api.scanDevices({ connect: true, quick: false }).catch(() => [] as DeviceInfo[]);
       const listedDevices = await api.listDevices().catch(() => data.devices ?? []);
       const devices = uniqueDevices([...scannedDevices, ...listedDevices]);
+      const r2Devices = devices.filter((item) => isR2Device(item) || isConfiguredR2Device(item, data.settings.r2SensorId));
 
-      for (const device of devices.filter((item) => isR2Device(item) || isConfiguredR2Device(item, data.settings.r2SensorId)).filter((device) => !isConnectedDevice(device))) {
+      for (const device of r2Devices.filter((device) => !isConnectedDevice(device))) {
         await api.connectDevice(device.id).catch(() => undefined);
       }
 
-      const sensors = await api.listSensors().catch(() => [] as typeof data.sensors);
-      const sensor = findDifluidR2Sensor(sensors);
-      if (!sensor) {
+      const sensor = await findR2SensorWithRetry(api, data.sensors);
+      const sensorId = sensor?.id ?? data.settings.r2SensorId ?? r2Devices[0]?.id;
+      if (!sensorId) {
         await data.refresh();
         setStatus({ type: "error", message: "No DiFluid R2 detected after refresh." });
         return;
       }
 
-      await data.persistSettings({ ...data.settings, r2SensorId: sensor.id });
+      await data.persistSettings({ ...data.settings, r2SensorId: sensorId });
       await data.refresh();
-      setStatus({ type: "success", message: `R2 connected: ${sensor.id}.` });
+      setStatus({ type: "success", message: `R2 connected through ReaPrime: ${sensorId}.` });
     } catch (error) {
       setStatus({ type: "error", message: `Could not refresh R2: ${errorMessage(error)}` });
     } finally {
@@ -1165,13 +1190,14 @@ export function App() {
   };
 
   const readR2 = async () => {
-    if (!r2Sensor) {
+    const sensorId = r2Sensor?.id ?? data.settings.r2SensorId;
+    if (!sensorId) {
       setStatus({ type: "error", message: "No DiFluid R2 sensor detected." });
       return null;
     }
 
     try {
-      const result = await api.executeSensor(r2Sensor.id, "measure", { timeout: 30 });
+      const result = await api.executeSensor(sensorId, "measure", { timeout: 30 });
       if (result.status === "error") {
         setStatus({ type: "error", message: `Could not read R2: ${result.message ?? "Measurement command failed."}` });
         return null;
@@ -1181,6 +1207,9 @@ export function App() {
       if (tds === null) {
         setStatus({ type: "error", message: "R2 did not return a TDS reading." });
         return null;
+      }
+      if (r2Sensor?.id && data.settings.r2SensorId !== r2Sensor.id) {
+        await Promise.resolve(data.persistSettings({ ...data.settings, r2SensorId: r2Sensor.id })).catch(() => undefined);
       }
       return tds;
     } catch (error) {
@@ -1312,6 +1341,11 @@ export function App() {
     if (nextStatus.id === "scale" && !nextStatus.connected) {
       setExpandedStatusId(null);
       void forceScaleConnection();
+      return;
+    }
+    if (nextStatus.id === "r2" && !nextStatus.connected) {
+      setExpandedStatusId(null);
+      void refreshR2Sensor();
       return;
     }
     setExpandedStatusId((current) => (current === nextStatus.id ? null : nextStatus.id));
@@ -1496,6 +1530,7 @@ export function App() {
               onSaveAnnotations={saveReview}
               onUploadVisualizer={uploadReviewToVisualizer}
               r2Sensor={r2Sensor}
+              r2Available={r2Available}
               onReadR2={readR2}
               autoReadR2={autoReadR2ShotId === reviewShot.id}
               onBackToGraph={() => setPage("live")}

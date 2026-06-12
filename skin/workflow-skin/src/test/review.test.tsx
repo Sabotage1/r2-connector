@@ -15,6 +15,7 @@ const appMocks = vi.hoisted(() => ({
     batches: unknown[];
     bags: unknown[];
     grinders: unknown[];
+    devices: unknown[];
     sensors: SensorListItem[];
     shots: ShotRecord[];
     settings: typeof defaultSkinSettings;
@@ -76,6 +77,7 @@ function appData(overrides: Partial<NonNullable<typeof appMocks.data>> = {}) {
     batches: [],
     bags: [],
     grinders: [],
+    devices: [],
     sensors: [],
     shots: [shot],
     settings: defaultSkinSettings,
@@ -177,7 +179,7 @@ describe("ReviewPage", () => {
       }
     ];
 
-    render(
+    const { container } = render(
       <ReviewPage
         shot={currentShot}
         previousShots={previousSameBag}
@@ -190,6 +192,7 @@ describe("ReviewPage", () => {
 
     expect(screen.getByRole("img", { name: "Shot pressure graph" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Last Shot Details" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Extraction Yield" })).toBeInTheDocument();
     expect(screen.getByText("Duration: 28s")).toBeInTheDocument();
     expect(screen.getByText("Yield: 40 g")).toBeInTheDocument();
     expect(screen.getByText("TDS: 9%")).toBeInTheDocument();
@@ -203,6 +206,14 @@ describe("ReviewPage", () => {
     expect(screen.getByText("Avg duration: 28s")).toBeInTheDocument();
     expect(screen.getByText("Grinds: 7.0, 7.1")).toBeInTheDocument();
     expect(screen.queryByText("50 g")).not.toBeInTheDocument();
+
+    const sections = Array.from(container.querySelectorAll(".workflow-grid > section"));
+    const detailsSection = screen.getByRole("heading", { name: "Last Shot Details" }).closest("section");
+    const extractionSection = screen.getByRole("heading", { name: "Extraction Yield" }).closest("section");
+    const comparisonSection = screen.getByRole("heading", { name: "Same Bag Comparison" }).closest("section");
+
+    expect(sections.indexOf(extractionSection as Element)).toBe(sections.indexOf(detailsSection as Element) + 1);
+    expect(sections.indexOf(extractionSection as Element)).toBeLessThan(sections.indexOf(comparisonSection as Element));
   });
 
   it("starts on the latest shot and scrubs through previous same-bag shot details", () => {
@@ -400,8 +411,24 @@ describe("ReviewPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "Review" }));
     await userEvent.click(screen.getByRole("button", { name: "Read from R2" }));
 
-    expect(screen.getByLabelText("TDS")).toHaveValue("9.7");
+    expect(await screen.findByDisplayValue("9.7")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("imports an R2 TDS reading from the configured native ReaPrime id when sensors are stale", async () => {
+    appMocks.data = appData({ settings: { ...defaultSkinSettings, r2SensorId: "F4:12:FA:FA:AC:E3" } });
+    appMocks.executeSensor.mockResolvedValue({
+      status: "ok",
+      result: { reading: { tds: 9.4 } }
+    });
+
+    render(<App />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Review" }));
+    await userEvent.click(screen.getByRole("button", { name: "Read from R2" }));
+
+    expect(await screen.findByDisplayValue("9.4")).toBeInTheDocument();
+    expect(appMocks.executeSensor).toHaveBeenCalledWith("F4:12:FA:FA:AC:E3", "measure", { timeout: 30 });
   });
 
   it("shows local R2 reading feedback in the extraction panel", async () => {

@@ -973,6 +973,30 @@ describe("App shell", () => {
     );
   });
 
+  it("refreshes the native R2 connection when the disconnected R2 status is pressed", async () => {
+    const fetchState = mockReaFetch(
+      { ...initialSettings, r2SensorId: "F4:12:FA:FA:AC:E3" },
+      {
+        sensors: [],
+        sensorsAfterScan: [detectedR2Sensor],
+        scanDevicesResult: [{ id: "F4:12:FA:FA:AC:E3", name: "DiFluid R2", type: "sensor", state: "discovered" }]
+      }
+    );
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "R2" }));
+
+    await waitFor(() => expect(fetchState.savedSettings.r2SensorId).toBe("F4:12:FA:FA:AC:E3"));
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/devices/scan?connect=true&quick=false",
+      expect.objectContaining({ method: "GET" })
+    );
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/devices/connect",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "F4:12:FA:FA:AC:E3" }) })
+    );
+  });
+
   it("reveals the machine IP when the WiFi status is pressed", async () => {
     mockReaFetch(initialSettings, {
       machineState: { connected: true, wifi: { connected: true, ipAddress: "10.0.0.25" } }

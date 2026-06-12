@@ -26,6 +26,7 @@ export function ReviewPage({
   onSaveAnnotations,
   onUploadVisualizer,
   r2Sensor,
+  r2Available = Boolean(r2Sensor),
   onReadR2,
   autoReadR2 = false,
   onBackToGraph
@@ -35,6 +36,7 @@ export function ReviewPage({
   onSaveAnnotations: (shotId: string, annotations: ShotAnnotations) => Promise<void> | void;
   onUploadVisualizer: () => Promise<void> | void;
   r2Sensor: SensorListItem | null;
+  r2Available?: boolean;
   onReadR2: () => Promise<number | null> | number | null;
   autoReadR2?: boolean;
   onBackToGraph?: () => void;
@@ -106,7 +108,7 @@ export function ReviewPage({
   }
 
   async function readR2() {
-    if (!r2Sensor) {
+    if (!r2Available) {
       setR2Status({ type: "error", message: "No DiFluid R2 sensor detected." });
       return;
     }
@@ -129,10 +131,10 @@ export function ReviewPage({
   }
 
   useEffect(() => {
-    if (!autoReadR2 || !r2Sensor || autoReadShotRef.current === shot.id) return;
+    if (!autoReadR2 || !r2Available || autoReadShotRef.current === shot.id) return;
     autoReadShotRef.current = shot.id;
     void readR2();
-  }, [autoReadR2, r2Sensor, shot.id]);
+  }, [autoReadR2, r2Available, shot.id]);
 
   useEffect(() => {
     setSelectedShotId(shot.id);
@@ -185,6 +187,30 @@ export function ReviewPage({
         <p>Peak pressure: {formatStat(selectedStats.peakPressure, " bar")}</p>
         <p>Average flow: {formatStat(selectedStats.averageFlow, " mL/s")}</p>
       </section>
+      <section className="panel review-form">
+        <h2>Extraction Yield</h2>
+        <label>
+          Dose
+          <input value={doseText} onChange={(event) => setDoseText(event.target.value)} inputMode="decimal" />
+        </label>
+        <label>
+          Yield
+          <input value={yieldText} onChange={(event) => setYieldText(event.target.value)} inputMode="decimal" />
+        </label>
+        <label>
+          TDS
+          <input aria-label="TDS" value={tdsText} onChange={(event) => setTdsText(event.target.value)} inputMode="decimal" />
+        </label>
+        <p>EY: {ey ?? "—"}%</p>
+        <button type="button" className="ghost-button" disabled={r2Busy} onClick={readR2}>
+          {r2Busy ? "Reading R2" : "Read from R2"}
+        </button>
+        {r2Status && (
+          <p className={r2Status.type === "error" ? "inline-panel-status error" : "inline-panel-status"} role={r2Status.type === "error" ? "alert" : "status"}>
+            {r2Status.message}
+          </p>
+        )}
+      </section>
       <section className="panel wide review-comparison">
         <h2>Same Bag Comparison</h2>
         <p>Previous same-bag shots: {sameBagShots.length}</p>
@@ -209,30 +235,6 @@ export function ReviewPage({
           </div>
         ) : (
           <p className="muted">No previous shots for this bag yet.</p>
-        )}
-      </section>
-      <section className="panel review-form">
-        <h2>Extraction</h2>
-        <label>
-          Dose
-          <input value={doseText} onChange={(event) => setDoseText(event.target.value)} inputMode="decimal" />
-        </label>
-        <label>
-          Yield
-          <input value={yieldText} onChange={(event) => setYieldText(event.target.value)} inputMode="decimal" />
-        </label>
-        <label>
-          TDS
-          <input aria-label="TDS" value={tdsText} onChange={(event) => setTdsText(event.target.value)} inputMode="decimal" />
-        </label>
-        <p>EY: {ey ?? "—"}%</p>
-        <button type="button" className="ghost-button" disabled={r2Busy} onClick={readR2}>
-          {r2Busy ? "Reading R2" : "Read from R2"}
-        </button>
-        {r2Status && (
-          <p className={r2Status.type === "error" ? "inline-panel-status error" : "inline-panel-status"} role={r2Status.type === "error" ? "alert" : "status"}>
-            {r2Status.message}
-          </p>
         )}
       </section>
       <section className="panel review-form">

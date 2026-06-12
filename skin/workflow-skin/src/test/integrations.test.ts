@@ -23,7 +23,7 @@ describe("findDifluidR2Sensor", () => {
     expect(findDifluidR2Sensor(sensors)?.id).toBe("sensor-r2");
   });
 
-  it("does not match a DiFluid R2 sensor without a measure command", () => {
+  it("matches a native DiFluid R2 sensor while ReaPrime metadata is still incomplete", () => {
     const sensors: SensorListItem[] = [
       {
         id: "sensor-r2",
@@ -35,7 +35,31 @@ describe("findDifluidR2Sensor", () => {
         }
       }
     ];
-    expect(findDifluidR2Sensor(sensors)).toBeNull();
+    expect(findDifluidR2Sensor(sensors)?.id).toBe("sensor-r2");
+  });
+
+  it("prefers the fully executable native R2 sensor when multiple R2 candidates exist", () => {
+    const sensors: SensorListItem[] = [
+      {
+        id: "sensor-r2-starting",
+        info: {
+          name: "DiFluid R2",
+          vendor: "DiFluid",
+          data: [],
+          commands: []
+        }
+      },
+      {
+        id: "sensor-r2-ready",
+        info: {
+          name: "DiFluid R2",
+          vendor: "DiFluid",
+          data: [{ key: "tds", type: "number", unit: "%" }],
+          commands: [{ id: "measure" }]
+        }
+      }
+    ];
+    expect(findDifluidR2Sensor(sensors)?.id).toBe("sensor-r2-ready");
   });
 });
 

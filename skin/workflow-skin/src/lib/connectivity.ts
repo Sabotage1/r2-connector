@@ -144,7 +144,8 @@ export function buildConnectivityStatuses({
   scaleConnected,
   waterLevels,
   r2SensorId,
-  r2Sensor
+  r2Sensor,
+  r2Connected
 }: {
   apiHost: string;
   appInfo?: AppInfo | null;
@@ -155,6 +156,7 @@ export function buildConnectivityStatuses({
   waterLevels?: WaterLevels | null;
   r2SensorId?: string;
   r2Sensor: SensorListItem | null;
+  r2Connected?: boolean;
 }): ConnectivityStatus[] {
   const machineConnected = Boolean(machineState && machineState.connected !== false);
   const ip = machineIp(machineState, appInfo, apiHost);
@@ -169,7 +171,7 @@ export function buildConnectivityStatuses({
   ];
 
   if (r2SensorId) {
-    const connected = r2Sensor?.id === r2SensorId;
+    const connected = Boolean(r2Connected) || r2Sensor?.id === r2SensorId;
     statuses.push({ id: "r2", label: "R2", detail: connected ? "Connected" : "Not connected", connected });
   }
 

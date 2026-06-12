@@ -161,4 +161,22 @@ describe("buildConnectivityStatuses", () => {
       connected: false
     });
   });
+
+  it("marks configured R2 connected from native ReaPrime device state when sensors are stale", () => {
+    const statuses = buildConnectivityStatuses({
+      apiHost: "192.168.1.88",
+      machineState: { connected: true },
+      sensors: [],
+      r2SensorId: "F4:12:FA:FA:AC:E3",
+      r2Sensor: null,
+      r2Connected: true
+    });
+
+    expect(statuses.find((status) => status.id === "r2")).toEqual({
+      id: "r2",
+      label: "R2",
+      detail: "Connected",
+      connected: true
+    });
+  });
 });
