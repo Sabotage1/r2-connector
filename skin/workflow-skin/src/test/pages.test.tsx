@@ -938,4 +938,11 @@ describe("ScreensaverPage", () => {
 
     expect(screen.getByLabelText("Screensaver mode")).toHaveStyle({ backgroundColor: "#020506" });
   });
+
+  it("always shows the WorkFlow brand on the screensaver", () => {
+    render(<ScreensaverPage title="Roy Decent" onWake={vi.fn()} />);
+
+    expect(screen.getByRole("heading", { name: "WorkFlow" })).toBeInTheDocument();
+    expect(screen.getByText("Roy Decent")).toHaveClass("screensaver-subtitle");
+  });
 });

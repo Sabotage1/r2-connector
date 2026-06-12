@@ -73,8 +73,9 @@ textarea {
   min-width: 0;
   height: var(--top-status-height);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
+  gap: 8px;
   border-bottom: 1px solid var(--skin-border);
   padding: 9px 14px;
   background:
@@ -87,7 +88,6 @@ textarea {
   position: relative;
   z-index: 1;
   min-width: 0;
-  max-width: calc(50vw - 162px);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -135,52 +135,25 @@ textarea {
 }
 
 .top-machine-status {
-  position: absolute;
-  top: 50%;
-  left: 50%;
+  position: relative;
   z-index: 2;
-  width: min(280px, 28vw);
-  min-width: 190px;
-  transform: translate(-50%, -50%);
-  min-height: 42px;
+  min-width: 0;
+  max-width: 170px;
   display: grid;
-  place-items: center;
+  justify-items: end;
   align-content: center;
-  border: 1px solid #3a4853;
-  border-radius: 8px;
-  padding: 6px 38px;
-  background:
-    linear-gradient(180deg, rgb(255 255 255 / 6%), rgb(255 255 255 / 0%)),
-    var(--skin-surface);
-  box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 3%),
-    0 8px 22px rgb(0 0 0 / 18%);
-  text-align: center;
+  padding: 0 2px;
+  text-align: right;
 }
 
 .top-machine-status::before,
 .top-machine-status::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  width: 26px;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--skin-accent);
-  opacity: 0.78;
-}
-
-.top-machine-status::before {
-  left: 10px;
-}
-
-.top-machine-status::after {
-  right: 10px;
+  display: none;
 }
 
 .top-machine-status span {
   color: var(--skin-muted);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 900;
   line-height: 1;
   text-transform: uppercase;
@@ -191,7 +164,7 @@ textarea {
   max-width: 100%;
   overflow: hidden;
   color: var(--skin-text);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 950;
   line-height: 1.12;
   text-overflow: ellipsis;
@@ -755,6 +728,15 @@ textarea {
   font-size: clamp(38px, 6vw, 72px);
   line-height: 1;
   letter-spacing: 0;
+}
+
+.screensaver-subtitle {
+  max-width: 460px;
+  margin: -8px 0 0;
+  color: #9aa7ad;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.2;
 }
 
 .review-form {
@@ -1473,12 +1455,8 @@ textarea {
   }
 
   .top-status-bar {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto auto;
     padding: 8px;
-  }
-
-  .top-status-indicators {
-    max-width: calc(50vw - 104px);
   }
 
   .top-status-chip {
@@ -1487,14 +1465,12 @@ textarea {
   }
 
   .top-machine-status {
-    width: min(220px, 34vw);
-    min-width: 150px;
-    min-height: 40px;
-    padding: 6px 28px;
+    max-width: 122px;
+    padding: 0;
   }
 
   .top-machine-status strong {
-    font-size: 13px;
+    font-size: 12px;
   }
 
   .top-status-actions .sleep-button span {

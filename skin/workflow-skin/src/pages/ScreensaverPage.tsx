@@ -4,6 +4,7 @@ import { screensaverArt } from "../lib/screensaverArt";
 export function ScreensaverPage({ title, onWake }: { title: string; onWake: () => void }) {
   const [artIndex, setArtIndex] = useState(() => Math.floor(Math.random() * screensaverArt.length));
   const art = screensaverArt[artIndex] ?? screensaverArt[0];
+  const subtitle = title.trim() && title.trim() !== "WorkFlow" ? title.trim() : "";
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -25,7 +26,8 @@ export function ScreensaverPage({ title, onWake }: { title: string; onWake: () =
     >
       <div className="screensaver-panel">
         <span className="eyebrow">Machine sleeping</span>
-        <h1>{title}</h1>
+        <h1>WorkFlow</h1>
+        {subtitle && <p className="screensaver-subtitle">{subtitle}</p>}
         <button
           type="button"
           className="ghost-button"
