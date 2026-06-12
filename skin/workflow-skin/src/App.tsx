@@ -326,7 +326,7 @@ function autoSleepCheckIntervalMs(idleLimitMs: number): number {
 }
 
 function latestMachineSnapshot(measurements: ShotSnapshot[]): ShotSnapshot["machine"] | undefined {
-  return measurements.at(-1)?.machine;
+  return measurements.length > 0 ? measurements[measurements.length - 1]?.machine : undefined;
 }
 
 function formatTopNumber(value: number | null | undefined, unit: string): string {

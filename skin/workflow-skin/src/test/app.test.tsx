@@ -280,6 +280,24 @@ describe("App shell", () => {
     expect(screen.queryByLabelText("App title")).not.toBeInTheDocument();
   });
 
+  it("renders on older WebViews without Array.prototype.at", async () => {
+    const originalAtDescriptor = Object.getOwnPropertyDescriptor(Array.prototype, "at");
+    Object.defineProperty(Array.prototype, "at", { configurable: true, value: undefined });
+    try {
+      mockReaFetch(initialSettings);
+      render(<App />);
+
+      expect(await screen.findByRole("heading", { name: "Brew" })).toBeInTheDocument();
+      expect(screen.getByLabelText("WorkFlow menu title")).toHaveTextContent("WorkFlow");
+    } finally {
+      if (originalAtDescriptor) {
+        Object.defineProperty(Array.prototype, "at", originalAtDescriptor);
+      } else {
+        delete (Array.prototype as unknown as Record<string, unknown>).at;
+      }
+    }
+  });
+
   it("has a dedicated menu item for profiles", async () => {
     mockReaFetch(initialSettings);
     render(<App />);
