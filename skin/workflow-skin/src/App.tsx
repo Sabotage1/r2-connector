@@ -292,14 +292,31 @@ function isScaleDeviceCandidate(device: DeviceInfo): boolean {
   );
 }
 
+function isConnectedDevice(device: DeviceInfo): boolean {
+  return device.state?.toLowerCase() === "connected";
+}
+
+function hasConnectedScale(devices: DeviceInfo[]): boolean {
+  return devices.some((device) => isScaleDeviceCandidate(device) && isConnectedDevice(device) && !isR2Device(device));
+}
+
 function isConnectableStartupDevice(device: DeviceInfo): boolean {
-  return (device.type === "machine" || isScaleDeviceCandidate(device)) && device.state !== "connected";
+  return (device.type === "machine" || isScaleDeviceCandidate(device)) && !isConnectedDevice(device);
 }
 
 function uniqueDevices(devices: DeviceInfo[]): DeviceInfo[] {
   const byId = new Map<string, DeviceInfo>();
   for (const device of devices) {
-    byId.set(device.id, device);
+    const current = byId.get(device.id);
+    if (!current) {
+      byId.set(device.id, device);
+      continue;
+    }
+    byId.set(device.id, {
+      ...current,
+      ...device,
+      state: isConnectedDevice(current) && !isConnectedDevice(device) ? current.state : device.state
+    });
   }
   return Array.from(byId.values());
 }
@@ -1085,8 +1102,17 @@ export function App() {
     setStatus({ type: "success", message: "Scanning for scale." });
     try {
       const scannedDevices = await api.scanDevices({ connect: true, quick: false }).catch(() => [] as DeviceInfo[]);
-      const devices = uniqueDevices([...scannedDevices, ...(await api.listDevices().catch(() => data.devices ?? []))]);
-      const scaleDevices = devices.filter((device) => isScaleDeviceCandidate(device) && device.state !== "connected" && !isR2Device(device));
+      const listedDevices = await api.listDevices().catch(() => data.devices ?? []);
+      const devices = uniqueDevices([...scannedDevices, ...listedDevices]);
+      const scanSawScale = scannedDevices.some((device) => isScaleDeviceCandidate(device) && !isR2Device(device));
+
+      if (hasConnectedScale(devices)) {
+        await data.refresh();
+        setStatus({ type: "success", message: "Scale connected." });
+        return;
+      }
+
+      const scaleDevices = devices.filter((device) => isScaleDeviceCandidate(device) && !isConnectedDevice(device) && !isR2Device(device));
 
       if (scaleDevices.length === 0) {
         setStatus({ type: "error", message: "No scale found after scan." });
@@ -1104,9 +1130,20 @@ export function App() {
         }
       }
 
-      if (connectedCount === 0 && firstError) throw firstError;
       await data.refresh();
-      setStatus({ type: "success", message: "Scale connection requested." });
+      const refreshedDevices = await api.listDevices().catch(() => [] as DeviceInfo[]);
+      if (connectedCount > 0 || hasConnectedScale(refreshedDevices)) {
+        setStatus({ type: "success", message: "Scale connection requested." });
+        return;
+      }
+
+      if (scanSawScale && firstError) {
+        setStatus({ type: "success", message: "Scale scan requested. Wake the scale if it stays disconnected." });
+        return;
+      }
+
+      if (firstError) throw firstError;
+      setStatus({ type: "success", message: "Scale scan requested. Wake the scale if it stays disconnected." });
     } catch (error) {
       setStatus({ type: "error", message: `Could not connect scale: ${errorMessage(error)}` });
     }

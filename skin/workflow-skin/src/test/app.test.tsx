@@ -46,6 +46,7 @@ function mockReaFetch(
     githubReleaseStatus?: number;
     githubManifestVersion?: string;
     githubManifestStatus?: number;
+    connectDeviceStatus?: number;
   } = {}
 ) {
   let savedSettings = initialSettings;
@@ -114,7 +115,10 @@ function mockReaFetch(
       sensors = options.sensorsAfterScan ?? sensors;
       return responseJson(options.scanDevicesResult ?? devices);
     }
-    if (method === "PUT" && url.pathname === "/api/v1/devices/connect") return Promise.resolve(new Response("", { status: 200 }));
+    if ((method === "PUT" || method === "POST") && url.pathname === "/api/v1/devices/connect") {
+      if (options.connectDeviceStatus) return Promise.resolve(new Response(`connect failed for ${String(init.body)}`, { status: options.connectDeviceStatus }));
+      return Promise.resolve(new Response("", { status: 200 }));
+    }
     if (method === "GET" && url.pathname === "/api/v1/display") return responseJson(displayState);
     if (method === "PUT" && url.pathname === "/api/v1/display/brightness") {
       displayState = { ...displayState, ...JSON.parse(String(init.body)) };
@@ -770,6 +774,24 @@ describe("App shell", () => {
       );
     });
     expect(await screen.findByRole("status")).toHaveTextContent("Scale connection requested.");
+  });
+
+  it("keeps force scale connection usable when explicit connect returns 404 after scan", async () => {
+    const fetchState = mockReaFetch(initialSettings, {
+      devices: [],
+      scanDevicesResult: [{ id: "D4:41:89:DB:21:2E", name: "Acaia Pearl", type: "scale", state: "discovered" }],
+      connectDeviceStatus: 404
+    });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Scale" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Scale scan requested. Wake the scale if it stays disconnected.");
+    expect(screen.queryByText(/Could not connect scale/i)).not.toBeInTheDocument();
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/devices/scan?connect=true&quick=false",
+      expect.objectContaining({ method: "GET" })
+    );
   });
 
   it.each([

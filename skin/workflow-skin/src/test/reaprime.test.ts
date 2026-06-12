@@ -279,6 +279,32 @@ describe("ReaPrimeApi", () => {
     );
   });
 
+  it("falls back to alternate device connection payloads", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init = {}) => {
+      const url = new URL(String(input));
+      const body = String(init.body ?? "");
+      if (url.pathname === "/api/v1/devices/connect" && init.method === "PUT" && body === JSON.stringify({ deviceId: "scale-1" })) {
+        return Promise.resolve(new Response("deviceId not accepted", { status: 404 }));
+      }
+      if (url.pathname === "/api/v1/devices/connect" && init.method === "PUT" && body === JSON.stringify({ id: "scale-1" })) {
+        return Promise.resolve(new Response("", { status: 200 }));
+      }
+      return Promise.reject(new Error(`Unhandled ${init.method} ${url.pathname} ${body}`));
+    });
+    const api = new ReaPrimeApi("http://machine:8080");
+
+    await expect((api as any).connectDevice("scale-1")).resolves.toBeUndefined();
+
+    expect(fetch).toHaveBeenCalledWith(
+      "http://machine:8080/api/v1/devices/connect",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "scale-1" }) })
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      "http://machine:8080/api/v1/devices/connect",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ id: "scale-1" }) })
+    );
+  });
+
   it("controls native display brightness and wake-lock", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(() =>
       Promise.resolve(new Response(JSON.stringify({ brightness: 8, wakeLockOverride: false }), { status: 200 }))

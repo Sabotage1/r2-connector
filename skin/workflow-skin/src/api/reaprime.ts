@@ -414,7 +414,19 @@ export class ReaPrimeApi {
     return this.request<void>("/api/v1/devices/connect", {
       method: "PUT",
       body: JSON.stringify({ deviceId })
-    });
+    }).catch((primaryError) =>
+      this.request<void>("/api/v1/devices/connect", {
+        method: "PUT",
+        body: JSON.stringify({ id: deviceId })
+      }).catch(() =>
+        this.request<void>("/api/v1/devices/connect", {
+          method: "POST",
+          body: JSON.stringify({ deviceId })
+        }).catch(() => {
+          throw primaryError;
+        })
+      )
+    );
   }
 
   getDisplay() {

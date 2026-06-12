@@ -107,11 +107,13 @@ test("top machine status and action buttons do not overlap", async ({ page }) =>
 
   const metrics = await page.evaluate(() => {
     const bar = document.querySelector(".top-status-bar")?.getBoundingClientRect();
+    const indicators = document.querySelector(".top-status-indicators")?.getBoundingClientRect();
     const title = document.querySelector(".top-machine-status")?.getBoundingClientRect();
     const actions = document.querySelector(".top-status-actions")?.getBoundingClientRect();
     const buttons = Array.from(document.querySelectorAll(".top-status-actions .sleep-button")).map((button) => button.getBoundingClientRect());
     return {
       bar: bar ? { top: bar.top, bottom: bar.bottom } : null,
+      indicators: indicators ? { left: indicators.left, right: indicators.right, top: indicators.top, bottom: indicators.bottom } : null,
       title: title ? { left: title.left, right: title.right, top: title.top, bottom: title.bottom } : null,
       actions: actions ? { left: actions.left, right: actions.right, top: actions.top, bottom: actions.bottom } : null,
       buttons: buttons.map((button) => ({ left: button.left, right: button.right })),
@@ -121,9 +123,11 @@ test("top machine status and action buttons do not overlap", async ({ page }) =>
 
   expect(metrics.bar).not.toBeNull();
   expect(metrics.bar!.top).toBe(0);
+  expect(metrics.indicators).not.toBeNull();
   expect(metrics.title).not.toBeNull();
   expect(metrics.actions).not.toBeNull();
   expect((metrics.title!.left + metrics.title!.right) / 2).toBeCloseTo(metrics.viewportCenter, 0);
+  expect(metrics.indicators!.right).toBeLessThanOrEqual(metrics.title!.left - 8);
   expect(metrics.title!.right).toBeLessThanOrEqual(metrics.actions!.left - 8);
   expect(metrics.buttons).toHaveLength(2);
   expect(metrics.buttons[0].right).toBeLessThanOrEqual(metrics.buttons[1].left - 8);
