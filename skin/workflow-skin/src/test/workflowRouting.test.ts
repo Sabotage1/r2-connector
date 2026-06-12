@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ProfileRecord, ShotRecord } from "../api/types";
-import { postShotPageForShot } from "../lib/workflowRouting";
+import { postActivityPage, postShotPageForShot } from "../lib/workflowRouting";
 import { defaultSkinSettings } from "../state/skinSettings";
 
 const profiles: ProfileRecord[] = [
@@ -45,5 +45,13 @@ describe("postShotPageForShot", () => {
 
   it("routes non-milk profiles to review when review is enabled", () => {
     expect(postShotPageForShot(shotWithProfile("espresso"), defaultSkinSettings, profiles)).toBe("review");
+  });
+
+  it("does not route non-milk brews to steam when review is disabled", () => {
+    expect(postActivityPage("brew", "espresso", { ...defaultSkinSettings, defaultReviewEnabled: false })).toBeNull();
+  });
+
+  it("routes completed steam sessions back to review", () => {
+    expect(postActivityPage("steam", "espresso", { ...defaultSkinSettings, defaultReviewEnabled: false })).toBe("review");
   });
 });

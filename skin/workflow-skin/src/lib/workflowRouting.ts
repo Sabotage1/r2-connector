@@ -2,6 +2,7 @@ import type { ProfileRecord, ShotRecord, Workflow } from "../api/types";
 import { isMilkProfile, isReviewEnabled, type SkinSettings } from "../state/skinSettings";
 
 export type PostShotPage = "review" | "steam" | null;
+export type CompletedWorkflowActivity = "brew" | "steam";
 
 function workflowSkinExtras(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -20,9 +21,17 @@ export function selectedProfileIdFromWorkflow(workflow: Workflow | undefined, pr
   return profiles.find((profile) => profile.profile.title?.trim() === workflowTitle)?.id;
 }
 
-export function postShotPageForShot(shot: ShotRecord, settings: SkinSettings, profiles: ProfileRecord[]): PostShotPage {
-  const profileId = selectedProfileIdFromWorkflow(shot.workflow, profiles);
+export function postBrewPageForProfile(profileId: string | undefined, settings: SkinSettings): PostShotPage {
   if (isReviewEnabled(settings, profileId)) return "review";
   if (isMilkProfile(settings, profileId)) return "steam";
   return null;
+}
+
+export function postActivityPage(activity: CompletedWorkflowActivity, profileId: string | undefined, settings: SkinSettings): PostShotPage {
+  if (activity === "steam") return "review";
+  return postBrewPageForProfile(profileId, settings);
+}
+
+export function postShotPageForShot(shot: ShotRecord, settings: SkinSettings, profiles: ProfileRecord[]): PostShotPage {
+  return postBrewPageForProfile(selectedProfileIdFromWorkflow(shot.workflow, profiles), settings);
 }

@@ -118,7 +118,7 @@ test("top machine status stays compact beside action buttons", async ({ page }) 
       bar: bar ? { top: bar.top, bottom: bar.bottom } : null,
       indicators: indicators ? { left: indicators.left, right: indicators.right, top: indicators.top, bottom: indicators.bottom } : null,
       title: title ? { left: title.left, right: title.right, top: title.top, bottom: title.bottom } : null,
-      titleStyle: titleStyle ? { borderTopWidth: titleStyle.borderTopWidth, backgroundColor: titleStyle.backgroundColor } : null,
+      titleStyle: titleStyle ? { borderTopWidth: titleStyle.borderTopWidth, backgroundColor: titleStyle.backgroundColor, textAlign: titleStyle.textAlign } : null,
       actions: actions ? { left: actions.left, right: actions.right, top: actions.top, bottom: actions.bottom } : null,
       buttons: buttons.map((button) => ({ left: button.left, right: button.right })),
       viewportCenter: window.innerWidth / 2
@@ -137,6 +137,7 @@ test("top machine status stays compact beside action buttons", async ({ page }) 
   expect(metrics.title!.right).toBeGreaterThan(metrics.viewportCenter);
   expect(metrics.title!.right - metrics.title!.left).toBeLessThanOrEqual(170);
   expect(metrics.titleStyle!.borderTopWidth).toBe("0px");
+  expect(metrics.titleStyle!.textAlign).toBe("center");
   expect(metrics.buttons).toHaveLength(2);
   expect(metrics.buttons[0].right).toBeLessThanOrEqual(metrics.buttons[1].left - 8);
 });

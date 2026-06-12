@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import skinManifest from "../../skin-manifest.json";
@@ -51,6 +51,7 @@ function mockReaFetch(
 ) {
   let savedSettings = initialSettings;
   let workflow = options.workflow ?? { context: { targetDoseWeight: 18, targetYield: 36 } };
+  let shots = options.shots ?? [];
   let workflowUpdateCount = 0;
   let displayState = options.displayState ?? { brightness: 100, wakeLockOverride: true };
   let machineState = options.machineState ?? { connected: true, wifi: { connected: true, ipAddress: "192.168.1.20" } };
@@ -134,7 +135,8 @@ function mockReaFetch(
     }
     if (method === "GET" && url.pathname === "/api/v1/beans") return responseJson([]);
     if (method === "GET" && url.pathname === "/api/v1/grinders") return responseJson([]);
-    if (method === "GET" && url.pathname === "/api/v1/shots") return responseJson({ items: options.shots ?? [], total: options.shots?.length ?? 0, limit: 100, offset: 0 });
+    if (method === "GET" && url.pathname === "/api/v1/shots") return responseJson({ items: shots, total: shots.length, limit: 100, offset: 0 });
+    if (method === "GET" && url.pathname === "/api/v1/shots/latest") return responseJson(shots[0] ?? null);
     if (method === "GET" && url.pathname === "/api/v1/steams") return responseJson(options.steams ?? []);
     if (method === "GET" && url.pathname === "/api/v1/sensors") return responseJson(sensors);
     if (method === "GET" && url.pathname === "/api/v1/plugins") return responseJson(options.plugins ?? []);
@@ -210,6 +212,12 @@ function mockReaFetch(
     },
     get displayState() {
       return displayState;
+    },
+    setMachineState(next: MachineState) {
+      machineState = next;
+    },
+    setShots(next: ShotRecord[]) {
+      shots = next;
     }
   };
 }
@@ -250,6 +258,7 @@ describe("App shell", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
     localStorage.clear();
   });
 
@@ -282,6 +291,18 @@ describe("App shell", () => {
     expect(topbar).toHaveTextContent("91.2°C");
     expect(within(topbar).getByRole("button", { name: "WiFi" })).toBeInTheDocument();
     expect(screen.queryByLabelText("App title")).not.toBeInTheDocument();
+  });
+
+  it("shortens PreparingForShot in the machine header", async () => {
+    mockReaFetch(initialSettings, {
+      machineState: { connected: true, state: { state: "PreparingForShot" }, groupTemperature: 88.3 }
+    });
+    render(<App />);
+
+    const topbar = await screen.findByRole("banner", { name: "Machine status bar" });
+
+    expect(topbar).toHaveTextContent("Preparing");
+    expect(topbar).not.toHaveTextContent("PreparingForShot");
   });
 
   it("renders on older WebViews without Array.prototype.at", async () => {
@@ -585,6 +606,105 @@ describe("App shell", () => {
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
+  });
+
+  it("routes one second after espresso returns idle without sending non-milk shots to steam", async () => {
+    vi.useFakeTimers();
+    const shot: ShotRecord = {
+      id: "shot-idle-1",
+      timestamp: "2026-06-12T10:00:00.000Z",
+      workflow: {
+        profile: profiles[0].profile,
+        context: { extras: { workflowSkin: { selectedProfileId: "p1" } } }
+      },
+      measurements: []
+    };
+    const fetchState = mockReaFetch(
+      { ...initialSettings, defaultReviewEnabled: false },
+      {
+        machineState: { connected: true, state: { state: "espresso", substate: "pouring" } },
+        shots: [shot]
+      }
+    );
+    render(<App />);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
+
+    fetchState.setMachineState({ connected: true, state: { state: "idle" } });
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(999);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("heading", { name: "Brew" })).toBeInTheDocument();
+    expect(screen.queryByText("Steam Workflow")).not.toBeInTheDocument();
+  });
+
+  it("routes milk profiles to steam one second after espresso returns idle when review is disabled", async () => {
+    vi.useFakeTimers();
+    const shot: ShotRecord = {
+      id: "shot-milk-1",
+      timestamp: "2026-06-12T10:00:00.000Z",
+      workflow: {
+        profile: profiles[0].profile,
+        context: { extras: { workflowSkin: { selectedProfileId: "p1" } } }
+      },
+      measurements: []
+    };
+    const fetchState = mockReaFetch(
+      {
+        ...initialSettings,
+        defaultReviewEnabled: false,
+        profileWorkflows: { p1: { milkBased: true, steamTimers: { small: 20, medium: 30, large: 40 } } }
+      },
+      {
+        machineState: { connected: true, state: { state: "espresso", substate: "pouring" } },
+        shots: [shot]
+      }
+    );
+    render(<App />);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
+    fetchState.setMachineState({ connected: true, state: { state: "idle" } });
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(1_000);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Steam Workflow")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Blooming" })).toBeInTheDocument();
   });
 
   it("auto sleeps the machine after the configured idle timer", async () => {

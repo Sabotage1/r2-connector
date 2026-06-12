@@ -13,6 +13,7 @@ import { ScreensaverPage } from "../pages/ScreensaverPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { SteamPage } from "../pages/SteamPage";
 import { screensaverArt } from "../lib/screensaverArt";
+import { screensaverQuotes } from "../lib/screensaverQuotes";
 import type { ProfileRecord, ShotRecord } from "../api/types";
 import { defaultSkinSettings } from "../state/skinSettings";
 
@@ -934,6 +935,7 @@ describe("GrindersPage", () => {
 describe("ScreensaverPage", () => {
   it("has 15 dark generated coffee pictures for sleep mode", () => {
     expect(screensaverArt).toHaveLength(15);
+    expect(screensaverQuotes.length).toBeGreaterThanOrEqual(15);
     render(<ScreensaverPage title="WorkFlow" onWake={vi.fn()} />);
 
     expect(screen.getByLabelText("Screensaver mode")).toHaveStyle({ backgroundColor: "#020506" });
@@ -943,6 +945,8 @@ describe("ScreensaverPage", () => {
     render(<ScreensaverPage title="Roy Decent" onWake={vi.fn()} />);
 
     expect(screen.getByRole("heading", { name: "WorkFlow" })).toBeInTheDocument();
-    expect(screen.getByText("Roy Decent")).toHaveClass("screensaver-subtitle");
+    expect(screen.queryByText("Roy Decent")).not.toBeInTheDocument();
+    const visibleQuote = screensaverQuotes.map((quote) => screen.queryByText(quote)).find(Boolean);
+    expect(visibleQuote).toHaveClass("screensaver-subtitle");
   });
 });

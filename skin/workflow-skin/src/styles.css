@@ -140,10 +140,10 @@ textarea {
   min-width: 0;
   max-width: 170px;
   display: grid;
-  justify-items: end;
+  justify-items: center;
   align-content: center;
   padding: 0 2px;
-  text-align: right;
+  text-align: center;
 }
 
 .top-machine-status::before,

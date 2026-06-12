@@ -22,7 +22,7 @@ import { uploadShotToVisualizer } from "./api/visualizer";
 import type { Bag } from "./lib/bags";
 import { buildConnectivityStatuses } from "./lib/connectivity";
 import type { ConnectivityStatus } from "./lib/connectivity";
-import { postShotPageForShot, selectedProfileIdFromWorkflow } from "./lib/workflowRouting";
+import { postActivityPage, selectedProfileIdFromWorkflow, type CompletedWorkflowActivity } from "./lib/workflowRouting";
 import { BagsPage } from "./pages/BagsPage";
 import { BrewPage } from "./pages/BrewPage";
 import { GrindersPage } from "./pages/GrindersPage";
@@ -49,6 +49,9 @@ import { useLiveTelemetry } from "./state/useLiveTelemetry";
 import { useReaData } from "./state/useReaData";
 
 type Page = MainMenuItemId | "screensaver";
+
+const POST_ACTIVITY_ROUTE_DELAY_MS = 1000;
+const ACTIVE_MACHINE_STATE_POLL_MS = 500;
 
 interface TopStatusIndicator {
   id: TopStatusIndicatorId;
@@ -334,6 +337,20 @@ function isBrewingMode(state: string | undefined): boolean {
   return state === "espresso" || state === "brewing";
 }
 
+function isSteamingMode(state: string | undefined): boolean {
+  return state === "steam" || state === "steaming";
+}
+
+function isIdleMode(state: string | undefined): boolean {
+  return state === "idle";
+}
+
+function workflowActivityForMode(state: string | undefined): CompletedWorkflowActivity | null {
+  if (isBrewingMode(state)) return "brew";
+  if (isSteamingMode(state)) return "steam";
+  return null;
+}
+
 function isSleepingMode(state: string | undefined): boolean {
   return state === "sleeping";
 }
@@ -354,6 +371,8 @@ function machineModeLabel(machineState: MachineState | null, liveMachine: ShotSn
   const state = liveMachine?.state?.state ?? machineState?.state?.state;
   const substate = liveMachine?.state?.substate ?? machineState?.state?.substate;
   if (!state) return machineState?.connected === false ? "Disconnected" : "Idle";
+  const compactState = state.replace(/[\s_-]/g, "").toLowerCase();
+  if (compactState === "preparingforshot") return "Preparing";
   const title = state.replace(/_/g, " ");
   const cased = `${title.charAt(0).toUpperCase()}${title.slice(1)}`;
   return substate ? `${cased} · ${substate.replace(/_/g, " ")}` : cased;
@@ -481,6 +500,8 @@ export function App() {
   const [lastUseAt, setLastUseAt] = useState(() => Date.now());
   const [startupApplyTick, setStartupApplyTick] = useState(0);
   const [r2RefreshBusy, setR2RefreshBusy] = useState(false);
+  const [lastCompletedProfileId, setLastCompletedProfileId] = useState<string | undefined>();
+  const [fastMachineState, setFastMachineState] = useState<MachineState | null>(null);
   const startupProfileApplyRef = useRef<{ profileId: string | null; attempts: number; pending: boolean }>({ profileId: null, attempts: 0, pending: false });
   const startupConnectRef = useRef(false);
   const skinAutoUpdateRef = useRef(false);
@@ -490,6 +511,8 @@ export function App() {
   const sleepMachineRef = useRef<(() => Promise<void>) | null>(null);
   const lastUseAtRef = useRef(lastUseAt);
   const autoSleepPendingRef = useRef(false);
+  const completedActivityRef = useRef<{ activity: CompletedWorkflowActivity; profileId?: string } | null>(null);
+  const completedActivityTimerRef = useRef<number | null>(null);
   const api = useMemo(() => new ReaPrimeApi(), []);
   const data = useReaData(api);
   const liveTelemetry = useLiveTelemetry(undefined, { recordIdle: page === "live" });
@@ -498,8 +521,9 @@ export function App() {
   const configuredR2Sensor = data.settings.r2SensorId ? data.sensors.find((sensor) => sensor.id === data.settings.r2SensorId) ?? null : null;
   const r2Sensor = configuredR2Sensor ?? detectedR2Sensor;
   const selectedProfileId = selectedProfileIdFromWorkflow(data.workflow, data.profiles);
-  const activeProfile = data.profiles.find((profile) => profile.id === selectedProfileId);
-  const activeProfileWorkflow = profileWorkflowFor(data.settings, selectedProfileId);
+  const workflowPageProfileId = selectedProfileId ?? (page === "steam" || page === "review" ? lastCompletedProfileId : undefined);
+  const activeProfile = data.profiles.find((profile) => profile.id === workflowPageProfileId);
+  const activeProfileWorkflow = profileWorkflowFor(data.settings, workflowPageProfileId);
   const visualizerPlugin = data.plugins?.find((plugin) => plugin.id === "visualizer.reaplugin") ?? null;
   const shownProfiles = useMemo(
     () => data.profiles.filter((profile) => isProfileShown(data.settings, profile.id)),
@@ -515,7 +539,7 @@ export function App() {
     return shownProfiles.filter((profile) => !assignedProfileIds.has(profile.id));
   }, [data.settings.presetSlots, editingSlotIndex, shownProfiles]);
   const machineConnected = Boolean(data.machineState && data.machineState.connected !== false);
-  const currentMachineMode = liveTelemetry.machineMode?.state ?? data.machineState?.state?.state;
+  const currentMachineMode = fastMachineState?.state?.state ?? liveTelemetry.machineMode?.state ?? data.machineState?.state?.state;
   const statuses = useMemo(
     () =>
       buildConnectivityStatuses({
@@ -638,6 +662,83 @@ export function App() {
   }, [currentMachineMode, data.loaded, page]);
 
   useEffect(() => {
+    if (!data.loaded) return;
+    const shouldPollMachineState = Boolean(workflowActivityForMode(currentMachineMode) || completedActivityRef.current);
+    if (!shouldPollMachineState) {
+      setFastMachineState(null);
+      return;
+    }
+
+    let cancelled = false;
+    const pollMachineState = async () => {
+      const nextState = await api.getMachineState().catch(() => null);
+      if (!cancelled && nextState) setFastMachineState(nextState);
+    };
+
+    void pollMachineState();
+    const interval = window.setInterval(() => {
+      void pollMachineState();
+    }, ACTIVE_MACHINE_STATE_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [api, currentMachineMode, data.loaded, page]);
+
+  const routeCompletedActivity = useCallback(
+    async (completed: { activity: CompletedWorkflowActivity; profileId?: string }) => {
+      await data.refresh();
+      if (completed.activity === "brew") {
+        const latestCompletedShot = await api.getLatestShot().catch(() => latestShot);
+        if (latestCompletedShot && r2Sensor && autoReadR2ShotIdRef.current !== latestCompletedShot.id) {
+          autoReadR2ShotIdRef.current = latestCompletedShot.id;
+          setAutoReadR2ShotId(latestCompletedShot.id);
+        }
+
+        const completedProfileId = completed.profileId ?? selectedProfileIdFromWorkflow(latestCompletedShot?.workflow, data.profiles);
+        setLastCompletedProfileId(completedProfileId);
+        const nextPage = postActivityPage("brew", completedProfileId, data.settings);
+        setPage(nextPage ?? "brew");
+        return;
+      }
+
+      setPage("review");
+    },
+    [api, data.profiles, data.refresh, data.settings, latestShot, r2Sensor]
+  );
+
+  useEffect(() => {
+    if (!data.loaded) return;
+
+    const activeActivity = workflowActivityForMode(currentMachineMode);
+    if (activeActivity) {
+      completedActivityRef.current = { activity: activeActivity, profileId: selectedProfileId };
+      if (completedActivityTimerRef.current !== null) {
+        window.clearTimeout(completedActivityTimerRef.current);
+        completedActivityTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (!isIdleMode(currentMachineMode) || !completedActivityRef.current || completedActivityTimerRef.current !== null) return;
+
+    const completed = completedActivityRef.current;
+    completedActivityTimerRef.current = window.setTimeout(() => {
+      completedActivityTimerRef.current = null;
+      completedActivityRef.current = null;
+      void routeCompletedActivity(completed);
+    }, POST_ACTIVITY_ROUTE_DELAY_MS);
+  }, [currentMachineMode, data.loaded, routeCompletedActivity, selectedProfileId]);
+
+  useEffect(() => {
+    return () => {
+      if (completedActivityTimerRef.current !== null) {
+        window.clearTimeout(completedActivityTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     const updateFullscreenState = () => setFullscreen(Boolean(currentFullscreenElement()));
     updateFullscreenState();
     document.addEventListener("fullscreenchange", updateFullscreenState);
@@ -649,7 +750,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (isBrewingMode(currentMachineMode)) setLastUseAt(Date.now());
+    if (workflowActivityForMode(currentMachineMode)) setLastUseAt(Date.now());
   }, [currentMachineMode]);
 
   useEffect(() => {
@@ -684,13 +785,11 @@ export function App() {
     knownLatestShotIdRef.current = latestShotId;
     if (!latestShot) return;
 
-    const nextPage = postShotPageForShot(latestShot, data.settings, data.profiles);
     if (r2Sensor && autoReadR2ShotIdRef.current !== latestShot.id) {
       autoReadR2ShotIdRef.current = latestShot.id;
       setAutoReadR2ShotId(latestShot.id);
     }
-    if (nextPage) setPage(nextPage);
-  }, [data.loaded, latestShot, data.settings, data.profiles, r2Sensor]);
+  }, [data.loaded, latestShot, r2Sensor]);
 
   const toggleReview = async (profileId: string, enabled: boolean) => {
     try {
