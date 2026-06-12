@@ -570,6 +570,21 @@ describe("App shell", () => {
     expect(exitFullscreen).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the app title and top action buttons in a shared top bar", async () => {
+    mockReaFetch(initialSettings);
+    const { container } = render(<App />);
+
+    await screen.findByRole("heading", { name: "Brew" });
+    const topbar = container.querySelector(".page-topbar") as HTMLElement;
+    const actions = container.querySelector(".page-top-actions") as HTMLElement;
+    const title = screen.getByLabelText("App title");
+
+    expect(topbar).toBeInTheDocument();
+    expect(topbar).toContainElement(title);
+    expect(topbar).toContainElement(actions);
+    expect(within(actions).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Sleep machine", "Enter fullscreen"]);
+  });
+
   it("reveals the machine IP when the WiFi status is pressed", async () => {
     mockReaFetch(initialSettings, {
       machineState: { connected: true, wifi: { connected: true, ipAddress: "10.0.0.25" } }

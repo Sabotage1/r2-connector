@@ -347,6 +347,21 @@ describe("ReaPrimeApi", () => {
     );
   });
 
+  it("executes sensor commands with raw Bluetooth-style sensor ids", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ status: "ok", result: { reading: { tds: 9.7 } } }), { status: 200 }));
+    const api = new ReaPrimeApi("http://machine:8080");
+
+    await expect(api.executeSensor("F4:12:FA:FA:AC:E3", "measure", { timeout: 30 })).resolves.toEqual({
+      status: "ok",
+      result: { reading: { tds: 9.7 } }
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "http://machine:8080/api/v1/sensors/F4:12:FA:FA:AC:E3/execute",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ commandId: "measure", params: { timeout: 30 } }) })
+    );
+  });
+
   it("wraps WebUI skin update and GitHub release install APIs", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init = {}) => {
       const url = new URL(String(input));

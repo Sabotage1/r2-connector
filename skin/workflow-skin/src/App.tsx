@@ -975,30 +975,32 @@ export function App() {
         })}
       </nav>
       <section className="page-surface">
-        <div className="page-top-actions">
-          <button
-            type="button"
-            className="sleep-button"
-            aria-label="Sleep machine"
-            title={machineConnected ? "Sleep machine" : "Machine is not connected"}
-            disabled={!machineConnected || sleepPending}
-            onClick={() => void sleepMachine()}
-          >
-            <Moon size={17} />
-            <span>{sleepPending ? "Sleeping" : "Sleep"}</span>
-          </button>
-          <button
-            type="button"
-            className="sleep-button fullscreen-button"
-            aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-            title={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-            onClick={() => void toggleFullscreen()}
-          >
-            {fullscreen ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
-            <span>{fullscreen ? "Exit" : "Full"}</span>
-          </button>
+        <div className="page-topbar">
+          <AppHeadline title={data.settings.skinTitle} />
+          <div className="page-top-actions">
+            <button
+              type="button"
+              className="sleep-button"
+              aria-label="Sleep machine"
+              title={machineConnected ? "Sleep machine" : "Machine is not connected"}
+              disabled={!machineConnected || sleepPending}
+              onClick={() => void sleepMachine()}
+            >
+              <Moon size={17} />
+              <span>{sleepPending ? "Sleeping" : "Sleep"}</span>
+            </button>
+            <button
+              type="button"
+              className="sleep-button fullscreen-button"
+              aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+              title={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+              onClick={() => void toggleFullscreen()}
+            >
+              {fullscreen ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
+              <span>{fullscreen ? "Exit" : "Full"}</span>
+            </button>
+          </div>
         </div>
-        <AppHeadline title={data.settings.skinTitle} />
         <h1>{navById[page].label}</h1>
         {data.error && (
           <p className="muted" role="alert" aria-live="assertive">

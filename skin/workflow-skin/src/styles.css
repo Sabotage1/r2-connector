@@ -239,13 +239,25 @@ textarea {
   contain: layout paint;
 }
 
-.page-top-actions {
-  position: absolute;
+.page-topbar {
+  position: relative;
   z-index: 2;
-  top: 18px;
-  right: 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 300px) max-content;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+  margin-bottom: 14px;
+}
+
+.page-top-actions {
+  grid-column: 3;
+  justify-self: end;
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 8px;
+  min-width: max-content;
 }
 
 .sleep-button {
@@ -277,12 +289,14 @@ textarea {
 }
 
 .app-headline {
+  grid-column: 2;
+  grid-row: 1;
   position: relative;
   display: grid;
   place-items: center;
-  width: min(360px, calc(100% - 230px));
+  width: 100%;
   min-height: 42px;
-  margin: 0 auto 14px;
+  margin: 0;
   border: 1px solid #3a4853;
   border-radius: 8px;
   padding: 8px 40px;
@@ -1183,9 +1197,21 @@ textarea {
     padding: 18px;
   }
 
+  .page-topbar {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+
   .page-top-actions {
-    position: static;
-    margin-bottom: 12px;
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: stretch;
+    min-width: 0;
+  }
+
+  .page-top-actions .sleep-button {
+    flex: 1 1 0;
   }
 
   .sleep-button {
@@ -1193,9 +1219,10 @@ textarea {
   }
 
   .app-headline {
+    grid-column: 1;
+    grid-row: 1;
     width: 100%;
     min-height: 46px;
-    margin-bottom: 18px;
     padding: 10px 42px;
   }
 
