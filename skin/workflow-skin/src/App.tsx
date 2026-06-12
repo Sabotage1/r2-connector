@@ -8,6 +8,8 @@ import {
   Flame,
   Gauge,
   History,
+  Maximize2,
+  Minimize2,
   Moon,
   NotebookPen,
   PackageOpen,
@@ -225,6 +227,34 @@ function isSleepingMode(state: string | undefined): boolean {
   return state === "sleeping";
 }
 
+type FullscreenDocument = Document & {
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void> | void;
+};
+
+type FullscreenElement = HTMLElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void;
+};
+
+function currentFullscreenElement(): Element | null {
+  const fullscreenDocument = document as FullscreenDocument;
+  return document.fullscreenElement ?? fullscreenDocument.webkitFullscreenElement ?? null;
+}
+
+function requestAppFullscreen(): Promise<void> {
+  const element = document.documentElement as FullscreenElement;
+  if (element.requestFullscreen) return element.requestFullscreen();
+  if (element.webkitRequestFullscreen) return Promise.resolve(element.webkitRequestFullscreen());
+  return Promise.reject(new Error("Fullscreen is not supported on this device."));
+}
+
+function exitAppFullscreen(): Promise<void> {
+  const fullscreenDocument = document as FullscreenDocument;
+  if (document.exitFullscreen) return document.exitFullscreen();
+  if (fullscreenDocument.webkitExitFullscreen) return Promise.resolve(fullscreenDocument.webkitExitFullscreen());
+  return Promise.reject(new Error("Fullscreen is not supported on this device."));
+}
+
 function SidebarStatus({
   statuses,
   expandedStatusId,
@@ -283,11 +313,13 @@ export function App() {
   const [availableSkinVersion, setAvailableSkinVersion] = useState<string | null>(null);
   const [mainMenuEditing, setMainMenuEditing] = useState(false);
   const [expandedStatusId, setExpandedStatusId] = useState<ConnectivityStatus["id"] | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
   const [lastUseAt, setLastUseAt] = useState(() => Date.now());
   const startupAppliedRef = useRef(false);
   const startupConnectRef = useRef(false);
   const skinAutoUpdateRef = useRef(false);
   const knownLatestShotIdRef = useRef<string | null | undefined>(undefined);
+  const sleepMachineRef = useRef<(() => Promise<void>) | null>(null);
   const api = useMemo(() => new ReaPrimeApi(), []);
   const data = useReaData(api);
   const liveTelemetry = useLiveTelemetry(undefined, { recordIdle: page === "live" });
@@ -393,6 +425,17 @@ export function App() {
     if (!data.loaded || page === "live" || page === "screensaver") return;
     if (isBrewingMode(currentMachineMode)) setPage("live");
   }, [currentMachineMode, data.loaded, page]);
+
+  useEffect(() => {
+    const updateFullscreenState = () => setFullscreen(Boolean(currentFullscreenElement()));
+    updateFullscreenState();
+    document.addEventListener("fullscreenchange", updateFullscreenState);
+    document.addEventListener("webkitfullscreenchange", updateFullscreenState);
+    return () => {
+      document.removeEventListener("fullscreenchange", updateFullscreenState);
+      document.removeEventListener("webkitfullscreenchange", updateFullscreenState);
+    };
+  }, []);
 
   useEffect(() => {
     if (isBrewingMode(currentMachineMode)) setLastUseAt(Date.now());
@@ -767,6 +810,10 @@ export function App() {
     }
   }, [api, data.refresh, data.settings.screensaverBrightness]);
 
+  useEffect(() => {
+    sleepMachineRef.current = sleepMachine;
+  }, [sleepMachine]);
+
   const wakeScreen = async () => {
     await api.setDisplayBrightness(100).catch(() => undefined);
     if (data.settings.keepScreenAwake !== false) {
@@ -790,12 +837,12 @@ export function App() {
     const delay = Math.max(50, idleLimitMs - (Date.now() - lastUseAt));
     const timer = window.setTimeout(() => {
       if (Date.now() - lastUseAt >= idleLimitMs) {
-        void sleepMachine();
+        void sleepMachineRef.current?.();
       }
     }, delay);
 
     return () => window.clearTimeout(timer);
-  }, [currentMachineMode, data.loaded, data.settings.autoSleepMinutes, lastUseAt, machineConnected, page, sleepMachine]);
+  }, [currentMachineMode, data.loaded, data.settings.autoSleepMinutes, lastUseAt, machineConnected, page]);
 
   const forceScaleConnection = async () => {
     setStatus({ type: "success", message: "Trying to connect scale." });
@@ -824,6 +871,19 @@ export function App() {
 
   const toggleMenuCollapsed = async () => {
     await persistSettings({ ...data.settings, menuCollapsed: !data.settings.menuCollapsed });
+  };
+
+  const toggleFullscreen = async () => {
+    try {
+      if (currentFullscreenElement()) {
+        await exitAppFullscreen();
+      } else {
+        await requestAppFullscreen();
+      }
+      setFullscreen(Boolean(currentFullscreenElement()));
+    } catch (error) {
+      setStatus({ type: "error", message: `Could not toggle fullscreen: ${errorMessage(error)}` });
+    }
   };
 
   if (page === "screensaver") {
@@ -926,6 +986,16 @@ export function App() {
           >
             <Moon size={17} />
             <span>{sleepPending ? "Sleeping" : "Sleep"}</span>
+          </button>
+          <button
+            type="button"
+            className="sleep-button fullscreen-button"
+            aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+            title={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+            onClick={() => void toggleFullscreen()}
+          >
+            {fullscreen ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
+            <span>{fullscreen ? "Exit" : "Full"}</span>
           </button>
         </div>
         <AppHeadline title={data.settings.skinTitle} />

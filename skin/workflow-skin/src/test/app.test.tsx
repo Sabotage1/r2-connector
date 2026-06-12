@@ -537,6 +537,39 @@ describe("App shell", () => {
     expect(fetchState.fetchMock).toHaveBeenCalledWith("http://localhost:8080/api/v1/display/wakelock", expect.objectContaining({ method: "POST" }));
   });
 
+  it("shows a fullscreen button to the right of sleep and toggles native fullscreen", async () => {
+    let fullscreenElement: Element | null = null;
+    const requestFullscreen = vi.fn().mockImplementation(() => {
+      fullscreenElement = document.documentElement;
+      document.dispatchEvent(new Event("fullscreenchange"));
+      return Promise.resolve();
+    });
+    const exitFullscreen = vi.fn().mockImplementation(() => {
+      fullscreenElement = null;
+      document.dispatchEvent(new Event("fullscreenchange"));
+      return Promise.resolve();
+    });
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => fullscreenElement });
+    Object.defineProperty(document.documentElement, "requestFullscreen", { configurable: true, value: requestFullscreen });
+    Object.defineProperty(document, "exitFullscreen", { configurable: true, value: exitFullscreen });
+
+    mockReaFetch(initialSettings);
+    const { container } = render(<App />);
+    const actions = container.querySelector(".page-top-actions") as HTMLElement;
+
+    expect(actions).toBeInTheDocument();
+    expect(within(actions).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Sleep machine", "Enter fullscreen"]);
+
+    await userEvent.click(await within(actions).findByRole("button", { name: "Enter fullscreen" }));
+
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(await within(actions).findByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument();
+
+    await userEvent.click(within(actions).getByRole("button", { name: "Exit fullscreen" }));
+
+    expect(exitFullscreen).toHaveBeenCalledTimes(1);
+  });
+
   it("reveals the machine IP when the WiFi status is pressed", async () => {
     mockReaFetch(initialSettings, {
       machineState: { connected: true, wifi: { connected: true, ipAddress: "10.0.0.25" } }

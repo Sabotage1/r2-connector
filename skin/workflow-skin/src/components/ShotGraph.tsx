@@ -24,40 +24,40 @@ const SERIES_DEFINITIONS: SeriesDefinition[] = [
   {
     key: "pressure",
     label: "Pressure",
-    color: "#50c17b",
+    color: "#76d99b",
     value: (measurement) => numeric(measurement.machine?.pressure)
   },
   {
     key: "flow",
     label: "Flow",
-    color: "#7ca8ff",
+    color: "#8fb7ff",
     value: (measurement) => numeric(measurement.machine?.flow)
   },
   {
     key: "targetPressure",
     label: "Target pressure",
-    color: "#7fcf9f",
+    color: "#b2e9c5",
     dashArray: "6 5",
     value: (measurement) => numeric(measurement.machine?.targetPressure)
   },
   {
     key: "targetFlow",
     label: "Target flow",
-    color: "#a9c6ff",
+    color: "#c3d8ff",
     dashArray: "6 5",
     value: (measurement) => numeric(measurement.machine?.targetFlow)
   },
   {
     key: "groupTemperature",
     label: "Temp / 10",
-    color: "#ff5a67",
+    color: "#f0a46c",
     value: (measurement) => numeric(measurement.machine?.groupTemperature) ?? numeric(measurement.machine?.mixTemperature),
     scale: (value) => value / 10
   },
   {
     key: "targetTemperature",
     label: "Target temp",
-    color: "#ff97a0",
+    color: "#ffd2a8",
     dashArray: "6 5",
     value: (measurement) => numeric(measurement.machine?.targetGroupTemperature) ?? numeric(measurement.machine?.targetMixTemperature),
     scale: (value) => value / 10
@@ -65,7 +65,7 @@ const SERIES_DEFINITIONS: SeriesDefinition[] = [
   {
     key: "weightFlow",
     label: "Weight flow",
-    color: "#8a6d1c",
+    color: "#d8c16b",
     value: (measurement) => numeric(measurement.scale?.weightFlow)
   }
 ];
@@ -154,7 +154,7 @@ export function ShotGraph({ measurements }: { measurements: ShotSnapshot[] }) {
 
   return (
     <svg className="shot-graph" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Shot pressure graph">
-      <rect width={width} height={height} rx="8" fill="#10161b" />
+      <rect width={width} height={height} rx="8" fill="#0d141a" />
       {series.length ? (
         <>
           <rect className="shot-graph-plot" x={plot.x} y={plot.y} width={plot.width} height={plot.height} rx="4" />

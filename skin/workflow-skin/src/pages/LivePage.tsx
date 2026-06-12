@@ -1,4 +1,4 @@
-import type { ProfileRecord, ShotRecord, ShotSnapshot, WeightSnapshot, Workflow } from "../api/types";
+import type { JsonMap, ProfileRecord, ShotRecord, ShotSnapshot, WeightSnapshot, Workflow } from "../api/types";
 import { MetricTile } from "../components/MetricTile";
 import { ShotGraph } from "../components/ShotGraph";
 import { shotStats } from "../lib/shotStats";
@@ -37,6 +37,78 @@ function profileName(activeProfile: ProfileRecord | undefined, workflow: Workflo
   return activeProfile?.profile.title ?? workflow.profile?.title ?? "Selected profile";
 }
 
+function numericStepValue(step: JsonMap | undefined, key: string): number | null {
+  const value = step?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function stringStepValue(step: JsonMap | undefined, key: string): string | null {
+  const value = step?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function nestedStepMap(step: JsonMap, key: string): JsonMap | null {
+  const value = step[key];
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonMap) : null;
+}
+
+function nestedNumberValue(value: JsonMap | null, key: string): number | null {
+  const item = value?.[key];
+  return typeof item === "number" && Number.isFinite(item) ? item : null;
+}
+
+function nestedStringValue(value: JsonMap | null, key: string): string | null {
+  const item = value?.[key];
+  return typeof item === "string" && item.trim() ? item.trim() : null;
+}
+
+function profileSteps(activeProfile: ProfileRecord | undefined, workflow: Workflow): JsonMap[] {
+  return activeProfile?.profile.steps ?? workflow.profile?.steps ?? [];
+}
+
+function currentStepInfo(steps: JsonMap[], elapsedSeconds: number | null) {
+  if (steps.length === 0) return null;
+  const elapsed = elapsedSeconds ?? 0;
+  let endAt = 0;
+
+  for (let index = 0; index < steps.length; index += 1) {
+    const step = steps[index];
+    endAt += numericStepValue(step, "seconds") ?? 0;
+    if (elapsed <= endAt || index === steps.length - 1) {
+      const startsAt = endAt - (numericStepValue(step, "seconds") ?? 0);
+      return { step, index, startsAt, endAt };
+    }
+  }
+
+  return null;
+}
+
+function goalLine(step: JsonMap, time: number | null): string {
+  const pump = stringStepValue(step, "pump");
+  const pressure = numericStepValue(step, "pressure");
+  const flow = numericStepValue(step, "flow");
+  const temperature = numericStepValue(step, "temperature");
+  const weight = numericStepValue(step, "weight");
+  const exit = nestedStepMap(step, "exit");
+  const exitType = nestedStringValue(exit, "type");
+  const exitCondition = nestedStringValue(exit, "condition");
+  const exitValue = nestedNumberValue(exit, "value");
+  const limiter = nestedStepMap(step, "limiter");
+  const limiterValue = nestedNumberValue(limiter, "value");
+  const limiterRange = nestedNumberValue(limiter, "range");
+  const goals = [
+    pressure !== null ? `Pressure ${pressure.toFixed(2)} bar` : null,
+    flow !== null ? `Flow ${flow.toFixed(2)} mL/s` : null,
+    temperature !== null ? `Temp ${temperature.toFixed(2)} °C` : null,
+    weight !== null && weight > 0 ? `Weight ${weight.toFixed(2)} g` : null,
+    exitType && exitCondition && exitValue !== null ? `Exit ${exitType} ${exitCondition} ${exitValue.toFixed(2)}` : null,
+    limiterValue !== null && limiterRange !== null ? `Limiter ${limiterValue.toFixed(2)} +/- ${limiterRange.toFixed(2)}` : null,
+    time !== null ? `Ends at ${Math.round(time)}s` : null
+  ].filter(Boolean);
+
+  return [pump ? `${pump[0].toUpperCase()}${pump.slice(1)} pump` : null, ...goals].filter(Boolean).join(" · ");
+}
+
 export function LivePage({
   workflow,
   activeProfile,
@@ -58,6 +130,8 @@ export function LivePage({
   const pressure = latest?.machine?.pressure ?? stats.averagePressure;
   const flow = liveFlow(measurements, scaleSnapshot) ?? stats.averageFlow;
   const waitingForData = measurements.length === 0 && !scaleSnapshot;
+  const steps = profileSteps(activeProfile, workflow);
+  const stepInfo = currentStepInfo(steps, time);
 
   return (
     <div className="live-grid">
@@ -72,7 +146,28 @@ export function LivePage({
           <MetricTile label="Brew Time" value={formatSeconds(time)} unit="s" />
         </div>
       </section>
-      <section className="panel wide light-graph-panel">
+      {stepInfo && (
+        <section className="panel wide live-step-panel">
+          <div className="live-step-heading">
+            <div>
+              <span className="eyebrow">Step {stepInfo.index + 1} of {steps.length}</span>
+              <h2>Step</h2>
+            </div>
+            <strong>{stringStepValue(stepInfo.step, "name") ?? `Step ${stepInfo.index + 1}`}</strong>
+          </div>
+          <div className="live-step-goals" aria-label="Current step goals">
+            {goalLine(stepInfo.step, stepInfo.endAt)
+              .split(" · ")
+              .map((goal) => (
+                <span key={goal}>{goal}</span>
+              ))}
+          </div>
+          <span className="muted">
+            {stringStepValue(stepInfo.step, "transition") ?? "fast"} transition · {stringStepValue(stepInfo.step, "sensor") ?? "coffee"} sensor
+          </span>
+        </section>
+      )}
+      <section className="panel wide dark-graph-panel">
         <ShotGraph measurements={measurements} />
       </section>
       <section className="panel">

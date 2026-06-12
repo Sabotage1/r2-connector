@@ -132,7 +132,27 @@ describe("LivePage", () => {
     render(
       <LivePage
         workflow={{ context: { targetDoseWeight: 18, targetYield: 36 } }}
-        activeProfile={profiles[0]}
+        activeProfile={{
+          id: "p1",
+          profile: {
+            title: "Blooming",
+            steps: [
+              { name: "Preinfusion", pump: "pressure", transition: "smooth", seconds: 8, pressure: 3, temperature: 92, sensor: "coffee" },
+              {
+                name: "Ramp",
+                pump: "flow",
+                transition: "fast",
+                seconds: 20,
+                flow: 2.5,
+                temperature: 93,
+                weight: 36,
+                sensor: "coffee",
+                exit: { type: "flow", condition: "under", value: 1.4 },
+                limiter: { value: 9, range: 0.6 }
+              }
+            ]
+          }
+        }}
         latestShot={null}
         liveMeasurements={[
           {
@@ -160,6 +180,10 @@ describe("LivePage", () => {
     expect(screen.getByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
     const graph = screen.getByRole("img", { name: "Shot pressure graph" });
     expect(graph).toBeInTheDocument();
+    expect(graph.closest("section")).toHaveClass("dark-graph-panel");
+    expect(graph.closest("section")).not.toHaveClass("light-graph-panel");
+    expect(graph.querySelector(".shot-graph-series.pressure")).toHaveAttribute("stroke", "#76d99b");
+    expect(graph.querySelector(".shot-graph-series.groupTemperature")).toHaveAttribute("stroke", "#f0a46c");
     expect(graph.querySelectorAll(".shot-graph-series")).toHaveLength(7);
     expect(within(graph).getByText("Target pressure")).toBeInTheDocument();
     expect(within(graph).getByText("Target flow")).toBeInTheDocument();
@@ -167,6 +191,15 @@ describe("LivePage", () => {
     expect(within(graph).getByText("Target temp")).toBeInTheDocument();
     expect(within(graph).getByText("Weight flow")).toBeInTheDocument();
     expect(screen.getByText("Blooming")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Step" })).toBeInTheDocument();
+    expect(screen.getByText("Step 2 of 2")).toBeInTheDocument();
+    expect(screen.getByText("Ramp")).toBeInTheDocument();
+    expect(screen.getByText("Flow 2.50 mL/s")).toBeInTheDocument();
+    expect(screen.getByText("Temp 93.00 °C")).toBeInTheDocument();
+    expect(screen.getByText("Weight 36.00 g")).toBeInTheDocument();
+    expect(screen.getByText("Exit flow under 1.40")).toBeInTheDocument();
+    expect(screen.getByText("Limiter 9.00 +/- 0.60")).toBeInTheDocument();
+    expect(screen.getByText("Ends at 28s")).toBeInTheDocument();
     expect(screen.getByLabelText("Weight: 36.35 g")).toBeInTheDocument();
     expect(screen.getByLabelText("Pressure: 8.57 bar")).toBeInTheDocument();
     expect(screen.getByLabelText("Flow: 1.85 g/s")).toBeInTheDocument();
@@ -424,6 +457,78 @@ describe("ProfilesPage", () => {
       expect.objectContaining({
         title: "Blooming v2",
         author: "Roy"
+      })
+    );
+  });
+
+  it("edits profile steps, exits, and limits while preserving unknown step fields", async () => {
+    const onSaveProfile = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ProfilesPage
+        profiles={[
+          {
+            id: "p1",
+            profile: {
+              title: "Blooming",
+              steps: [
+                {
+                  name: "Bloom",
+                  pump: "pressure",
+                  transition: "smooth",
+                  seconds: 10,
+                  weight: 0,
+                  volume: 40,
+                  temperature: 92,
+                  sensor: "coffee",
+                  pressure: 2,
+                  exit: { type: "pressure", condition: "over", value: 3 },
+                  limiter: { value: 8, range: 0.6 },
+                  customField: "keep-me"
+                }
+              ]
+            }
+          }
+        ]}
+        settings={defaultSkinSettings}
+        onToggleReview={vi.fn()}
+        onSetStartupProfile={vi.fn()}
+        onSetProfileShown={vi.fn()}
+        onUpdateProfileWorkflow={vi.fn()}
+        onSaveProfile={onSaveProfile}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit Blooming" }));
+
+    expect(screen.getByRole("heading", { name: "Profile Steps" })).toBeInTheDocument();
+    await userEvent.clear(screen.getByLabelText("Step 1 name"));
+    await userEvent.type(screen.getByLabelText("Step 1 name"), "Saturate");
+    fireEvent.change(screen.getByLabelText("Step 1 pressure goal"), { target: { value: "3.5" } });
+    fireEvent.change(screen.getByLabelText("Step 1 limiter value"), { target: { value: "9" } });
+    fireEvent.change(screen.getByLabelText("Step 1 limiter range"), { target: { value: "0.4" } });
+    fireEvent.change(screen.getByLabelText("Step 1 exit type"), { target: { value: "flow" } });
+    fireEvent.change(screen.getByLabelText("Step 1 exit condition"), { target: { value: "under" } });
+    fireEvent.change(screen.getByLabelText("Step 1 exit value"), { target: { value: "1.4" } });
+    await userEvent.click(screen.getByRole("button", { name: "Add step" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save Blooming" }));
+
+    expect(onSaveProfile).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({
+        steps: [
+          expect.objectContaining({
+            name: "Saturate",
+            pump: "pressure",
+            pressure: 3.5,
+            exit: { type: "flow", condition: "under", value: 1.4 },
+            limiter: { value: 9, range: 0.4 },
+            customField: "keep-me"
+          }),
+          expect.objectContaining({
+            name: "New step",
+            pump: "pressure"
+          })
+        ]
       })
     );
   });
