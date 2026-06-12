@@ -12,7 +12,7 @@ async function routeProfileEditorApi(page: Page) {
     reviewEnabledByProfile: {},
     profileWorkflows: {},
     shownProfileIds: profiles.map((profile) => profile.id),
-    skinTitle: "Workflow"
+    skinTitle: "WorkFlow"
   };
 
   await page.route("**/api/v1/**", async (route) => {
@@ -32,8 +32,8 @@ async function routeProfileEditorApi(page: Page) {
     else if (method === "GET" && url.pathname === "/api/v1/info") body = { localIp: "192.168.1.20", version: "0.7.6" };
     else if (method === "GET" && url.pathname === "/api/v1/display") body = { brightness: 100, wakeLockOverride: true };
     else if (method === "GET" && url.pathname === "/api/v1/plugins") body = [];
-    else if (method === "GET" && url.pathname === "/api/v1/webui/skins") body = [{ id: "workflow-skin", name: "Workflow Skin", version: "0.1.24" }];
-    else if (method === "GET" && url.pathname === "/api/v1/webui/skins/default") body = { id: "workflow-skin", name: "Workflow Skin", version: "0.1.24" };
+    else if (method === "GET" && url.pathname === "/api/v1/webui/skins") body = [{ id: "workflow-skin", name: "WorkFlow", version: "0.1.24" }];
+    else if (method === "GET" && url.pathname === "/api/v1/webui/skins/default") body = { id: "workflow-skin", name: "WorkFlow", version: "0.1.24" };
     else if (method === "GET" && url.pathname === "/api/v1/devices/scan") body = [];
     else if ((method === "POST" || method === "DELETE") && url.pathname === "/api/v1/display/wakelock") body = {};
     else if (method === "GET" && url.pathname === "/api/v1/machine/state") body = { connected: true, wifi: { connected: true, ipAddress: "192.168.1.20" } };
@@ -98,25 +98,32 @@ test("preset editor assigns a profile when a visible profile row is clicked", as
   expect(api.settings.presetSlots[0]).toEqual({ label: "Light", profileId: "profile-2" });
 });
 
-test("top title and machine action buttons do not overlap", async ({ page }) => {
+test("top machine status and action buttons do not overlap", async ({ page }) => {
   await routeProfileEditorApi(page);
 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Brew" })).toBeVisible();
+  await expect(page.getByLabel("WorkFlow menu title")).toContainText("WorkFlow");
 
   const metrics = await page.evaluate(() => {
-    const title = document.querySelector(".app-headline")?.getBoundingClientRect();
-    const actions = document.querySelector(".page-top-actions")?.getBoundingClientRect();
-    const buttons = Array.from(document.querySelectorAll(".page-top-actions .sleep-button")).map((button) => button.getBoundingClientRect());
+    const bar = document.querySelector(".top-status-bar")?.getBoundingClientRect();
+    const title = document.querySelector(".top-machine-status")?.getBoundingClientRect();
+    const actions = document.querySelector(".top-status-actions")?.getBoundingClientRect();
+    const buttons = Array.from(document.querySelectorAll(".top-status-actions .sleep-button")).map((button) => button.getBoundingClientRect());
     return {
+      bar: bar ? { top: bar.top, bottom: bar.bottom } : null,
       title: title ? { left: title.left, right: title.right, top: title.top, bottom: title.bottom } : null,
       actions: actions ? { left: actions.left, right: actions.right, top: actions.top, bottom: actions.bottom } : null,
-      buttons: buttons.map((button) => ({ left: button.left, right: button.right }))
+      buttons: buttons.map((button) => ({ left: button.left, right: button.right })),
+      viewportCenter: window.innerWidth / 2
     };
   });
 
+  expect(metrics.bar).not.toBeNull();
+  expect(metrics.bar!.top).toBe(0);
   expect(metrics.title).not.toBeNull();
   expect(metrics.actions).not.toBeNull();
+  expect((metrics.title!.left + metrics.title!.right) / 2).toBeCloseTo(metrics.viewportCenter, 0);
   expect(metrics.title!.right).toBeLessThanOrEqual(metrics.actions!.left - 8);
   expect(metrics.buttons).toHaveLength(2);
   expect(metrics.buttons[0].right).toBeLessThanOrEqual(metrics.buttons[1].left - 8);

@@ -1,7 +1,7 @@
 import type { Bag } from "../lib/bags";
 
 const fields: Array<{ key: keyof Bag; label: string; type?: string; mandatory?: boolean }> = [
-  { key: "name", label: "Name" },
+  { key: "name", label: "Bag Name" },
   { key: "roaster", label: "Roaster", mandatory: true },
   { key: "bean", label: "Bean", mandatory: true },
   { key: "country", label: "Country" },
@@ -27,7 +27,7 @@ export function BagForm({
   const editing = mode === "edit";
   return (
     <form
-      aria-label={editing ? "Edit a bag" : "Add a bag"}
+      aria-label={editing ? "Edit a bag" : "Create a bag"}
       className="bag-form"
       onSubmit={(event) => {
         event.preventDefault();
@@ -37,7 +37,7 @@ export function BagForm({
       <div className="form-header">
         <div>
           <span className="eyebrow">{editing ? "Bean Library" : "New Bean"}</span>
-          <h2>{editing ? "Edit a bag" : "Add a bag"}</h2>
+          <h2>{editing ? "Edit a bag" : "Create a bag"}</h2>
         </div>
         <div className="form-actions">
           <button type="button" className="ghost-button" onClick={onCancel}>

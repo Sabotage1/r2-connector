@@ -1,10 +1,6 @@
 import {
   Activity,
-  ArrowDown,
-  ArrowUp,
   Coffee,
-  Eye,
-  EyeOff,
   Flame,
   Gauge,
   History,
@@ -18,10 +14,10 @@ import {
   Settings,
   SlidersHorizontal
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { apiBaseUrl, ReaPrimeApi, ReaPrimeApiError, type CreateGrinderPayload } from "./api/reaprime";
 import { findDifluidR2Sensor } from "./api/sensors";
-import type { DeviceInfo, Grinder, MachineState, Profile, ProfileRecord, ShotAnnotations } from "./api/types";
+import type { DeviceInfo, Grinder, MachineState, Profile, ProfileRecord, ShotAnnotations, ShotSnapshot } from "./api/types";
 import { uploadShotToVisualizer } from "./api/visualizer";
 import type { Bag } from "./lib/bags";
 import { buildConnectivityStatuses } from "./lib/connectivity";
@@ -38,20 +34,28 @@ import { ScreensaverPage } from "./pages/ScreensaverPage";
 import { SettingsPage, type SkinUpdatePhase } from "./pages/SettingsPage";
 import { SteamPage } from "./pages/SteamPage";
 import {
-  hiddenMainMenuItemIdsForSettings,
   MAIN_MENU_ITEM_LABELS,
-  mainMenuItemsForSettings,
+  activeSkinTheme,
+  topStatusIndicatorIdsForSettings,
   visibleMainMenuItems,
   isProfileShown,
   profileWorkflowFor,
   type MainMenuItemId,
   type ProfileWorkflowSettings,
-  type SkinSettings
+  type SkinSettings,
+  type TopStatusIndicatorId
 } from "./state/skinSettings";
 import { useLiveTelemetry } from "./state/useLiveTelemetry";
 import { useReaData } from "./state/useReaData";
 
 type Page = MainMenuItemId | "screensaver";
+
+interface TopStatusIndicator {
+  id: TopStatusIndicatorId;
+  label: string;
+  detail: string;
+  connected: boolean;
+}
 
 const navById: Record<MainMenuItemId, { label: string; icon: React.ComponentType<{ className?: string; size?: number }> }> = {
   brew: { label: MAIN_MENU_ITEM_LABELS.brew, icon: Coffee },
@@ -205,18 +209,47 @@ function replaceProfileIdInSettings(settings: SkinSettings, fromId: string, toId
   };
 }
 
-function statusPopoverTitle(status: ConnectivityStatus): string {
+function statusPopoverTitle(status: Pick<TopStatusIndicator, "id" | "label">): string {
   if (status.id === "wifi") return "Machine IP address";
   if (status.id === "water") return "Current water level";
   return `${status.label} status`;
 }
 
-function isDisconnectedDevice(device: DeviceInfo): boolean {
-  return (device.type === "machine" || device.type === "scale") && device.state !== "connected";
+function deviceLabel(device: DeviceInfo): string {
+  return `${device.type ?? ""} ${device.name ?? ""} ${device.id}`.toLowerCase();
+}
+
+function isScaleDeviceCandidate(device: DeviceInfo): boolean {
+  const label = deviceLabel(device);
+  return (
+    device.type === "scale" ||
+    label.includes("scale") ||
+    label.includes("microbalance") ||
+    label.includes("acaia") ||
+    label.includes("hiroia") ||
+    label.includes("lunar") ||
+    label.includes("pearl") ||
+    label.includes("felicita") ||
+    label.includes("bookoo") ||
+    label.includes("boo koo") ||
+    label.includes("decent scale")
+  );
+}
+
+function isConnectableStartupDevice(device: DeviceInfo): boolean {
+  return (device.type === "machine" || isScaleDeviceCandidate(device)) && device.state !== "connected";
+}
+
+function uniqueDevices(devices: DeviceInfo[]): DeviceInfo[] {
+  const byId = new Map<string, DeviceInfo>();
+  for (const device of devices) {
+    byId.set(device.id, device);
+  }
+  return Array.from(byId.values());
 }
 
 function isR2Device(device: DeviceInfo): boolean {
-  const label = `${device.name ?? ""} ${device.id}`.toLowerCase();
+  const label = deviceLabel(device);
   return label.includes("difluid") || label.includes("r2");
 }
 
@@ -230,6 +263,59 @@ function isBrewingMode(state: string | undefined): boolean {
 
 function isSleepingMode(state: string | undefined): boolean {
   return state === "sleeping";
+}
+
+function autoSleepCheckIntervalMs(idleLimitMs: number): number {
+  return Math.min(30_000, Math.max(1_000, Math.floor(idleLimitMs / 4)));
+}
+
+function latestMachineSnapshot(measurements: ShotSnapshot[]): ShotSnapshot["machine"] | undefined {
+  return measurements.at(-1)?.machine;
+}
+
+function formatTopNumber(value: number | null | undefined, unit: string): string {
+  return typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(1)}${unit}` : "—";
+}
+
+function machineModeLabel(machineState: MachineState | null, liveMachine: ShotSnapshot["machine"] | undefined): string {
+  const state = liveMachine?.state?.state ?? machineState?.state?.state;
+  const substate = liveMachine?.state?.substate ?? machineState?.state?.substate;
+  if (!state) return machineState?.connected === false ? "Disconnected" : "Idle";
+  const title = state.replace(/_/g, " ");
+  const cased = `${title.charAt(0).toUpperCase()}${title.slice(1)}`;
+  return substate ? `${cased} · ${substate.replace(/_/g, " ")}` : cased;
+}
+
+function machineTemperature(machineState: MachineState | null, liveMachine: ShotSnapshot["machine"] | undefined): number | null {
+  return liveMachine?.groupTemperature ?? machineState?.groupTemperature ?? liveMachine?.mixTemperature ?? machineState?.mixTemperature ?? machineState?.steamTemperature ?? null;
+}
+
+function buildTopStatusIndicators({
+  statuses,
+  indicatorIds,
+  machineState,
+  liveMeasurements
+}: {
+  statuses: ConnectivityStatus[];
+  indicatorIds: TopStatusIndicatorId[];
+  machineState: MachineState | null;
+  liveMeasurements: ShotSnapshot[];
+}): TopStatusIndicator[] {
+  const liveMachine = latestMachineSnapshot(liveMeasurements);
+  const statusById = new Map(statuses.map((status) => [status.id, status]));
+  const all: Record<TopStatusIndicatorId, TopStatusIndicator | null> = {
+    machine: statusById.get("machine") ?? null,
+    wifi: statusById.get("wifi") ?? null,
+    scale: statusById.get("scale") ?? null,
+    water: statusById.get("water") ?? null,
+    r2: statusById.get("r2") ?? null,
+    state: { id: "state", label: "State", detail: machineModeLabel(machineState, liveMachine), connected: machineState?.connected !== false },
+    temperature: { id: "temperature", label: "Temp", detail: formatTopNumber(machineTemperature(machineState, liveMachine), "°C"), connected: true },
+    pressure: { id: "pressure", label: "Bar", detail: formatTopNumber(liveMachine?.pressure ?? machineState?.pressure, " bar"), connected: true },
+    flow: { id: "flow", label: "Flow", detail: formatTopNumber(liveMachine?.flow ?? machineState?.flow, " g/s"), connected: true }
+  };
+
+  return indicatorIds.map((id) => all[id]).filter((indicator): indicator is TopStatusIndicator => Boolean(indicator));
 }
 
 type FullscreenDocument = Document & {
@@ -260,24 +346,28 @@ function exitAppFullscreen(): Promise<void> {
   return Promise.reject(new Error("Fullscreen is not supported on this device."));
 }
 
-function SidebarStatus({
-  statuses,
+function TopStatusBar({
+  indicators,
   expandedStatusId,
-  onStatusPress
+  machineSummary,
+  onStatusPress,
+  children
 }: {
-  statuses: ConnectivityStatus[];
-  expandedStatusId: ConnectivityStatus["id"] | null;
-  onStatusPress: (status: ConnectivityStatus) => void;
+  indicators: TopStatusIndicator[];
+  expandedStatusId: TopStatusIndicatorId | null;
+  machineSummary: string;
+  onStatusPress: (status: TopStatusIndicator) => void;
+  children: ReactNode;
 }) {
-  const expandedStatus = statuses.find((status) => status.id === expandedStatusId);
+  const expandedStatus = indicators.find((status) => status.id === expandedStatusId);
 
   return (
-    <div className="sidebar-header">
-      <div className="compact-status-bar" aria-label="Connection status">
-        {statuses.map((status) => (
+    <header className="top-status-bar" aria-label="Machine status bar">
+      <div className="top-status-indicators" aria-label="Machine indicators">
+        {indicators.map((status) => (
           <button
             type="button"
-            className="compact-status-chip"
+            className="top-status-chip"
             key={status.id}
             title={`${status.label}: ${status.detail}`}
             aria-label={status.label}
@@ -288,21 +378,18 @@ function SidebarStatus({
             <span>{status.label}</span>
           </button>
         ))}
+        {expandedStatus && (
+          <div className="top-status-popover status-popover" role="status">
+            <span>{statusPopoverTitle(expandedStatus)}</span>
+            <strong>{expandedStatus.detail}</strong>
+          </div>
+        )}
       </div>
-      {expandedStatus && (
-        <div className="status-popover" role="status">
-          <span>{statusPopoverTitle(expandedStatus)}</span>
-          <strong>{expandedStatus.detail}</strong>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AppHeadline({ title }: { title: string }) {
-  return (
-    <header className="app-headline" aria-label="App title">
-      <span>{title}</span>
+      <div className="top-machine-status" aria-label="Machine current status">
+        <span>Machine</span>
+        <strong>{machineSummary}</strong>
+      </div>
+      <div className="top-status-actions">{children}</div>
     </header>
   );
 }
@@ -316,8 +403,7 @@ export function App() {
   const [skinUpdateBusy, setSkinUpdateBusy] = useState(false);
   const [skinUpdatePhase, setSkinUpdatePhase] = useState<SkinUpdatePhase>("idle");
   const [availableSkinVersion, setAvailableSkinVersion] = useState<string | null>(null);
-  const [mainMenuEditing, setMainMenuEditing] = useState(false);
-  const [expandedStatusId, setExpandedStatusId] = useState<ConnectivityStatus["id"] | null>(null);
+  const [expandedStatusId, setExpandedStatusId] = useState<TopStatusIndicatorId | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [lastUseAt, setLastUseAt] = useState(() => Date.now());
   const [startupApplyTick, setStartupApplyTick] = useState(0);
@@ -329,6 +415,8 @@ export function App() {
   const autoReadR2ShotIdRef = useRef<string | null>(null);
   const [autoReadR2ShotId, setAutoReadR2ShotId] = useState<string | null>(null);
   const sleepMachineRef = useRef<(() => Promise<void>) | null>(null);
+  const lastUseAtRef = useRef(lastUseAt);
+  const autoSleepPendingRef = useRef(false);
   const api = useMemo(() => new ReaPrimeApi(), []);
   const data = useReaData(api);
   const liveTelemetry = useLiveTelemetry(undefined, { recordIdle: page === "live" });
@@ -344,6 +432,15 @@ export function App() {
     () => data.profiles.filter((profile) => isProfileShown(data.settings, profile.id)),
     [data.profiles, data.settings.shownProfileIds]
   );
+  const presetPickerProfiles = useMemo(() => {
+    if (editingSlotIndex === null) return shownProfiles;
+    const assignedProfileIds = new Set(
+      data.settings.presetSlots
+        .map((slot, index) => (index === editingSlotIndex ? undefined : slot.profileId))
+        .filter((profileId): profileId is string => Boolean(profileId))
+    );
+    return shownProfiles.filter((profile) => !assignedProfileIds.has(profile.id));
+  }, [data.settings.presetSlots, editingSlotIndex, shownProfiles]);
   const machineConnected = Boolean(data.machineState && data.machineState.connected !== false);
   const currentMachineMode = liveTelemetry.machineMode?.state ?? data.machineState?.state?.state;
   const statuses = useMemo(
@@ -361,10 +458,21 @@ export function App() {
       }),
     [data.machineState, data.sensors, data.settings.r2SensorId, liveTelemetry.scaleConnected, liveTelemetry.waterLevels, r2Sensor]
   );
-  const orderedMenuIds = useMemo(() => mainMenuItemsForSettings(data.settings), [data.settings.mainMenuItems]);
   const visibleMenuIds = useMemo(() => visibleMainMenuItems(data.settings), [data.settings.mainMenuItems, data.settings.hiddenMainMenuItemIds]);
-  const hiddenMenuIds = useMemo(() => new Set(hiddenMainMenuItemIdsForSettings(data.settings)), [data.settings.hiddenMainMenuItemIds]);
-  const renderedMenuIds = mainMenuEditing ? orderedMenuIds : visibleMenuIds;
+  const topStatusIndicators = useMemo(
+    () =>
+      buildTopStatusIndicators({
+        statuses,
+        indicatorIds: topStatusIndicatorIdsForSettings(data.settings),
+        machineState: data.machineState,
+        liveMeasurements: liveTelemetry.measurements
+      }),
+    [statuses, data.settings.topStatusIndicatorIds, data.machineState, liveTelemetry.measurements]
+  );
+  const topLiveMachine = latestMachineSnapshot(liveTelemetry.measurements);
+  const topMachineStatus = machineModeLabel(data.machineState, topLiveMachine);
+  const topMachineTemperature = machineTemperature(data.machineState, topLiveMachine);
+  const topMachineSummary = `${topMachineStatus}${topMachineTemperature === null ? "" : ` · ${topMachineTemperature.toFixed(1)}°C`}`;
 
   const applyProfile = async (profile: ProfileRecord) => {
     const extras = data.workflow.context?.extras ?? {};
@@ -421,10 +529,10 @@ export function App() {
     startupConnectRef.current = true;
 
     const connectAndWake = async () => {
-      await api.scanDevices({ connect: true, quick: true }).catch(() => undefined);
-      const devices = await api.listDevices().catch(() => data.devices ?? []);
+      const scannedDevices = await api.scanDevices({ connect: true, quick: true }).catch(() => [] as DeviceInfo[]);
+      const devices = uniqueDevices([...scannedDevices, ...(await api.listDevices().catch(() => data.devices ?? []))]);
 
-      for (const device of devices.filter(isDisconnectedDevice)) {
+      for (const device of devices.filter(isConnectableStartupDevice)) {
         await api.connectDevice(device.id).catch(() => undefined);
       }
 
@@ -472,7 +580,16 @@ export function App() {
   }, [currentMachineMode]);
 
   useEffect(() => {
-    const markUse = () => setLastUseAt(Date.now());
+    lastUseAtRef.current = lastUseAt;
+  }, [lastUseAt]);
+
+  useEffect(() => {
+    const markUse = () => {
+      const now = Date.now();
+      autoSleepPendingRef.current = false;
+      lastUseAtRef.current = now;
+      setLastUseAt(now);
+    };
     window.addEventListener("pointerdown", markUse);
     window.addEventListener("keydown", markUse);
     window.addEventListener("touchstart", markUse);
@@ -531,25 +648,6 @@ export function App() {
       ...data.settings,
       profileWorkflows: { ...data.settings.profileWorkflows, [profileId]: workflow }
     });
-  };
-
-  const moveMainMenuItem = async (itemId: MainMenuItemId, direction: -1 | 1) => {
-    const currentItems = mainMenuItemsForSettings(data.settings);
-    const index = currentItems.indexOf(itemId);
-    const nextIndex = index + direction;
-    if (index < 0 || nextIndex < 0 || nextIndex >= currentItems.length) return;
-
-    const nextItems = [...currentItems];
-    [nextItems[index], nextItems[nextIndex]] = [nextItems[nextIndex], nextItems[index]];
-    await persistSettings({ ...data.settings, mainMenuItems: nextItems }, "Main menu saved.");
-  };
-
-  const setMainMenuItemVisible = async (itemId: MainMenuItemId, visible: boolean) => {
-    if (itemId === "settings") return;
-    const hidden = new Set(hiddenMainMenuItemIdsForSettings(data.settings));
-    if (visible) hidden.delete(itemId);
-    else hidden.add(itemId);
-    await persistSettings({ ...data.settings, hiddenMainMenuItemIds: Array.from(hidden) }, "Main menu saved.");
   };
 
   const setProfileShown = async (profileId: string, shown: boolean) => {
@@ -709,7 +807,12 @@ export function App() {
     try {
       await data.persistSettings({
         ...data.settings,
-        presetSlots: data.settings.presetSlots.map((item, index) => (index === editingSlotIndex ? { ...item, profileId: profile.id } : item))
+        presetSlots: data.settings.presetSlots.map((item, index) => {
+          if (index === editingSlotIndex) return { ...item, profileId: profile.id };
+          if (item.profileId !== profile.id) return item;
+          const { profileId: _profileId, ...rest } = item;
+          return rest;
+        })
       });
       setStatus({ type: "success", message: `Preset ${slot.label} set to ${profile.profile.title ?? profile.id}.` });
       setEditingSlotIndex(null);
@@ -885,7 +988,10 @@ export function App() {
     if (isSleepingMachine(data.machineState)) {
       await api.wakeMachine().catch(() => undefined);
     }
-    setLastUseAt(Date.now());
+    const now = Date.now();
+    autoSleepPendingRef.current = false;
+    lastUseAtRef.current = now;
+    setLastUseAt(now);
     setPage("brew");
   };
 
@@ -897,31 +1003,55 @@ export function App() {
     if (!autoSleepMinutes) return;
 
     const idleLimitMs = autoSleepMinutes * 60_000;
-    const delay = Math.max(50, idleLimitMs - (Date.now() - lastUseAt));
-    const timer = window.setTimeout(() => {
-      if (Date.now() - lastUseAt >= idleLimitMs) {
-        void sleepMachineRef.current?.();
+    const checkIdle = () => {
+      if (autoSleepPendingRef.current) return;
+      if (Date.now() - lastUseAtRef.current >= idleLimitMs) {
+        const sleep = sleepMachineRef.current;
+        if (!sleep) return;
+        autoSleepPendingRef.current = true;
+        void sleep().finally(() => {
+          autoSleepPendingRef.current = false;
+        });
       }
-    }, delay);
+    };
 
-    return () => window.clearTimeout(timer);
+    checkIdle();
+    const timer = window.setInterval(checkIdle, autoSleepCheckIntervalMs(idleLimitMs));
+    return () => window.clearInterval(timer);
   }, [currentMachineMode, data.loaded, data.settings.autoSleepMinutes, lastUseAt, machineConnected, page]);
 
   const forceScaleConnection = async () => {
-    setStatus({ type: "success", message: "Trying to connect scale." });
+    setStatus({ type: "success", message: "Scanning for scale." });
     try {
-      await api.scanDevices({ connect: true, quick: false }).catch(() => undefined);
-      const devices = await api.listDevices().catch(() => data.devices ?? []);
-      for (const device of devices.filter((device) => device.type === "scale" && device.state !== "connected")) {
-        await api.connectDevice(device.id).catch(() => undefined);
+      const scannedDevices = await api.scanDevices({ connect: true, quick: false }).catch(() => [] as DeviceInfo[]);
+      const devices = uniqueDevices([...scannedDevices, ...(await api.listDevices().catch(() => data.devices ?? []))]);
+      const scaleDevices = devices.filter((device) => isScaleDeviceCandidate(device) && device.state !== "connected" && !isR2Device(device));
+
+      if (scaleDevices.length === 0) {
+        setStatus({ type: "error", message: "No scale found after scan." });
+        return;
       }
+
+      let connectedCount = 0;
+      let firstError: unknown = null;
+      for (const device of scaleDevices) {
+        try {
+          await api.connectDevice(device.id);
+          connectedCount += 1;
+        } catch (error) {
+          firstError ??= error;
+        }
+      }
+
+      if (connectedCount === 0 && firstError) throw firstError;
       await data.refresh();
+      setStatus({ type: "success", message: "Scale connection requested." });
     } catch (error) {
       setStatus({ type: "error", message: `Could not connect scale: ${errorMessage(error)}` });
     }
   };
 
-  const toggleStatusPopover = (nextStatus: ConnectivityStatus) => {
+  const toggleStatusPopover = (nextStatus: TopStatusIndicator) => {
     if (nextStatus.id === "scale" && !nextStatus.connected) {
       setExpandedStatusId(null);
       void forceScaleConnection();
@@ -954,11 +1084,53 @@ export function App() {
   }
 
   const navIconSize = 20;
+  const theme = activeSkinTheme(data.settings);
+  const shellStyle = {
+    "--skin-bg": theme.background,
+    "--skin-surface": theme.surface,
+    "--skin-panel": theme.panel,
+    "--skin-border": theme.border,
+    "--skin-text": theme.text,
+    "--skin-muted": theme.muted,
+    "--skin-accent": theme.accent,
+    "--skin-accent-alt": theme.accentAlt,
+    fontSize: `${data.settings.skinFontScale}%`
+  } as CSSProperties;
 
   return (
-    <main className={data.settings.menuCollapsed ? "app-shell menu-collapsed" : "app-shell"}>
-      <nav className={mainMenuEditing ? "side-nav menu-editing" : "side-nav"} aria-label="Workflow navigation">
-        <SidebarStatus statuses={statuses} expandedStatusId={expandedStatusId} onStatusPress={toggleStatusPopover} />
+    <main className={data.settings.menuCollapsed ? "app-shell menu-collapsed" : "app-shell"} style={shellStyle}>
+      <TopStatusBar
+        indicators={topStatusIndicators}
+        expandedStatusId={expandedStatusId}
+        machineSummary={topMachineSummary}
+        onStatusPress={toggleStatusPopover}
+      >
+        <button
+          type="button"
+          className="sleep-button"
+          aria-label="Sleep machine"
+          title={machineConnected ? "Sleep machine" : "Machine is not connected"}
+          disabled={!machineConnected || sleepPending}
+          onClick={() => void sleepMachine()}
+        >
+          <Moon size={17} />
+          <span>{sleepPending ? "Sleeping" : "Sleep"}</span>
+        </button>
+        <button
+          type="button"
+          className="sleep-button fullscreen-button"
+          aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          title={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          onClick={() => void toggleFullscreen()}
+        >
+          {fullscreen ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
+        </button>
+      </TopStatusBar>
+      <nav className="side-nav" aria-label="Workflow navigation">
+        <div className="menu-brand" aria-label="WorkFlow menu title">
+          <span className="menu-brand-full">WorkFlow</span>
+          <span className="menu-brand-short">WF</span>
+        </div>
         <button
           type="button"
           className="nav-button menu-toggle-button"
@@ -969,101 +1141,28 @@ export function App() {
           {data.settings.menuCollapsed ? <PanelLeftOpen className="nav-icon" size={navIconSize} /> : <PanelLeftClose className="nav-icon" size={navIconSize} />}
           <span>{data.settings.menuCollapsed ? "Expand" : "Minimize"}</span>
         </button>
-        {renderedMenuIds.map((itemId) => {
+        {visibleMenuIds.map((itemId) => {
           const item = navById[itemId];
           const Icon = item.icon;
           const isReview = itemId === "review";
-          const itemIsHidden = hiddenMenuIds.has(itemId);
-          const menuIndex = orderedMenuIds.indexOf(itemId);
-          const className = [
-            page === itemId ? "nav-button active" : "nav-button",
-            isReview ? "review-nav-button" : "",
-            itemIsHidden ? "hidden-menu-item" : ""
-          ]
+          const className = [page === itemId ? "nav-button active" : "nav-button", isReview ? "review-nav-button" : ""]
             .filter(Boolean)
             .join(" ");
           return (
-            <div className={mainMenuEditing ? "nav-edit-row" : "nav-edit-row idle"} key={itemId}>
-              <button
-                aria-current={page === itemId ? "page" : undefined}
-                aria-label={item.label}
-                className={className}
-                onClick={() => setPage(itemId)}
-              >
-                <Icon className={isReview ? "nav-icon review-nav-icon" : "nav-icon"} size={navIconSize} />
-                <span>{item.label}</span>
-              </button>
-              {mainMenuEditing && (
-                <div className="nav-edit-controls" aria-label={`${item.label} menu controls`}>
-                  <button
-                    type="button"
-                    className="nav-edit-button"
-                    aria-label={`Move ${item.label} up`}
-                    disabled={menuIndex <= 0}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void moveMainMenuItem(itemId, -1);
-                    }}
-                  >
-                    <ArrowUp size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    className="nav-edit-button"
-                    aria-label={`Move ${item.label} down`}
-                    disabled={menuIndex === orderedMenuIds.length - 1}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void moveMainMenuItem(itemId, 1);
-                    }}
-                  >
-                    <ArrowDown size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    className="nav-edit-button"
-                    aria-label={itemIsHidden ? `Show ${item.label}` : `Hide ${item.label}`}
-                    disabled={itemId === "settings"}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void setMainMenuItemVisible(itemId, itemIsHidden);
-                    }}
-                  >
-                    {itemIsHidden ? <Eye size={14} /> : <EyeOff size={14} />}
-                  </button>
-                </div>
-              )}
-            </div>
+            <button
+              key={itemId}
+              aria-current={page === itemId ? "page" : undefined}
+              aria-label={item.label}
+              className={className}
+              onClick={() => setPage(itemId)}
+            >
+              <Icon className={isReview ? "nav-icon review-nav-icon" : "nav-icon"} size={navIconSize} />
+              <span>{item.label}</span>
+            </button>
           );
         })}
       </nav>
       <section className="page-surface">
-        <div className="page-topbar">
-          <AppHeadline title={data.settings.skinTitle} />
-          <div className="page-top-actions">
-            <button
-              type="button"
-              className="sleep-button"
-              aria-label="Sleep machine"
-              title={machineConnected ? "Sleep machine" : "Machine is not connected"}
-              disabled={!machineConnected || sleepPending}
-              onClick={() => void sleepMachine()}
-            >
-              <Moon size={17} />
-              <span>{sleepPending ? "Sleeping" : "Sleep"}</span>
-            </button>
-            <button
-              type="button"
-              className="sleep-button fullscreen-button"
-              aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-              title={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-              onClick={() => void toggleFullscreen()}
-            >
-              {fullscreen ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
-              <span>{fullscreen ? "Exit" : "Full"}</span>
-            </button>
-          </div>
-        </div>
         <h1>{navById[page].label}</h1>
         {data.error && (
           <p className="muted" role="alert" aria-live="assertive">
@@ -1161,13 +1260,9 @@ export function App() {
         {page === "bags" && (
           <BagsPage
             bags={data.bags}
-            grinders={data.grinders ?? []}
             onSaveBag={saveBag}
             onUpdateBag={updateBag}
             onArchiveBag={archiveBag}
-            onCreateGrinder={createGrinder}
-            onUpdateGrinder={updateGrinder}
-            onArchiveGrinder={archiveGrinder}
           />
         )}
         {page === "grinders" && (
@@ -1204,8 +1299,6 @@ export function App() {
             skinUpdateBusy={skinUpdateBusy}
             skinUpdatePhase={skinUpdatePhase}
             availableSkinVersion={availableSkinVersion}
-            mainMenuEditing={mainMenuEditing}
-            onToggleMainMenuEditing={setMainMenuEditing}
             r2RefreshBusy={r2RefreshBusy}
             onRefreshR2={refreshR2Sensor}
             onCheckSkinUpdates={() => checkSkinUpdates()}
@@ -1236,7 +1329,10 @@ export function App() {
               )}
               <div className="profile-picker" aria-label={`Choose a profile for ${editingSlot.label}`}>
                 {shownProfiles.length === 0 && <p className="muted">No profiles are shown. Enable profiles from the Profiles page.</p>}
-                {shownProfiles.map((profile) => (
+                {shownProfiles.length > 0 && presetPickerProfiles.length === 0 && (
+                  <p className="muted">All shown profiles are already assigned to other presets.</p>
+                )}
+                {presetPickerProfiles.map((profile) => (
                   <button
                     key={profile.id}
                     type="button"

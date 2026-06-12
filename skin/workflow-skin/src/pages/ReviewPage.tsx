@@ -8,6 +8,18 @@ function formatStat(value: number | null, unit: string): string {
   return value == null ? "—" : `${value}${unit}`;
 }
 
+function averageNumbers(values: Array<number | null | undefined>): number | null {
+  const numbers = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  if (numbers.length === 0) return null;
+  return Math.round((numbers.reduce((sum, value) => sum + value, 0) / numbers.length) * 100) / 100;
+}
+
+function shotTimestampLabel(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (!Number.isFinite(date.getTime())) return timestamp;
+  return date.toISOString().slice(0, 16).replace("T", " ");
+}
+
 export function ReviewPage({
   shot,
   previousShots,
@@ -29,6 +41,7 @@ export function ReviewPage({
 }) {
   const stats = shotStats(shot);
   const context = shotContext(shot);
+  const [selectedShotId, setSelectedShotId] = useState(shot.id);
   const [tdsText, setTdsText] = useState(String(shot.annotations?.drinkTds ?? ""));
   const [doseText, setDoseText] = useState(String(shot.annotations?.actualDoseWeight ?? context?.targetDoseWeight ?? ""));
   const [yieldText, setYieldText] = useState(String(shot.annotations?.actualYield ?? stats.finalYield ?? ""));
@@ -49,6 +62,26 @@ export function ReviewPage({
   );
 
   const sameBagShots = context?.beanBatchId ? previousFiveForBag(previousShots, context.beanBatchId, shot.id) : [];
+  const reviewShots = [shot, ...sameBagShots];
+  const selectedShotIndex = Math.max(0, reviewShots.findIndex((item) => item.id === selectedShotId));
+  const selectedShot = reviewShots[selectedShotIndex] ?? shot;
+  const selectedShotIsLatest = selectedShot.id === shot.id;
+  const selectedStats = selectedShotIsLatest ? stats : shotStats(selectedShot);
+  const selectedContext = selectedShotIsLatest ? context : shotContext(selectedShot);
+  const selectedDose = selectedShotIsLatest ? cleanNumber(doseText) : selectedShot.annotations?.actualDoseWeight ?? selectedContext?.targetDoseWeight ?? null;
+  const selectedYield = selectedShotIsLatest ? cleanNumber(yieldText) ?? selectedStats.finalYield : selectedStats.finalYield;
+  const selectedTds = selectedShotIsLatest ? cleanNumber(tdsText) : selectedShot.annotations?.drinkTds ?? null;
+  const selectedEy = selectedShotIsLatest ? ey : selectedShot.annotations?.drinkEy ?? null;
+  const selectedGrindSize = selectedShotIsLatest ? grindSize : grindSizeFromShot(selectedShot) ?? "";
+  const selectedShotLabel = selectedShotIsLatest ? "Latest shot" : shotTimestampLabel(selectedShot.timestamp);
+  const sameBagStats = sameBagShots.map((item) => ({ shot: item, stats: shotStats(item), grindSize: grindSizeFromShot(item) }));
+  const sameBagGrinds = sameBagStats.map((item) => item.grindSize).filter((value): value is string => Boolean(value));
+  const sameBagAverages = {
+    duration: averageNumbers(sameBagStats.map((item) => item.stats.durationSeconds)),
+    yield: averageNumbers(sameBagStats.map((item) => item.stats.finalYield)),
+    tds: averageNumbers(sameBagShots.map((item) => item.annotations?.drinkTds)),
+    ey: averageNumbers(sameBagShots.map((item) => item.annotations?.drinkEy))
+  };
 
   async function save() {
     const workflowSkin = (shot.annotations?.extras?.workflowSkin as Record<string, unknown> | undefined) ?? {};
@@ -101,24 +134,82 @@ export function ReviewPage({
     void readR2();
   }, [autoReadR2, r2Sensor, shot.id]);
 
+  useEffect(() => {
+    setSelectedShotId(shot.id);
+  }, [shot.id]);
+
   return (
     <div className="workflow-grid">
       <section className="panel wide">
         <div className="review-graph-header">
           <h2>Shot Review</h2>
+          <span className="muted">{selectedShotIsLatest ? "Last shot graph" : "Selected shot graph"}</span>
           {onBackToGraph && (
             <button type="button" className="ghost-button compact-button" onClick={onBackToGraph}>
               Back to graph
             </button>
           )}
         </div>
-        <ShotGraph measurements={shot.measurements ?? []} />
+        <div className="shot-scrubber">
+          <div className="shot-scrubber-heading">
+            <strong>Selected shot: {selectedShotLabel}</strong>
+            <span className="muted">
+              {selectedShotIndex + 1} of {reviewShots.length}
+            </span>
+          </div>
+          {reviewShots.length > 1 && (
+            <input
+              type="range"
+              aria-label="Shot scrubber"
+              min={0}
+              max={reviewShots.length - 1}
+              step={1}
+              value={selectedShotIndex}
+              onChange={(event) => {
+                const nextIndex = Number(event.currentTarget.value);
+                setSelectedShotId(reviewShots[nextIndex]?.id ?? shot.id);
+              }}
+            />
+          )}
+        </div>
+        <ShotGraph measurements={selectedShot.measurements ?? []} />
       </section>
       <section className="panel">
-        <h2>Stats</h2>
-        <p>Duration: {formatStat(stats.durationSeconds, "s")}</p>
-        <p>Peak pressure: {formatStat(stats.peakPressure, " bar")}</p>
-        <p>Average flow: {formatStat(stats.averageFlow, " mL/s")}</p>
+        <h2>{selectedShotIsLatest ? "Last Shot Details" : "Selected Shot Details"}</h2>
+        <p>Duration: {formatStat(selectedStats.durationSeconds, "s")}</p>
+        <p>Dose: {formatStat(selectedDose, " g")}</p>
+        <p>Yield: {formatStat(selectedYield, " g")}</p>
+        <p>TDS: {formatStat(selectedTds, "%")}</p>
+        <p>Current EY: {formatStat(selectedEy, "%")}</p>
+        <p>Grind: {selectedGrindSize || "—"}</p>
+        <p>Peak pressure: {formatStat(selectedStats.peakPressure, " bar")}</p>
+        <p>Average flow: {formatStat(selectedStats.averageFlow, " mL/s")}</p>
+      </section>
+      <section className="panel wide review-comparison">
+        <h2>Same Bag Comparison</h2>
+        <p>Previous same-bag shots: {sameBagShots.length}</p>
+        <div className="review-comparison-grid">
+          <span>Avg duration: {formatStat(sameBagAverages.duration, "s")}</span>
+          <span>Avg yield: {formatStat(sameBagAverages.yield, " g")}</span>
+          <span>Avg TDS: {formatStat(sameBagAverages.tds, "%")}</span>
+          <span>Avg EY: {formatStat(sameBagAverages.ey, "%")}</span>
+        </div>
+        <p>Grinds: {sameBagGrinds.join(", ") || "—"}</p>
+        {sameBagStats.length > 0 ? (
+          <div className="review-shot-list" aria-label="Previous same-bag shot details">
+            {sameBagStats.map((item) => (
+              <div className="review-shot-row" key={item.shot.id}>
+                <strong>{shotTimestampLabel(item.shot.timestamp)}</strong>
+                <span>Yield {formatStat(item.stats.finalYield, " g")}</span>
+                <span>TDS {formatStat(item.shot.annotations?.drinkTds ?? null, "%")}</span>
+                <span>EY {formatStat(item.shot.annotations?.drinkEy ?? null, "%")}</span>
+                <span>Grind {item.grindSize || "—"}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="muted">No previous shots for this bag yet.</p>
+        )}
       </section>
       <section className="panel review-form">
         <h2>Extraction</h2>

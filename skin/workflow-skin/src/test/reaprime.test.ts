@@ -368,14 +368,14 @@ describe("ReaPrimeApi", () => {
       const method = init.method ?? "GET";
       if (method === "GET" && url.pathname === "/api/v1/webui/skins") {
         return Promise.resolve(
-          new Response(JSON.stringify([{ id: "workflow-skin", name: "Workflow Skin", version: "0.1.9", path: "/skins/workflow", isBundled: false }]), {
+          new Response(JSON.stringify([{ id: "workflow-skin", name: "WorkFlow", version: "0.1.9", path: "/skins/workflow", isBundled: false }]), {
             status: 200
           })
         );
       }
       if (method === "GET" && url.pathname === "/api/v1/webui/skins/default") {
         return Promise.resolve(
-          new Response(JSON.stringify({ id: "workflow-skin", name: "Workflow Skin", version: "0.1.9", path: "/skins/workflow", isBundled: false }), {
+          new Response(JSON.stringify({ id: "workflow-skin", name: "WorkFlow", version: "0.1.9", path: "/skins/workflow", isBundled: false }), {
             status: 200
           })
         );
@@ -394,11 +394,11 @@ describe("ReaPrimeApi", () => {
     const api = new ReaPrimeApi("http://machine:8080");
 
     await expect(api.listWebUISkins()).resolves.toEqual([
-      { id: "workflow-skin", name: "Workflow Skin", version: "0.1.9", path: "/skins/workflow", isBundled: false }
+      { id: "workflow-skin", name: "WorkFlow", version: "0.1.9", path: "/skins/workflow", isBundled: false }
     ]);
     await expect(api.getDefaultWebUISkin()).resolves.toEqual({
       id: "workflow-skin",
-      name: "Workflow Skin",
+      name: "WorkFlow",
       version: "0.1.9",
       path: "/skins/workflow",
       isBundled: false

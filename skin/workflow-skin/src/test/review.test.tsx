@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
@@ -130,6 +130,129 @@ describe("ReviewPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "Back to graph" }));
 
     expect(onBackToGraph).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows last shot details and same-bag comparison from previous shots", () => {
+    const currentShot: ShotRecord = {
+      ...shot,
+      annotations: {
+        actualDoseWeight: 18,
+        actualYield: 40,
+        drinkTds: 9,
+        drinkEy: 20,
+        extras: { workflowSkin: { grindSize: "7.2" } }
+      },
+      measurements: [
+        { machine: { timestamp: "2026-06-09T10:00:00.000Z", pressure: 2, flow: 1 }, scale: { weight: 5 } },
+        { machine: { timestamp: "2026-06-09T10:00:28.000Z", pressure: 9, flow: 2 }, scale: { weight: 40 } }
+      ]
+    };
+    const previousSameBag: ShotRecord[] = [
+      {
+        id: "same-1",
+        timestamp: "2026-06-09T09:55:00Z",
+        workflow: { context: { beanBatchId: "batch-1" } },
+        annotations: { actualYield: 38, drinkTds: 8.8, drinkEy: 18.1, extras: { workflowSkin: { grindSize: "7.0" } } },
+        measurements: [
+          { machine: { timestamp: "2026-06-09T09:55:00.000Z", pressure: 2, flow: 1 } },
+          { machine: { timestamp: "2026-06-09T09:55:27.000Z", pressure: 8, flow: 2 } }
+        ]
+      },
+      {
+        id: "same-2",
+        timestamp: "2026-06-09T09:45:00Z",
+        workflow: { context: { beanBatchId: "batch-1" } },
+        annotations: { actualYield: 39, drinkTds: 8.9, drinkEy: 18.3, extras: { workflowSkin: { grindSize: "7.1" } } },
+        measurements: [
+          { machine: { timestamp: "2026-06-09T09:45:00.000Z", pressure: 2, flow: 1 } },
+          { machine: { timestamp: "2026-06-09T09:45:29.000Z", pressure: 8.5, flow: 2.1 } }
+        ]
+      },
+      {
+        id: "other-bag",
+        timestamp: "2026-06-09T09:35:00Z",
+        workflow: { context: { beanBatchId: "batch-2" } },
+        annotations: { actualYield: 50, drinkTds: 12, drinkEy: 30 },
+        measurements: []
+      }
+    ];
+
+    render(
+      <ReviewPage
+        shot={currentShot}
+        previousShots={previousSameBag}
+        onSaveAnnotations={vi.fn()}
+        onUploadVisualizer={vi.fn()}
+        r2Sensor={null}
+        onReadR2={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("img", { name: "Shot pressure graph" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Last Shot Details" })).toBeInTheDocument();
+    expect(screen.getByText("Duration: 28s")).toBeInTheDocument();
+    expect(screen.getByText("Yield: 40 g")).toBeInTheDocument();
+    expect(screen.getByText("TDS: 9%")).toBeInTheDocument();
+    expect(screen.getByText("Current EY: 20%")).toBeInTheDocument();
+    expect(screen.getByText("Grind: 7.2")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Same Bag Comparison" })).toBeInTheDocument();
+    expect(screen.getByText("Previous same-bag shots: 2")).toBeInTheDocument();
+    expect(screen.getByText("Avg yield: 38.5 g")).toBeInTheDocument();
+    expect(screen.getByText("Avg TDS: 8.85%")).toBeInTheDocument();
+    expect(screen.getByText("Avg EY: 18.2%")).toBeInTheDocument();
+    expect(screen.getByText("Avg duration: 28s")).toBeInTheDocument();
+    expect(screen.getByText("Grinds: 7.0, 7.1")).toBeInTheDocument();
+    expect(screen.queryByText("50 g")).not.toBeInTheDocument();
+  });
+
+  it("starts on the latest shot and scrubs through previous same-bag shot details", () => {
+    const currentShot: ShotRecord = {
+      ...shot,
+      annotations: {
+        actualDoseWeight: 18,
+        actualYield: 40,
+        drinkTds: 9,
+        drinkEy: 20,
+        extras: { workflowSkin: { grindSize: "7.2" } }
+      },
+      measurements: [
+        { machine: { timestamp: "2026-06-09T10:00:00.000Z", pressure: 2, flow: 1 }, scale: { weight: 5 } },
+        { machine: { timestamp: "2026-06-09T10:00:28.000Z", pressure: 9, flow: 2 }, scale: { weight: 40 } }
+      ]
+    };
+    const previousShot: ShotRecord = {
+      id: "same-1",
+      timestamp: "2026-06-09T09:55:00Z",
+      workflow: { context: { beanBatchId: "batch-1" } },
+      annotations: { actualYield: 38, drinkTds: 8.8, drinkEy: 18.1, extras: { workflowSkin: { grindSize: "7.0" } } },
+      measurements: [
+        { machine: { timestamp: "2026-06-09T09:55:00.000Z", pressure: 2, flow: 1 } },
+        { machine: { timestamp: "2026-06-09T09:55:27.000Z", pressure: 8, flow: 2 } }
+      ]
+    };
+
+    render(
+      <ReviewPage
+        shot={currentShot}
+        previousShots={[previousShot]}
+        onSaveAnnotations={vi.fn()}
+        onUploadVisualizer={vi.fn()}
+        r2Sensor={null}
+        onReadR2={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Selected shot: Latest shot")).toBeInTheDocument();
+    expect(screen.getByText("Yield: 40 g")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Shot scrubber"), { target: { value: "1" } });
+
+    expect(screen.getByText("Selected shot: 2026-06-09 09:55")).toBeInTheDocument();
+    expect(screen.getByText("Duration: 27s")).toBeInTheDocument();
+    expect(screen.getByText("Yield: 38 g")).toBeInTheDocument();
+    expect(screen.getByText("TDS: 8.8%")).toBeInTheDocument();
+    expect(screen.getByText("Current EY: 18.1%")).toBeInTheDocument();
+    expect(screen.getByText("Grind: 7.0")).toBeInTheDocument();
   });
 
   it("preserves unrelated annotation extras when saving review fields", async () => {

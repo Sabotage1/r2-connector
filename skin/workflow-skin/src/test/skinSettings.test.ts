@@ -18,7 +18,7 @@ describe("skin settings", () => {
     expect(defaultSkinSettings.reviewEnabledByProfile).toEqual({});
     expect(defaultSkinSettings.defaultReviewEnabled).toBe(true);
     expect(defaultSkinSettings.profileWorkflows).toEqual({});
-    expect(defaultSkinSettings.skinTitle).toBe("Workflow");
+    expect(defaultSkinSettings.skinTitle).toBe("WorkFlow");
     expect(defaultSkinSettings.startupProfileId).toBeUndefined();
     expect(defaultSkinSettings.r2SensorId).toBeUndefined();
     expect(defaultSkinSettings.shownProfileIds).toEqual([]);
@@ -31,6 +31,7 @@ describe("skin settings", () => {
     expect(defaultSkinSettings.menuCollapsed).toBe(false);
     expect(defaultSkinSettings.mainMenuItems).toEqual(DEFAULT_MAIN_MENU_ITEMS);
     expect(defaultSkinSettings.hiddenMainMenuItemIds).toEqual([]);
+    expect(defaultSkinSettings.topStatusIndicatorIds).toEqual(["machine", "wifi", "scale", "water", "r2", "state", "temperature"]);
     expect(mainMenuItemsForSettings(defaultSkinSettings).indexOf("profiles")).toBeLessThan(mainMenuItemsForSettings(defaultSkinSettings).indexOf("grinders"));
   });
 
@@ -61,6 +62,7 @@ describe("skin settings", () => {
         menuCollapsed: true,
         mainMenuItems: ["settings", "profiles", "missing", "brew", "profiles"],
         hiddenMainMenuItemIds: ["history", "settings", "bad"],
+        topStatusIndicatorIds: ["wifi", "pressure", "bad", "wifi"],
         shownProfileIds: ["p1", 42, "p2"],
         profileWorkflows: {
           p2: { milkBased: true, steamTimers: { small: 18, medium: 28, large: 42 } },
@@ -93,6 +95,7 @@ describe("skin settings", () => {
     expect(settings.mainMenuItems.slice(0, 3)).toEqual(["settings", "profiles", "brew"]);
     expect(settings.mainMenuItems).toEqual(expect.arrayContaining([...DEFAULT_MAIN_MENU_ITEMS]));
     expect(settings.hiddenMainMenuItemIds).toEqual(["history"]);
+    expect(settings.topStatusIndicatorIds).toEqual(["wifi", "pressure"]);
     expect(visibleMainMenuItems(settings)).not.toContain("history");
     expect(visibleMainMenuItems(settings)).toContain("settings");
     expect(settings.shownProfileIds).toEqual(["p1", "p2"]);

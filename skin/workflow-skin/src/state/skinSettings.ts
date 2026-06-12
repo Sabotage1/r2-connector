@@ -14,6 +14,22 @@ export interface ProfileWorkflowSettings {
   steamTimers: SteamTimers;
 }
 
+export type SkinThemeId = "default" | "slate" | "ruby";
+export type EditableSkinThemeId = Exclude<SkinThemeId, "default">;
+export type TopStatusIndicatorId = "machine" | "wifi" | "scale" | "water" | "r2" | "state" | "temperature" | "pressure" | "flow";
+
+export interface SkinThemePalette {
+  name: string;
+  background: string;
+  surface: string;
+  panel: string;
+  border: string;
+  text: string;
+  muted: string;
+  accent: string;
+  accentAlt: string;
+}
+
 export const DEFAULT_MAIN_MENU_ITEMS = ["brew", "live", "review", "steam", "bags", "profiles", "grinders", "history", "settings"] as const;
 export type MainMenuItemId = (typeof DEFAULT_MAIN_MENU_ITEMS)[number];
 
@@ -53,6 +69,10 @@ export interface SkinSettings {
   skinUpdateRepo: string;
   skinUpdateAsset: string;
   skinUpdatePrerelease: boolean;
+  skinFontScale: number;
+  skinThemeId: SkinThemeId;
+  customSkinThemes: Record<EditableSkinThemeId, SkinThemePalette>;
+  topStatusIndicatorIds: TopStatusIndicatorId[];
 }
 
 export const SKIN_NAMESPACE = "workflow-skin";
@@ -62,6 +82,57 @@ export const MIN_PRESET_SLOT_COUNT = 1;
 export const MAX_PRESET_SLOT_COUNT = 8;
 export const DEFAULT_AUTO_SLEEP_MINUTES = 30;
 export const MAX_AUTO_SLEEP_MINUTES = 240;
+export const MIN_SKIN_FONT_SCALE = 85;
+export const MAX_SKIN_FONT_SCALE = 125;
+export const EDITABLE_SKIN_THEME_IDS = ["slate", "ruby"] as const satisfies readonly EditableSkinThemeId[];
+export const DEFAULT_TOP_STATUS_INDICATORS: TopStatusIndicatorId[] = ["machine", "wifi", "scale", "water", "r2", "state", "temperature"];
+export const TOP_STATUS_INDICATOR_LABELS: Record<TopStatusIndicatorId, string> = {
+  machine: "Machine",
+  wifi: "WiFi",
+  scale: "Scale",
+  water: "Water",
+  r2: "R2",
+  state: "State",
+  temperature: "Temperature",
+  pressure: "Pressure",
+  flow: "Flow"
+};
+
+export const DEFAULT_SKIN_THEMES: Record<SkinThemeId, SkinThemePalette> = {
+  default: {
+    name: "WorkFlow Dark",
+    background: "#11171c",
+    surface: "#12191f",
+    panel: "#151c22",
+    border: "#303a43",
+    text: "#f5f7f8",
+    muted: "#9daab4",
+    accent: "#5bd179",
+    accentAlt: "#f0c36a"
+  },
+  slate: {
+    name: "Slate Citrus",
+    background: "#101417",
+    surface: "#151d20",
+    panel: "#1a2327",
+    border: "#34404a",
+    text: "#f7f4ee",
+    muted: "#aeb7bd",
+    accent: "#5fb8d1",
+    accentAlt: "#efb75e"
+  },
+  ruby: {
+    name: "Ruby Mint",
+    background: "#171315",
+    surface: "#201719",
+    panel: "#261d20",
+    border: "#47343a",
+    text: "#f9f3f5",
+    muted: "#b8a8ae",
+    accent: "#82d9b0",
+    accentAlt: "#f09a7a"
+  }
+};
 
 const DEFAULT_PRESET_SLOTS: PresetSlot[] = [
   { label: "Light" },
@@ -86,7 +157,7 @@ export function createDefaultSkinSettings(): SkinSettings {
     presetSlotCount: DEFAULT_PRESET_SLOTS.length,
     defaultReviewEnabled: true,
     reviewEnabledByProfile: {},
-    skinTitle: "Workflow",
+    skinTitle: "WorkFlow",
     menuCollapsed: false,
     mainMenuItems: [...DEFAULT_MAIN_MENU_ITEMS],
     hiddenMainMenuItemIds: [],
@@ -97,6 +168,13 @@ export function createDefaultSkinSettings(): SkinSettings {
     skinUpdateRepo: DEFAULT_SKIN_UPDATE_REPO,
     skinUpdateAsset: "workflow-skin.zip",
     skinUpdatePrerelease: false,
+    skinFontScale: 100,
+    skinThemeId: "default",
+    customSkinThemes: {
+      slate: { ...DEFAULT_SKIN_THEMES.slate },
+      ruby: { ...DEFAULT_SKIN_THEMES.ruby }
+    },
+    topStatusIndicatorIds: [...DEFAULT_TOP_STATUS_INDICATORS],
     shownProfileIds: [],
     profileWorkflows: {}
   };
@@ -205,6 +283,53 @@ function normalizeAutoSleepMinutes(value: unknown): number {
   return Math.min(MAX_AUTO_SLEEP_MINUTES, Math.max(0, value));
 }
 
+function normalizeSkinFontScale(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 100;
+  return Math.min(MAX_SKIN_FONT_SCALE, Math.max(MIN_SKIN_FONT_SCALE, Math.round(value)));
+}
+
+function normalizeSkinThemeId(value: unknown): SkinThemeId {
+  return value === "slate" || value === "ruby" || value === "default" ? value : "default";
+}
+
+function isTopStatusIndicatorId(value: string): value is TopStatusIndicatorId {
+  return Object.prototype.hasOwnProperty.call(TOP_STATUS_INDICATOR_LABELS, value);
+}
+
+export function topStatusIndicatorIdsForSettings(settings: Pick<SkinSettings, "topStatusIndicatorIds"> | { topStatusIndicatorIds?: unknown }): TopStatusIndicatorId[] {
+  if (!Array.isArray(settings.topStatusIndicatorIds)) return [...DEFAULT_TOP_STATUS_INDICATORS];
+  const indicators = settings.topStatusIndicatorIds.filter((item): item is TopStatusIndicatorId => typeof item === "string" && isTopStatusIndicatorId(item));
+  return Array.from(new Set(indicators));
+}
+
+function normalizeColor(value: unknown, fallback: string): string {
+  if (typeof value !== "string") return fallback;
+  const clean = value.trim();
+  return /^#[0-9a-fA-F]{6}$/.test(clean) ? clean : fallback;
+}
+
+function normalizeSkinThemePalette(value: unknown, fallback: SkinThemePalette): SkinThemePalette {
+  if (!isPlainRecord(value)) return { ...fallback };
+  return {
+    name: typeof value.name === "string" && value.name.trim() ? value.name.trim() : fallback.name,
+    background: normalizeColor(value.background, fallback.background),
+    surface: normalizeColor(value.surface, fallback.surface),
+    panel: normalizeColor(value.panel, fallback.panel),
+    border: normalizeColor(value.border, fallback.border),
+    text: normalizeColor(value.text, fallback.text),
+    muted: normalizeColor(value.muted, fallback.muted),
+    accent: normalizeColor(value.accent, fallback.accent),
+    accentAlt: normalizeColor(value.accentAlt, fallback.accentAlt)
+  };
+}
+
+function normalizeCustomSkinThemes(value: unknown): Record<EditableSkinThemeId, SkinThemePalette> {
+  return {
+    slate: normalizeSkinThemePalette(isPlainRecord(value) ? value.slate : undefined, DEFAULT_SKIN_THEMES.slate),
+    ruby: normalizeSkinThemePalette(isPlainRecord(value) ? value.ruby : undefined, DEFAULT_SKIN_THEMES.ruby)
+  };
+}
+
 function normalizeSteamTimers(value: unknown): SteamTimers {
   if (!isPlainRecord(value)) return cloneSteamTimers(DEFAULT_STEAM_TIMERS);
   return {
@@ -237,7 +362,7 @@ export function normalizeSkinSettings(value: unknown): SkinSettings {
     presetSlotCount: normalizePresetSlotCount(value.presetSlotCount, DEFAULT_PRESET_SLOTS.length),
     defaultReviewEnabled: typeof value.defaultReviewEnabled === "boolean" ? value.defaultReviewEnabled : true,
     reviewEnabledByProfile: normalizeReviewEnabledByProfile(value.reviewEnabledByProfile),
-    skinTitle: typeof value.skinTitle === "string" && value.skinTitle.trim() ? value.skinTitle.trim() : "Workflow",
+    skinTitle: typeof value.skinTitle === "string" && value.skinTitle.trim() ? value.skinTitle.trim() : "WorkFlow",
     menuCollapsed: typeof value.menuCollapsed === "boolean" ? value.menuCollapsed : false,
     mainMenuItems: mainMenuItemsForSettings({ mainMenuItems: value.mainMenuItems }),
     hiddenMainMenuItemIds: hiddenMainMenuItemIdsForSettings({ hiddenMainMenuItemIds: value.hiddenMainMenuItemIds }),
@@ -251,6 +376,10 @@ export function normalizeSkinSettings(value: unknown): SkinSettings {
     skinUpdateRepo: normalizeString(value.skinUpdateRepo),
     skinUpdateAsset: normalizeString(value.skinUpdateAsset, "workflow-skin.zip"),
     skinUpdatePrerelease: typeof value.skinUpdatePrerelease === "boolean" ? value.skinUpdatePrerelease : false,
+    skinFontScale: normalizeSkinFontScale(value.skinFontScale),
+    skinThemeId: normalizeSkinThemeId(value.skinThemeId),
+    customSkinThemes: normalizeCustomSkinThemes(value.customSkinThemes),
+    topStatusIndicatorIds: topStatusIndicatorIdsForSettings({ topStatusIndicatorIds: value.topStatusIndicatorIds }),
     shownProfileIds: normalizeStringList(value.shownProfileIds),
     profileWorkflows: normalizeProfileWorkflows(value.profileWorkflows)
   };
@@ -294,4 +423,16 @@ export function isProfileShown(settings: SkinSettings, profileId?: string): bool
 
 export function isMilkProfile(settings: SkinSettings, profileId?: string): boolean {
   return profileWorkflowFor(settings, profileId).milkBased;
+}
+
+export function skinThemesForSettings(settings: Pick<SkinSettings, "customSkinThemes">): Record<SkinThemeId, SkinThemePalette> {
+  return {
+    default: DEFAULT_SKIN_THEMES.default,
+    slate: settings.customSkinThemes?.slate ?? DEFAULT_SKIN_THEMES.slate,
+    ruby: settings.customSkinThemes?.ruby ?? DEFAULT_SKIN_THEMES.ruby
+  };
+}
+
+export function activeSkinTheme(settings: Pick<SkinSettings, "customSkinThemes" | "skinThemeId">): SkinThemePalette {
+  return skinThemesForSettings(settings)[settings.skinThemeId] ?? DEFAULT_SKIN_THEMES.default;
 }

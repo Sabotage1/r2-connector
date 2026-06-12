@@ -6,13 +6,14 @@ import { ProfilePresetGrid } from "../components/ProfilePresetGrid";
 import { BagsPage } from "../pages/BagsPage";
 import { BrewPage } from "../pages/BrewPage";
 import { GrindersPage } from "../pages/GrindersPage";
+import { HistoryPage } from "../pages/HistoryPage";
 import { LivePage } from "../pages/LivePage";
 import { ProfilesPage } from "../pages/ProfilesPage";
 import { ScreensaverPage } from "../pages/ScreensaverPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { SteamPage } from "../pages/SteamPage";
 import { screensaverArt } from "../lib/screensaverArt";
-import type { ProfileRecord } from "../api/types";
+import type { ProfileRecord, ShotRecord } from "../api/types";
 import { defaultSkinSettings } from "../state/skinSettings";
 
 const profiles: ProfileRecord[] = [
@@ -213,8 +214,9 @@ describe("BagsPage", () => {
   it("saves a valid draft bag through the provided callback", async () => {
     const onSaveBag = vi.fn().mockResolvedValue(undefined);
     render(<BagsPage bags={[]} onSaveBag={onSaveBag} />);
-    const form = screen.getByRole("form", { name: /Add a bag/i });
+    const form = screen.getByRole("form", { name: /Create a bag/i });
 
+    await userEvent.type(within(form).getByLabelText("Bag Name"), "Morning bag");
     await userEvent.type(within(form).getByLabelText("Roaster"), "Pilot");
     await userEvent.type(within(form).getByLabelText("Bean"), "Ethiopia Halo");
     await userEvent.type(within(form).getByLabelText("Country"), "Ethiopia");
@@ -226,6 +228,7 @@ describe("BagsPage", () => {
 
     expect(onSaveBag).toHaveBeenCalledWith(
       expect.objectContaining({
+        name: "Morning bag",
         roaster: "Pilot",
         bean: "Ethiopia Halo",
         country: "Ethiopia",
@@ -253,17 +256,16 @@ describe("BagsPage", () => {
   it("includes an optional bag name field and marks mandatory bag fields", () => {
     render(<BagsPage bags={[]} onSaveBag={vi.fn()} />);
 
-    expect(screen.getByLabelText("Name")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Create a bag" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Bag Name")).toBeInTheDocument();
     expect(screen.getByText("Roaster *")).toBeInTheDocument();
     expect(screen.getByText("Bean *")).toBeInTheDocument();
     expect(screen.getByText("Process *")).toBeInTheDocument();
     expect(screen.getByText("Roast Date *")).toBeInTheDocument();
   });
 
-  it("edits existing bag and grinder records", async () => {
+  it("edits existing bag records without showing grinder setup", async () => {
     const onUpdateBag = vi.fn().mockResolvedValue(undefined);
-    const onCreateGrinder = vi.fn().mockResolvedValue(undefined);
-    const onUpdateGrinder = vi.fn().mockResolvedValue(undefined);
     render(
       <BagsPage
         {...({
@@ -282,13 +284,13 @@ describe("BagsPage", () => {
           grinders: [{ id: "grinder-1", model: "ZP6", settingType: "numeric", notes: "Travel" }],
           onSaveBag: vi.fn(),
           onUpdateBag,
-          onArchiveBag: vi.fn(),
-          onCreateGrinder,
-          onUpdateGrinder,
-          onArchiveGrinder: vi.fn()
+          onArchiveBag: vi.fn()
         } as any)}
       />
     );
+
+    expect(screen.queryByRole("heading", { name: "Grinders" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Grinder model")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Edit Pilot Halo" }));
     const form = screen.getByRole("form", { name: /Edit a bag/i });
@@ -297,14 +299,82 @@ describe("BagsPage", () => {
     await userEvent.click(within(form).getByRole("button", { name: "Save" }));
 
     expect(onUpdateBag).toHaveBeenCalledWith(expect.objectContaining({ id: "batch-1", beanId: "bean-1", roaster: "April" }));
+  });
+});
 
-    await userEvent.click(screen.getByRole("button", { name: "Edit ZP6" }));
-    await userEvent.clear(screen.getByLabelText("Grinder model"));
-    await userEvent.type(screen.getByLabelText("Grinder model"), "ZP6 Special");
-    await userEvent.click(screen.getByRole("button", { name: "Save grinder" }));
+describe("HistoryPage", () => {
+  const historyBags = [
+    {
+      id: "bag-1",
+      beanId: "bean-1",
+      name: "Morning bag",
+      roaster: "Pilot",
+      bean: "Halo",
+      country: "Ethiopia",
+      region: "Yirgacheffe",
+      process: "Washed",
+      roastDate: "2026-06-01",
+      roastLevel: "Light"
+    },
+    {
+      id: "bag-2",
+      beanId: "bean-2",
+      name: "Night bag",
+      roaster: "April",
+      bean: "Finca Las Flores",
+      country: "Colombia",
+      region: "Huila",
+      process: "Natural",
+      roastDate: "2026-05-18",
+      roastLevel: "Medium"
+    }
+  ];
+  const historyShots: ShotRecord[] = [
+    {
+      id: "shot-1",
+      timestamp: "2026-06-12T08:00:00.000Z",
+      workflow: { profile: { title: "Blooming espresso" }, context: { beanBatchId: "bag-1" } },
+      annotations: { drinkEy: 20.1, espressoNotes: "Citrus" }
+    },
+    {
+      id: "shot-2",
+      timestamp: "2026-06-12T09:00:00.000Z",
+      workflow: { profile: { title: "Turbo flow" }, context: { beanBatchId: "bag-2" } },
+      annotations: { drinkEy: 18.4 }
+    }
+  ];
 
-    expect(onUpdateGrinder).toHaveBeenCalledWith("grinder-1", expect.objectContaining({ model: "ZP6 Special" }));
-    expect(screen.getByRole("button", { name: "Add new grinder" })).toBeInTheDocument();
+  it("searches history by profile and every bag filter", async () => {
+    render(<HistoryPage shots={historyShots} bags={historyBags} />);
+
+    expect(screen.getByText("Blooming espresso")).toBeInTheDocument();
+    expect(screen.getByText("Turbo flow")).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText("History search"), "citrus");
+    expect(screen.getByText("Blooming espresso")).toBeInTheDocument();
+    expect(screen.queryByText("Turbo flow")).not.toBeInTheDocument();
+    await userEvent.clear(screen.getByLabelText("History search"));
+
+    await userEvent.type(screen.getByLabelText("Profile"), "turbo");
+    expect(screen.queryByText("Blooming espresso")).not.toBeInTheDocument();
+    expect(screen.getByText("Turbo flow")).toBeInTheDocument();
+    await userEvent.clear(screen.getByLabelText("Profile"));
+
+    for (const [label, value, visibleProfile, hiddenProfile] of [
+      ["Bag Name", "morning", "Blooming espresso", "Turbo flow"],
+      ["Roaster", "april", "Turbo flow", "Blooming espresso"],
+      ["Bean", "halo", "Blooming espresso", "Turbo flow"],
+      ["Country", "colombia", "Turbo flow", "Blooming espresso"],
+      ["Region", "yirgacheffe", "Blooming espresso", "Turbo flow"],
+      ["Process", "natural", "Turbo flow", "Blooming espresso"],
+      ["Roast Date", "2026-06-01", "Blooming espresso", "Turbo flow"],
+      ["Roast Type", "medium", "Turbo flow", "Blooming espresso"]
+    ] as const) {
+      await userEvent.type(screen.getByLabelText(label), value);
+      expect(screen.getByText(visibleProfile)).toBeInTheDocument();
+      expect(screen.queryByText(hiddenProfile)).not.toBeInTheDocument();
+      await userEvent.clear(screen.getByLabelText(label));
+    }
   });
 });
 
@@ -535,24 +605,20 @@ describe("ProfilesPage", () => {
 });
 
 describe("SettingsPage", () => {
-  it("edits the centered skin title shown above the menu", async () => {
-    const onUpdateSettings = vi.fn();
-    render(<SettingsPage settings={defaultSkinSettings} r2Sensor={null} onUpdateSettings={onUpdateSettings} />);
-
-    await userEvent.clear(screen.getByLabelText("Skin title"));
-    await userEvent.type(screen.getByLabelText("Skin title"), "Roy's DE1");
-
-    expect(onUpdateSettings).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
-
-    expect(onUpdateSettings).toHaveBeenLastCalledWith({ ...defaultSkinSettings, skinTitle: "Roy's DE1" });
-  });
-
-  it("shows the skin creator credit", () => {
+  it("does not show the removed skin title setting", () => {
     render(<SettingsPage settings={defaultSkinSettings} r2Sensor={null} onUpdateSettings={vi.fn()} />);
 
-    expect(screen.getByText("Creator")).toBeInTheDocument();
-    expect(screen.getByText("Roy Ackerman")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Skin settings" }));
+
+    expect(screen.queryByLabelText("Skin title")).not.toBeInTheDocument();
+  });
+
+  it("does not show the removed creator setting", async () => {
+    render(<SettingsPage settings={defaultSkinSettings} r2Sensor={null} onUpdateSettings={vi.fn()} />);
+
+    expect(screen.queryByText("Creator")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Skin settings" }));
+    expect(screen.queryByText("Roy Ackerman")).not.toBeInTheDocument();
   });
 
   it("shows native display controls and Visualizer plugin status", async () => {
@@ -588,6 +654,7 @@ describe("SettingsPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
 
     expect(onUpdateSettings).toHaveBeenLastCalledWith(expect.objectContaining({ screensaverBrightness: 24 }));
+    await userEvent.click(screen.getByRole("tab", { name: "App settings" }));
     expect(screen.getByText("Visualizer upload")).toBeInTheDocument();
     expect(screen.getByText("Loaded · Auto-load on · v1.3.0")).toBeInTheDocument();
     expect(screen.getByText("Credentials configured · Auto upload on · Back-sync on")).toBeInTheDocument();
@@ -620,8 +687,8 @@ describe("SettingsPage", () => {
             skinUpdatePrerelease: false
           },
           r2Sensor: null,
-          webuiSkins: [{ id: "workflow-skin", name: "Workflow Skin", version: "0.1.9", path: "/skins/workflow", isBundled: false }],
-          defaultWebuiSkin: { id: "workflow-skin", name: "Workflow Skin", version: "0.1.9", path: "/skins/workflow", isBundled: false },
+          webuiSkins: [{ id: "workflow-skin", name: "WorkFlow", version: "0.1.9", path: "/skins/workflow", isBundled: false }],
+          defaultWebuiSkin: { id: "workflow-skin", name: "WorkFlow", version: "0.1.9", path: "/skins/workflow", isBundled: false },
           skinUpdateStatus: { type: "success", message: "Skin update check completed." },
           onUpdateSettings,
           onCheckSkinUpdates,
@@ -630,9 +697,10 @@ describe("SettingsPage", () => {
       />
     );
 
+    fireEvent.click(screen.getByRole("tab", { name: "Skin settings" }));
     expect(screen.getByText("Skin updates")).toBeInTheDocument();
-    expect(screen.getByText("Installed: Workflow Skin v0.1.9")).toBeInTheDocument();
-    expect(screen.getByText("Default skin: Workflow Skin")).toBeInTheDocument();
+    expect(screen.getByText("Installed: WorkFlow v0.1.9")).toBeInTheDocument();
+    expect(screen.getByText("Default skin: WorkFlow")).toBeInTheDocument();
     expect(screen.getByText("Skin update check completed.")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("checkbox", { name: "Auto update this skin on startup" }));
@@ -667,24 +735,26 @@ describe("SettingsPage", () => {
       settings: defaultSkinSettings,
       r2Sensor: null,
       onUpdateSettings: vi.fn(),
-      defaultWebuiSkin: { id: "workflow-skin", name: "Workflow Skin", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }
+      defaultWebuiSkin: { id: "workflow-skin", name: "WorkFlow", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }
     };
     const { rerender } = render(
       <SettingsPage
         {...commonProps}
-        webuiSkins={[{ id: "workflow-skin", name: "Workflow Skin", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }]}
+        webuiSkins={[{ id: "workflow-skin", name: "WorkFlow", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }]}
       />
     );
 
+    fireEvent.click(screen.getByRole("tab", { name: "Skin settings" }));
     expect(screen.getByText("The skin is up-to-date.")).toBeInTheDocument();
 
     rerender(
       <SettingsPage
         {...commonProps}
-        webuiSkins={[{ id: "workflow-skin", name: "Workflow Skin", version: "0.1.16", path: "/skins/workflow", isBundled: false }]}
+        webuiSkins={[{ id: "workflow-skin", name: "WorkFlow", version: "0.1.16", path: "/skins/workflow", isBundled: false }]}
       />
     );
 
+    fireEvent.click(screen.getByRole("tab", { name: "Skin settings" }));
     expect(screen.getByText(`Update available: v${currentSkinVersion} is available (installed v0.1.16).`)).toBeInTheDocument();
   });
 
@@ -694,12 +764,13 @@ describe("SettingsPage", () => {
         settings={defaultSkinSettings}
         r2Sensor={null}
         onUpdateSettings={vi.fn()}
-        webuiSkins={[{ id: "workflow-skin", name: "Workflow Skin", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }]}
-        defaultWebuiSkin={{ id: "workflow-skin", name: "Workflow Skin", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }}
+        webuiSkins={[{ id: "workflow-skin", name: "WorkFlow", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }]}
+        defaultWebuiSkin={{ id: "workflow-skin", name: "WorkFlow", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }}
         availableSkinVersion="99.0.0"
       />
     );
 
+    fireEvent.click(screen.getByRole("tab", { name: "Skin settings" }));
     expect(screen.queryByText("The skin is up-to-date.")).not.toBeInTheDocument();
     expect(screen.getByText(`Update available: v99.0.0 is available (installed v${currentSkinVersion}).`)).toBeInTheDocument();
   });
@@ -711,12 +782,13 @@ describe("SettingsPage", () => {
           settings: defaultSkinSettings,
           r2Sensor: null,
           onUpdateSettings: vi.fn(),
-          webuiSkins: [{ id: "workflow-skin", name: "Workflow Skin", version: "0.1.15", path: "/skins/workflow", isBundled: false }],
+          webuiSkins: [{ id: "workflow-skin", name: "WorkFlow", version: "0.1.15", path: "/skins/workflow", isBundled: false }],
           skinUpdatePhase: "downloading"
         } as any)}
       />
     );
 
+    fireEvent.click(screen.getByRole("tab", { name: "Skin settings" }));
     expect(screen.getByText("Downloading update...")).toBeInTheDocument();
   });
 
@@ -737,6 +809,7 @@ describe("SettingsPage", () => {
       />
     );
 
+    await userEvent.click(screen.getByRole("tab", { name: "Skin settings" }));
     fireEvent.change(screen.getByLabelText("Preset cards on main page"), { target: { value: "3" } });
     fireEvent.change(screen.getByLabelText("Preset 2 title"), { target: { value: "Milk" } });
 
@@ -755,33 +828,41 @@ describe("SettingsPage", () => {
     );
   });
 
-  it("enables main menu editing in the sidebar from settings", async () => {
-    const onToggleMainMenuEditing = vi.fn();
-    const { rerender } = render(
-      <SettingsPage
-        settings={defaultSkinSettings}
-        r2Sensor={null}
-        onUpdateSettings={vi.fn()}
-        mainMenuEditing={false}
-        onToggleMainMenuEditing={onToggleMainMenuEditing}
-      />
+  it("edits skin font size and editable theme options before saving settings", async () => {
+    const onUpdateSettings = vi.fn();
+    render(<SettingsPage settings={defaultSkinSettings} r2Sensor={null} onUpdateSettings={onUpdateSettings} />);
+
+    await userEvent.click(screen.getByRole("tab", { name: "Skin settings" }));
+    fireEvent.change(screen.getByRole("slider", { name: "Skin font size" }), { target: { value: "112" } });
+    await userEvent.clear(screen.getByLabelText("Slate Citrus theme name"));
+    await userEvent.type(screen.getByLabelText("Slate Citrus theme name"), "Roy Slate");
+    fireEvent.change(screen.getByLabelText("Slate Citrus accent color"), { target: { value: "#66ccff" } });
+    await userEvent.click(screen.getByRole("checkbox", { name: "Scale" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Pressure" }));
+    await userEvent.click(screen.getByRole("button", { name: "Use Roy Slate" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
+
+    expect(onUpdateSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        skinFontScale: 112,
+        skinThemeId: "slate",
+        customSkinThemes: expect.objectContaining({
+          slate: expect.objectContaining({ name: "Roy Slate", accent: "#66ccff" })
+        }),
+        topStatusIndicatorIds: expect.arrayContaining(["pressure"])
+      })
     );
+    const savedSettings = onUpdateSettings.mock.calls[onUpdateSettings.mock.calls.length - 1]?.[0];
+    expect(savedSettings.topStatusIndicatorIds).not.toContain("scale");
+  });
 
-    expect(screen.getByText("Main menu")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Edit main menu in sidebar" }));
-    expect(onToggleMainMenuEditing).toHaveBeenCalledWith(true);
+  it("keeps main menu editing out of app settings", () => {
+    render(<SettingsPage settings={defaultSkinSettings} r2Sensor={null} onUpdateSettings={vi.fn()} />);
 
-    rerender(
-      <SettingsPage
-        settings={defaultSkinSettings}
-        r2Sensor={null}
-        onUpdateSettings={vi.fn()}
-        mainMenuEditing
-        onToggleMainMenuEditing={onToggleMainMenuEditing}
-      />
-    );
+    fireEvent.click(screen.getByRole("tab", { name: "App settings" }));
 
-    expect(screen.getByRole("button", { name: "Done editing main menu" })).toBeInTheDocument();
+    expect(screen.queryByText("Main menu")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit main menu in sidebar" })).not.toBeInTheDocument();
   });
 });
 
@@ -850,7 +931,7 @@ describe("GrindersPage", () => {
 describe("ScreensaverPage", () => {
   it("has 15 dark generated coffee pictures for sleep mode", () => {
     expect(screensaverArt).toHaveLength(15);
-    render(<ScreensaverPage title="Workflow" onWake={vi.fn()} />);
+    render(<ScreensaverPage title="WorkFlow" onWake={vi.fn()} />);
 
     expect(screen.getByLabelText("Screensaver mode")).toHaveStyle({ backgroundColor: "#020506" });
   });

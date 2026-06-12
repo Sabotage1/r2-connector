@@ -27,6 +27,7 @@ function mockReaFetch(
     appInfo?: AppInfo;
     devices?: DeviceInfo[];
     devicesAfterScan?: DeviceInfo[];
+    scanDevicesResult?: DeviceInfo[];
     sensors?: SensorListItem[];
     sensorsAfterScan?: SensorListItem[];
     shots?: ShotRecord[];
@@ -102,7 +103,7 @@ function mockReaFetch(
     if (method === "GET" && url.pathname === "/api/v1/devices/scan") {
       devices = options.devicesAfterScan ?? devices;
       sensors = options.sensorsAfterScan ?? sensors;
-      return responseJson(devices);
+      return responseJson(options.scanDevicesResult ?? devices);
     }
     if (method === "PUT" && url.pathname === "/api/v1/devices/connect") return Promise.resolve(new Response("", { status: 200 }));
     if (method === "GET" && url.pathname === "/api/v1/display") return responseJson(displayState);
@@ -131,11 +132,11 @@ function mockReaFetch(
     }
     if (method === "GET" && url.pathname === "/api/v1/webui/skins") {
       return responseJson(
-        options.webuiSkins ?? [{ id: "workflow-skin", name: "Workflow Skin", version: "0.1.9", path: "/skins/workflow", isBundled: false }]
+        options.webuiSkins ?? [{ id: "workflow-skin", name: "WorkFlow", version: "0.1.9", path: "/skins/workflow", isBundled: false }]
       );
     }
     if (method === "GET" && url.pathname === "/api/v1/webui/skins/default") {
-      return responseJson(options.defaultWebuiSkin ?? { id: "workflow-skin", name: "Workflow Skin", version: "0.1.9", path: "/skins/workflow", isBundled: false });
+      return responseJson(options.defaultWebuiSkin ?? { id: "workflow-skin", name: "WorkFlow", version: "0.1.9", path: "/skins/workflow", isBundled: false });
     }
     if (method === "POST" && url.pathname === "/api/v1/webui/skins/update") {
       return responseJson({ message: "Skin update check completed" });
@@ -210,7 +211,7 @@ const initialSettings: SkinSettings = {
   ],
   defaultReviewEnabled: true,
   reviewEnabledByProfile: {},
-  skinTitle: "Workflow",
+  skinTitle: "WorkFlow",
   shownProfileIds: ["p1", "p2"],
   profileWorkflows: {}
 };
@@ -251,14 +252,23 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { name: "Bag Filters" })).toBeInTheDocument();
   });
 
-  it("renders the skin title as a centered app headline outside the menu", async () => {
-    mockReaFetch({ ...initialSettings, skinTitle: "Roy's Workflow" });
+  it("renders WorkFlow in the menu and machine status in the fixed top bar", async () => {
+    mockReaFetch({
+      ...initialSettings,
+      menuCollapsed: false
+    }, {
+      machineState: { connected: true, state: { state: "heating" }, groupTemperature: 91.2, wifi: { connected: true, ipAddress: "192.168.1.20" } }
+    });
     render(<App />);
 
-    const title = await screen.findByLabelText("App title");
+    const topbar = await screen.findByRole("banner", { name: "Machine status bar" });
+    const menuTitle = screen.getByLabelText("WorkFlow menu title");
 
-    expect(title).toHaveTextContent("Roy's Workflow");
-    expect(title.closest("nav")).toBeNull();
+    expect(menuTitle).toHaveTextContent("WorkFlow");
+    expect(topbar).toHaveTextContent("Heating");
+    expect(topbar).toHaveTextContent("91.2°C");
+    expect(within(topbar).getByRole("button", { name: "WiFi" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("App title")).not.toBeInTheDocument();
   });
 
   it("has a dedicated menu item for profiles", async () => {
@@ -299,31 +309,29 @@ describe("App shell", () => {
     expect(screen.queryByRole("button", { name: "Steam" })).not.toBeInTheDocument();
   });
 
-  it("edits main menu visibility and order from the sidebar", async () => {
-    const fetchState = mockReaFetch(initialSettings);
-    render(<App />);
-
-    await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
-    await userEvent.click(await screen.findByRole("button", { name: "Edit main menu in sidebar" }));
-    await userEvent.click(await screen.findByRole("button", { name: "Move Grinders up" }));
-    await userEvent.click(screen.getByRole("button", { name: "Hide History" }));
-
-    expect(fetchState.savedSettings.hiddenMainMenuItemIds).toEqual(["history"]);
-    expect(fetchState.savedSettings.mainMenuItems.indexOf("grinders")).toBeLessThan(fetchState.savedSettings.mainMenuItems.indexOf("profiles"));
-    expect(screen.getByRole("button", { name: "Show History" })).toBeInTheDocument();
-  });
-
   it("uses compact icons and a notepad edit icon in the collapsed menu", async () => {
     mockReaFetch({ ...initialSettings, menuCollapsed: true });
     render(<App />);
 
     const reviewButton = await screen.findByRole("button", { name: "Review" });
     const reviewIcon = reviewButton.querySelector("svg");
+    const menuTitle = screen.getByLabelText("WorkFlow menu title");
 
+    expect(menuTitle).toHaveTextContent("WF");
     expect(reviewButton).toHaveClass("review-nav-button");
     expect(reviewIcon).toHaveClass("review-nav-icon");
     expect(reviewIcon).toHaveAttribute("width", "20");
     expect(reviewIcon).toHaveAttribute("height", "20");
+  });
+
+  it("hides connection status indicators when the menu is collapsed", async () => {
+    mockReaFetch({ ...initialSettings, menuCollapsed: true });
+    render(<App />);
+
+    await screen.findByRole("navigation", { name: "Workflow navigation" });
+
+    expect(screen.queryByLabelText("Connection status")).not.toBeInTheDocument();
+    expect(screen.getByRole("banner", { name: "Machine status bar" })).toBeInTheDocument();
   });
 
   it("has a dedicated menu item for grinders", async () => {
@@ -354,6 +362,17 @@ describe("App shell", () => {
 
     expect(screen.getByRole("button", { name: "Use Classic" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Use Blooming" })).not.toBeInTheDocument();
+  });
+
+  it("does not list profiles already assigned to another preset slot", async () => {
+    mockReaFetch(initialSettings);
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Edit Sweet" }));
+
+    expect(screen.getByRole("dialog", { name: "Edit Sweet preset" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Use Blooming" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Use Classic" })).toBeInTheDocument();
   });
 
   it("creates an editable copy when saving a default profile is rejected", async () => {
@@ -566,7 +585,7 @@ describe("App shell", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: "Sleep machine" }));
 
-    expect(await screen.findByRole("heading", { name: "Workflow" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "WorkFlow" })).toBeInTheDocument();
     expect(screen.getByText("Machine sleeping")).toBeInTheDocument();
     expect(screen.getByText("Tap the screen to wake")).toBeInTheDocument();
     expect(fetchState.fetchMock).toHaveBeenCalledWith(
@@ -604,7 +623,7 @@ describe("App shell", () => {
 
     mockReaFetch(initialSettings);
     const { container } = render(<App />);
-    const actions = container.querySelector(".page-top-actions") as HTMLElement;
+    const actions = container.querySelector(".top-status-actions") as HTMLElement;
 
     expect(actions).toBeInTheDocument();
     expect(within(actions).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Sleep machine", "Enter fullscreen"]);
@@ -619,19 +638,22 @@ describe("App shell", () => {
     expect(exitFullscreen).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the app title and top action buttons in a shared top bar", async () => {
+  it("keeps the machine status screen-level and top action buttons grouped", async () => {
     mockReaFetch(initialSettings);
     const { container } = render(<App />);
 
     await screen.findByRole("heading", { name: "Brew" });
-    const topbar = container.querySelector(".page-topbar") as HTMLElement;
-    const actions = container.querySelector(".page-top-actions") as HTMLElement;
-    const title = screen.getByLabelText("App title");
+    const shell = container.querySelector(".app-shell") as HTMLElement;
+    const topbar = screen.getByRole("banner", { name: "Machine status bar" });
+    const actions = container.querySelector(".top-status-actions") as HTMLElement;
+    const machineStatus = screen.getByLabelText("Machine current status");
 
+    expect(shell).toContainElement(topbar);
+    expect(topbar).toContainElement(machineStatus);
     expect(topbar).toBeInTheDocument();
-    expect(topbar).toContainElement(title);
     expect(topbar).toContainElement(actions);
     expect(within(actions).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Sleep machine", "Enter fullscreen"]);
+    expect(within(actions).getByRole("button", { name: "Enter fullscreen" })).not.toHaveTextContent(/Full|Exit/);
   });
 
   it("refreshes and connects the R2 sensor from settings", async () => {
@@ -690,7 +712,7 @@ describe("App shell", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: "Scale" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Trying to connect scale.");
+    expect(await screen.findByRole("status")).toHaveTextContent("Scale connection requested.");
     expect(fetchState.fetchMock).toHaveBeenCalledWith(
       "http://localhost:8080/api/v1/devices/scan?connect=true&quick=false",
       expect.objectContaining({ method: "GET" })
@@ -699,6 +721,48 @@ describe("App shell", () => {
       "http://localhost:8080/api/v1/devices/connect",
       expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "scale-1" }) })
     );
+  });
+
+  it("connects a scale returned only by the scan response", async () => {
+    const fetchState = mockReaFetch(initialSettings, {
+      devices: [],
+      scanDevicesResult: [{ id: "acaia-lunar", name: "Acaia Lunar", type: "sensor", state: "discovered" }]
+    });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Scale" }));
+
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/devices/scan?connect=true&quick=false",
+      expect.objectContaining({ method: "GET" })
+    );
+    await waitFor(() => {
+      expect(fetchState.fetchMock).toHaveBeenCalledWith(
+        "http://localhost:8080/api/v1/devices/connect",
+        expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "acaia-lunar" }) })
+      );
+    });
+    expect(await screen.findByRole("status")).toHaveTextContent("Scale connection requested.");
+  });
+
+  it.each([
+    ["BooKoo Themis", "bookoo-themis"],
+    ["Decent Scale", "decent-scale"]
+  ])("recognizes %s as a connectable scale", async (scaleName, scaleId) => {
+    const fetchState = mockReaFetch(initialSettings, {
+      devices: [],
+      scanDevicesResult: [{ id: scaleId, name: scaleName, type: "sensor", state: "discovered" }]
+    });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Scale" }));
+
+    await waitFor(() => {
+      expect(fetchState.fetchMock).toHaveBeenCalledWith(
+        "http://localhost:8080/api/v1/devices/connect",
+        expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: scaleId }) })
+      );
+    });
   });
 
   it("installs the configured skin update on startup when auto-update is enabled", async () => {
@@ -724,13 +788,14 @@ describe("App shell", () => {
       skinUpdateAsset: "workflow-skin.zip",
       skinUpdatePrerelease: false
     }, {
-      webuiSkins: [{ id: "workflow-skin", name: "Workflow Skin", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }],
-      defaultWebuiSkin: { id: "workflow-skin", name: "Workflow Skin", version: currentSkinVersion, path: "/skins/workflow", isBundled: false },
+      webuiSkins: [{ id: "workflow-skin", name: "WorkFlow", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }],
+      defaultWebuiSkin: { id: "workflow-skin", name: "WorkFlow", version: currentSkinVersion, path: "/skins/workflow", isBundled: false },
       githubLatestTag: "v99.0.0"
     });
     render(<App />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "Skin settings" }));
     await userEvent.click(await screen.findByRole("button", { name: "Check for skin updates" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Skin update check completed.");
@@ -766,6 +831,7 @@ describe("App shell", () => {
     render(<App />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "Skin settings" }));
     await userEvent.click(await screen.findByRole("button", { name: "Install/update from GitHub release" }));
 
     expect(await screen.findByText("Downloading update...")).toBeInTheDocument();
@@ -788,6 +854,7 @@ describe("App shell", () => {
     render(<App />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "Skin settings" }));
     await userEvent.click(await screen.findByRole("button", { name: "Install/update from GitHub release" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Skin installed from committed workflow zip.");
@@ -837,7 +904,7 @@ describe("App shell", () => {
     const fetchState = mockReaFetch(initialSettings, { failBatchCreate: true });
     render(<App />);
     await userEvent.click(screen.getByRole("button", { name: /Bags/i }));
-    const form = screen.getByRole("form", { name: /Add a bag/i });
+    const form = screen.getByRole("form", { name: /Create a bag/i });
 
     await userEvent.type(within(form).getByLabelText("Roaster"), "Pilot");
     await userEvent.type(within(form).getByLabelText("Bean"), "Halo");
