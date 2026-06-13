@@ -694,12 +694,15 @@ describe("SettingsPage", () => {
     const onUpdateSettings = vi.fn();
     render(<SettingsPage settings={defaultSkinSettings} r2Sensor={null} onUpdateSettings={onUpdateSettings} />);
 
+    expect(screen.getByLabelText("Measure delay")).toHaveValue(30);
+    expect(screen.getByText("Set the delay for automatic R2 measurement.")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Auto sleep after last use"), { target: { value: "45" } });
+    fireEvent.change(screen.getByLabelText("Measure delay"), { target: { value: "55" } });
 
     expect(onUpdateSettings).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
 
-    expect(onUpdateSettings).toHaveBeenLastCalledWith(expect.objectContaining({ autoSleepMinutes: 45 }));
+    expect(onUpdateSettings).toHaveBeenLastCalledWith(expect.objectContaining({ autoSleepMinutes: 45, r2MeasureDelaySeconds: 55 }));
   });
 
   it("edits skin updater settings and triggers native update actions", async () => {

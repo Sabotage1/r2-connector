@@ -4,6 +4,7 @@ import type { DisplayState, JsonMap, PluginManifest, SensorListItem, VisualizerS
 import {
   DEFAULT_SKIN_THEMES,
   DEFAULT_SKIN_UPDATE_BRANCH,
+  DEFAULT_R2_MEASURE_DELAY_SECONDS,
   EDITABLE_SKIN_THEME_IDS,
   defaultPresetLabel,
   ensurePresetSlots,
@@ -11,6 +12,7 @@ import {
   mainMenuItemsForSettings,
   MAX_AUTO_SLEEP_MINUTES,
   MAX_PRESET_SLOT_COUNT,
+  MAX_R2_MEASURE_DELAY_SECONDS,
   MAX_SKIN_FONT_SCALE,
   MIN_PRESET_SLOT_COUNT,
   MIN_SKIN_FONT_SCALE,
@@ -143,6 +145,11 @@ function autoSleepValue(value: number | undefined): number {
   return Math.min(MAX_AUTO_SLEEP_MINUTES, Math.max(0, Math.round(value)));
 }
 
+function r2MeasureDelayValue(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_R2_MEASURE_DELAY_SECONDS;
+  return Math.min(MAX_R2_MEASURE_DELAY_SECONDS, Math.max(0, Math.round(value)));
+}
+
 function skinFontScaleValue(value: number | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return 100;
   return Math.min(MAX_SKIN_FONT_SCALE, Math.max(MIN_SKIN_FONT_SCALE, Math.round(value)));
@@ -162,6 +169,7 @@ function normalizeDraftSettings(settings: SkinSettings): SkinSettings {
     keepScreenAwake: settings.keepScreenAwake !== false,
     screensaverBrightness: brightnessValue(settings.screensaverBrightness),
     autoSleepMinutes: autoSleepValue(settings.autoSleepMinutes),
+    r2MeasureDelaySeconds: r2MeasureDelayValue(settings.r2MeasureDelaySeconds),
     skinAutoUpdateEnabled: Boolean(settings.skinAutoUpdateEnabled),
     skinUpdatePrerelease: Boolean(settings.skinUpdatePrerelease),
     skinUpdateBranch: settings.skinUpdateBranch.trim() || DEFAULT_SKIN_UPDATE_BRANCH,
@@ -226,6 +234,7 @@ export function SettingsPage({
   const r2Configured = Boolean(draftSettings.r2SensorId);
   const screensaverBrightness = brightnessValue(draftSettings.screensaverBrightness);
   const autoSleepMinutes = autoSleepValue(draftSettings.autoSleepMinutes);
+  const r2MeasureDelaySeconds = r2MeasureDelayValue(draftSettings.r2MeasureDelaySeconds);
   const skinFontScale = skinFontScaleValue(draftSettings.skinFontScale);
   const skinThemes = skinThemesForSettings(draftSettings);
   const workflowSkin = webuiSkins?.find((skin) => skin.id === WORKFLOW_SKIN_ID) ?? (defaultWebuiSkin?.id === WORKFLOW_SKIN_ID ? defaultWebuiSkin : null);
@@ -360,6 +369,19 @@ export function SettingsPage({
           <div className="list-row">
             <strong>DiFluid R2 status</strong>
             <span>{r2Configured ? `Configured sensor: ${draftSettings.r2SensorId}` : "R2 status is hidden until setup."}</span>
+            <label className="settings-field">
+              Measure delay
+              <input
+                aria-label="Measure delay"
+                type="number"
+                min={0}
+                max={MAX_R2_MEASURE_DELAY_SECONDS}
+                step={1}
+                value={r2MeasureDelaySeconds}
+                onChange={(event) => updateDraftSettings({ r2MeasureDelaySeconds: Number(event.target.value) })}
+              />
+            </label>
+            <span>Set the delay for automatic R2 measurement.</span>
             <div className="profile-workflow-controls">
               <button type="button" className="ghost-button" disabled={r2RefreshBusy || !onRefreshR2} onClick={() => void onRefreshR2?.()}>
                 {r2RefreshBusy ? "Refreshing R2" : "Refresh R2"}

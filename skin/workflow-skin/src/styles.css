@@ -58,6 +58,8 @@ textarea {
 .side-nav {
   min-width: 0;
   height: calc(100vh - var(--top-status-height));
+  display: flex;
+  flex-direction: column;
   padding: 14px 18px 18px;
   border-right: 1px solid var(--skin-border);
   background: var(--skin-panel);
@@ -370,10 +372,38 @@ textarea {
   margin-bottom: 8px;
 }
 
+.menu-version-footer {
+  display: grid;
+  gap: 3px;
+  margin-top: auto;
+  border-top: 1px solid rgb(255 255 255 / 10%);
+  padding: 12px 4px 0;
+  color: var(--skin-text);
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1.2;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.menu-version-footer strong {
+  color: inherit;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.menu-version-footer.update-available {
+  color: #f4d56c;
+}
+
 .menu-collapsed .nav-button {
   min-height: 56px;
   justify-content: center;
   padding: 8px;
+}
+
+.menu-collapsed .menu-version-footer {
+  display: none;
 }
 
 .menu-collapsed .nav-edit-row {
@@ -1503,6 +1533,10 @@ textarea {
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior-x: contain;
+  }
+
+  .menu-version-footer {
+    display: none;
   }
 
   .sidebar-header {

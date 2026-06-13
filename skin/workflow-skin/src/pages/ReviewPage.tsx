@@ -3,6 +3,7 @@ import type { SensorListItem, ShotAnnotations, ShotRecord } from "../api/types";
 import { ShotGraph } from "../components/ShotGraph";
 import { calculateEy, cleanNumber } from "../lib/ey";
 import { grindSizeFromShot, previousFiveForBag, shotContext, shotStats } from "../lib/shotStats";
+import { DEFAULT_R2_MEASURE_DELAY_SECONDS } from "../state/skinSettings";
 
 function formatStat(value: number | null, unit: string): string {
   return value == null ? "—" : `${value}${unit}`;
@@ -29,6 +30,7 @@ export function ReviewPage({
   r2Available = Boolean(r2Sensor),
   onReadR2,
   autoReadR2 = false,
+  autoReadR2DelaySeconds = DEFAULT_R2_MEASURE_DELAY_SECONDS,
   onBackToGraph
 }: {
   shot: ShotRecord;
@@ -39,6 +41,7 @@ export function ReviewPage({
   r2Available?: boolean;
   onReadR2: () => Promise<number | null> | number | null;
   autoReadR2?: boolean;
+  autoReadR2DelaySeconds?: number;
   onBackToGraph?: () => void;
 }) {
   const stats = shotStats(shot);
@@ -133,8 +136,21 @@ export function ReviewPage({
   useEffect(() => {
     if (!autoReadR2 || !r2Available || autoReadShotRef.current === shot.id) return;
     autoReadShotRef.current = shot.id;
-    void readR2();
-  }, [autoReadR2, r2Available, shot.id]);
+    const delayMs = Math.max(0, Math.round(autoReadR2DelaySeconds) * 1000);
+    if (delayMs === 0) {
+      void readR2();
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void readR2();
+    }, delayMs);
+
+    return () => {
+      window.clearTimeout(timer);
+      if (autoReadShotRef.current === shot.id) autoReadShotRef.current = null;
+    };
+  }, [autoReadR2, autoReadR2DelaySeconds, r2Available, shot.id]);
 
   useEffect(() => {
     setSelectedShotId(shot.id);

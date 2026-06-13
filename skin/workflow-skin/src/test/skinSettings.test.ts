@@ -28,6 +28,7 @@ describe("skin settings", () => {
     expect(defaultSkinSettings.skinUpdateAsset).toBe("workflow-skin.zip");
     expect(defaultSkinSettings.skinUpdatePrerelease).toBe(false);
     expect(defaultSkinSettings.autoSleepMinutes).toBe(30);
+    expect(defaultSkinSettings.r2MeasureDelaySeconds).toBe(30);
     expect(defaultSkinSettings.presetSlotCount).toBe(4);
     expect(defaultSkinSettings.menuCollapsed).toBe(false);
     expect(defaultSkinSettings.mainMenuItems).toEqual(DEFAULT_MAIN_MENU_ITEMS);
@@ -60,6 +61,7 @@ describe("skin settings", () => {
         skinUpdateAsset: " workflow-skin.zip ",
         skinUpdatePrerelease: true,
         autoSleepMinutes: 999,
+        r2MeasureDelaySeconds: 44.7,
         presetSlotCount: 12,
         menuCollapsed: true,
         mainMenuItems: ["settings", "profiles", "missing", "brew", "profiles"],
@@ -93,6 +95,7 @@ describe("skin settings", () => {
     expect(settings.skinUpdateAsset).toBe("workflow-skin.zip");
     expect(settings.skinUpdatePrerelease).toBe(true);
     expect(settings.autoSleepMinutes).toBe(240);
+    expect(settings.r2MeasureDelaySeconds).toBe(45);
     expect(settings.presetSlotCount).toBe(8);
     expect(settings.menuCollapsed).toBe(true);
     expect(settings.mainMenuItems.slice(0, 3)).toEqual(["settings", "profiles", "brew"]);

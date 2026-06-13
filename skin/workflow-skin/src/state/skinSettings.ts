@@ -65,6 +65,7 @@ export interface SkinSettings {
   keepScreenAwake?: boolean;
   screensaverBrightness?: number;
   autoSleepMinutes: number;
+  r2MeasureDelaySeconds: number;
   skinAutoUpdateEnabled: boolean;
   skinUpdateRepo: string;
   skinUpdateBranch: string;
@@ -84,6 +85,8 @@ export const MIN_PRESET_SLOT_COUNT = 1;
 export const MAX_PRESET_SLOT_COUNT = 8;
 export const DEFAULT_AUTO_SLEEP_MINUTES = 30;
 export const MAX_AUTO_SLEEP_MINUTES = 240;
+export const DEFAULT_R2_MEASURE_DELAY_SECONDS = 30;
+export const MAX_R2_MEASURE_DELAY_SECONDS = 3600;
 export const MIN_SKIN_FONT_SCALE = 85;
 export const MAX_SKIN_FONT_SCALE = 125;
 export const EDITABLE_SKIN_THEME_IDS = ["slate", "ruby"] as const satisfies readonly EditableSkinThemeId[];
@@ -166,6 +169,7 @@ export function createDefaultSkinSettings(): SkinSettings {
     keepScreenAwake: true,
     screensaverBrightness: 8,
     autoSleepMinutes: DEFAULT_AUTO_SLEEP_MINUTES,
+    r2MeasureDelaySeconds: DEFAULT_R2_MEASURE_DELAY_SECONDS,
     skinAutoUpdateEnabled: false,
     skinUpdateRepo: DEFAULT_SKIN_UPDATE_REPO,
     skinUpdateBranch: DEFAULT_SKIN_UPDATE_BRANCH,
@@ -286,6 +290,11 @@ function normalizeAutoSleepMinutes(value: unknown): number {
   return Math.min(MAX_AUTO_SLEEP_MINUTES, Math.max(0, value));
 }
 
+function normalizeR2MeasureDelaySeconds(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_R2_MEASURE_DELAY_SECONDS;
+  return Math.min(MAX_R2_MEASURE_DELAY_SECONDS, Math.max(0, Math.round(value)));
+}
+
 function normalizeSkinFontScale(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return 100;
   return Math.min(MAX_SKIN_FONT_SCALE, Math.max(MIN_SKIN_FONT_SCALE, Math.round(value)));
@@ -375,6 +384,7 @@ export function normalizeSkinSettings(value: unknown): SkinSettings {
         ? Math.min(100, Math.max(0, Math.round(value.screensaverBrightness)))
         : 8,
     autoSleepMinutes: normalizeAutoSleepMinutes(value.autoSleepMinutes),
+    r2MeasureDelaySeconds: normalizeR2MeasureDelaySeconds(value.r2MeasureDelaySeconds),
     skinAutoUpdateEnabled: typeof value.skinAutoUpdateEnabled === "boolean" ? value.skinAutoUpdateEnabled : false,
     skinUpdateRepo: normalizeString(value.skinUpdateRepo),
     skinUpdateBranch: normalizeString(value.skinUpdateBranch, DEFAULT_SKIN_UPDATE_BRANCH),

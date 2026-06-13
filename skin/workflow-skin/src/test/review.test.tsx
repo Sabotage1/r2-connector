@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
@@ -93,6 +93,7 @@ afterEach(() => {
   appMocks.executeSensor.mockReset();
   appMocks.getShot.mockReset();
   appMocks.updateShot.mockReset();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -450,7 +451,8 @@ describe("ReviewPage", () => {
     expect(screen.getByLabelText("TDS")).toHaveValue("9.7");
   });
 
-  it("automatically reads R2 when review opens after a brew", async () => {
+  it("waits for the configured delay before automatically reading R2 after a brew", async () => {
+    vi.useFakeTimers();
     const onReadR2 = vi.fn().mockResolvedValue(9.8);
     render(
       <ReviewPage
@@ -461,10 +463,22 @@ describe("ReviewPage", () => {
         r2Sensor={r2Sensor}
         onReadR2={onReadR2}
         autoReadR2
+        autoReadR2DelaySeconds={30}
       />
     );
 
-    expect(await screen.findByText("R2 TDS 9.8 imported.")).toBeInTheDocument();
+    expect(onReadR2).not.toHaveBeenCalled();
+    await act(async () => {
+      vi.advanceTimersByTime(29_999);
+    });
+    expect(onReadR2).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("R2 TDS 9.8 imported.")).toBeInTheDocument();
     expect(screen.getByLabelText("TDS")).toHaveValue("9.8");
     expect(onReadR2).toHaveBeenCalledTimes(1);
   });

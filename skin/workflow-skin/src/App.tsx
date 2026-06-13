@@ -15,9 +15,10 @@ import {
   SlidersHorizontal
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import skinManifest from "../skin-manifest.json";
 import { apiBaseUrl, ReaPrimeApi, ReaPrimeApiError, type CreateGrinderPayload } from "./api/reaprime";
 import { findDifluidR2Sensor } from "./api/sensors";
-import type { DeviceInfo, Grinder, MachineState, Profile, ProfileRecord, SensorListItem, ShotAnnotations, ShotRecord, ShotSnapshot, Workflow } from "./api/types";
+import type { DeviceInfo, Grinder, MachineState, Profile, ProfileRecord, SensorListItem, ShotAnnotations, ShotRecord, ShotSnapshot, WebUISkin, Workflow } from "./api/types";
 import { uploadShotToVisualizer } from "./api/visualizer";
 import type { Bag } from "./lib/bags";
 import { buildConnectivityStatuses } from "./lib/connectivity";
@@ -54,6 +55,8 @@ type SkinUpdateSource = "release" | "branch";
 
 const POST_ACTIVITY_ROUTE_DELAY_MS = 1000;
 const ACTIVE_MACHINE_STATE_POLL_MS = 500;
+const WORKFLOW_SKIN_ID = "workflow-skin";
+const CURRENT_SKIN_VERSION = typeof skinManifest.version === "string" ? skinManifest.version : "";
 
 interface TopStatusIndicator {
   id: TopStatusIndicatorId;
@@ -197,6 +200,15 @@ function newestSkinUpdate(releaseVersion: string | null | undefined, manifestVer
 
   const comparison = compareVersionStrings(manifest, release);
   return comparison !== null && comparison > 0 ? { version: manifest, source: "branch" } : { version: release, source: "release" };
+}
+
+function versionLabel(value: string | null | undefined): string {
+  const clean = value?.trim().replace(/^v/i, "");
+  return clean ? `v${clean}` : "Version unknown";
+}
+
+function workflowSkinFromList(webuiSkins: WebUISkin[] | undefined, defaultWebuiSkin: WebUISkin | null | undefined): WebUISkin | null {
+  return webuiSkins?.find((skin) => skin.id === WORKFLOW_SKIN_ID) ?? (defaultWebuiSkin?.id === WORKFLOW_SKIN_ID ? defaultWebuiSkin : null);
 }
 
 function dateOnlyToIsoDateTime(value: string | undefined): string | undefined {
@@ -607,6 +619,10 @@ export function App() {
     [nativeDevices, data.machineState, data.sensors, data.settings.r2SensorId, liveTelemetry.scaleConnected, liveTelemetry.waterLevels, r2DeviceConnected, r2Sensor]
   );
   const visibleMenuIds = useMemo(() => visibleMainMenuItems(data.settings), [data.settings.mainMenuItems, data.settings.hiddenMainMenuItemIds]);
+  const workflowSkin = useMemo(() => workflowSkinFromList(data.webuiSkins, data.defaultWebuiSkin), [data.webuiSkins, data.defaultWebuiSkin]);
+  const menuSkinVersion = workflowSkin?.version?.trim() || CURRENT_SKIN_VERSION;
+  const menuSkinUpdateAvailable =
+    Boolean(menuSkinVersion && availableSkinVersion) && compareVersionStrings(menuSkinVersion, availableSkinVersion ?? "") === -1;
   const topStatusIndicators = useMemo(
     () =>
       buildTopStatusIndicators({
@@ -968,6 +984,34 @@ export function App() {
       setSkinUpdatePhase("idle");
     }
   };
+
+  useEffect(() => {
+    if (!data.loaded) return;
+    const repo = data.settings.skinUpdateRepo.trim();
+    const branch = data.settings.skinUpdateBranch.trim();
+    if (!repo) {
+      setAvailableSkinVersion(null);
+      setAvailableSkinUpdateSource(null);
+      return;
+    }
+    setAvailableSkinUpdateSource(null);
+
+    let canceled = false;
+    const refreshAvailableVersion = async () => {
+      const [releaseVersion, manifestVersion] = await Promise.all([
+        fetchLatestGithubReleaseVersion(repo, data.settings.skinUpdatePrerelease).catch(() => null),
+        fetchGithubSkinManifestVersion(repo, branch).catch(() => null)
+      ]);
+      if (canceled) return;
+      const update = newestSkinUpdate(releaseVersion, manifestVersion);
+      setAvailableSkinVersion(update?.version ?? null);
+    };
+
+    void refreshAvailableVersion();
+    return () => {
+      canceled = true;
+    };
+  }, [data.loaded, data.settings.skinUpdateRepo, data.settings.skinUpdateBranch, data.settings.skinUpdatePrerelease]);
 
   const installSkinUpdate = async (reportStatus = true) => {
     const repo = data.settings.skinUpdateRepo.trim();
@@ -1467,6 +1511,16 @@ export function App() {
             </button>
           );
         })}
+        {!data.settings.menuCollapsed && (
+          <div
+            className={menuSkinUpdateAvailable ? "menu-version-footer update-available" : "menu-version-footer latest"}
+            aria-label="Skin version"
+            title={menuSkinUpdateAvailable ? `Update available: ${versionLabel(availableSkinVersion)}` : "Skin is up to date"}
+          >
+            <span>{versionLabel(menuSkinVersion)}</span>
+            {menuSkinUpdateAvailable && <strong>Update {versionLabel(availableSkinVersion)}</strong>}
+          </div>
+        )}
       </nav>
       <section className="page-surface">
         {page !== "bags" && <h1>{navById[page].label}</h1>}
@@ -1548,6 +1602,7 @@ export function App() {
               r2Available={r2Available}
               onReadR2={readR2}
               autoReadR2={autoReadR2ShotId === reviewShot.id}
+              autoReadR2DelaySeconds={data.settings.r2MeasureDelaySeconds}
               onBackToGraph={() => setPage("live")}
             />
           ) : (

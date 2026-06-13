@@ -298,6 +298,60 @@ describe("App shell", () => {
     expect(screen.queryByLabelText("App title")).not.toBeInTheDocument();
   });
 
+  it("shows the latest skin version at the bottom of the expanded menu", async () => {
+    const currentSkinVersion = typeof skinManifest.version === "string" ? skinManifest.version : "0.0.0";
+    mockReaFetch(
+      {
+        ...initialSettings,
+        menuCollapsed: false
+      },
+      {
+        webuiSkins: [{ id: "workflow-skin", name: "WorkFlow", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }],
+        defaultWebuiSkin: { id: "workflow-skin", name: "WorkFlow", version: currentSkinVersion, path: "/skins/workflow", isBundled: false },
+        githubLatestTag: `v${currentSkinVersion}`,
+        githubManifestVersion: currentSkinVersion
+      }
+    );
+    render(<App />);
+
+    const skinVersion = await screen.findByLabelText("Skin version");
+
+    expect(skinVersion).toHaveTextContent(`v${currentSkinVersion}`);
+    expect(skinVersion).toHaveClass("latest");
+    expect(skinVersion).not.toHaveClass("update-available");
+  });
+
+  it("highlights the expanded menu skin version when a repo update is available", async () => {
+    mockReaFetch(
+      {
+        ...initialSettings,
+        menuCollapsed: false
+      },
+      {
+        webuiSkins: [{ id: "workflow-skin", name: "WorkFlow", version: "0.1.25", path: "/skins/workflow", isBundled: false }],
+        defaultWebuiSkin: { id: "workflow-skin", name: "WorkFlow", version: "0.1.25", path: "/skins/workflow", isBundled: false },
+        githubLatestTag: "v99.0.0",
+        githubManifestVersion: "99.0.0"
+      }
+    );
+    render(<App />);
+
+    const skinVersion = await screen.findByLabelText("Skin version");
+
+    await waitFor(() => expect(skinVersion).toHaveClass("update-available"));
+    expect(skinVersion).toHaveTextContent("v0.1.25");
+    expect(skinVersion).toHaveTextContent("Update v99.0.0");
+  });
+
+  it("hides the skin version when the menu is minimized", async () => {
+    mockReaFetch({ ...initialSettings, menuCollapsed: true });
+    render(<App />);
+
+    await screen.findByRole("navigation", { name: "Workflow navigation" });
+
+    expect(screen.queryByLabelText("Skin version")).not.toBeInTheDocument();
+  });
+
   it("shows PreparingForShot as Heating in the machine header", async () => {
     mockReaFetch(initialSettings, {
       machineState: { connected: true, state: { state: "PreparingForShot" }, groupTemperature: 88.3 }
