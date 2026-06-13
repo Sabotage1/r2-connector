@@ -220,6 +220,9 @@ describe("BagsPage", () => {
   it("saves a valid draft bag through the provided callback", async () => {
     const onSaveBag = vi.fn().mockResolvedValue(undefined);
     render(<BagsPage bags={[]} onSaveBag={onSaveBag} />);
+
+    expect(screen.queryByRole("form", { name: /Create a bag/i })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Add Bag" }));
     const form = screen.getByRole("form", { name: /Create a bag/i });
 
     await userEvent.type(within(form).getByLabelText("Bag Name"), "Morning bag");
@@ -245,27 +248,39 @@ describe("BagsPage", () => {
       })
     );
     expect(await screen.findByRole("status")).toHaveTextContent("Bag saved");
-    expect(within(form).getByLabelText("Roaster")).toHaveValue("");
+    expect(screen.queryByRole("form", { name: /Create a bag/i })).not.toBeInTheDocument();
   });
 
   it("shows an inline validation message for invalid draft bags", async () => {
     const onSaveBag = vi.fn();
     render(<BagsPage bags={[]} onSaveBag={onSaveBag} />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await userEvent.click(screen.getByRole("button", { name: "Add Bag" }));
+    const form = screen.getByRole("form", { name: /Create a bag/i });
+    await userEvent.click(within(form).getByRole("button", { name: "Save" }));
 
     expect(onSaveBag).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent("to consider this a bag for suggestions and future features fill all mandatory fields");
-    expect(screen.getByText("Mandatory for bag suggestions: roaster, bean, process, and roast date.")).toBeInTheDocument();
+    expect(screen.getByText("Mandatory for bag suggestions: roaster, bean, country, process, and roast date.")).toBeInTheDocument();
   });
 
   it("includes an optional bag name field and marks mandatory bag fields", () => {
     render(<BagsPage bags={[]} onSaveBag={vi.fn()} />);
 
+    expect(screen.getByRole("button", { name: "Add Bag" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Create a bag" })).not.toBeInTheDocument();
+  });
+
+  it("opens the add bag card with optional name and mandatory bag fields", async () => {
+    render(<BagsPage bags={[]} onSaveBag={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Add Bag" }));
+
     expect(screen.getByRole("heading", { name: "Create a bag" })).toBeInTheDocument();
     expect(screen.getByLabelText("Bag Name")).toBeInTheDocument();
     expect(screen.getByText("Roaster *")).toBeInTheDocument();
     expect(screen.getByText("Bean *")).toBeInTheDocument();
+    expect(screen.getByText("Country *")).toBeInTheDocument();
     expect(screen.getByText("Process *")).toBeInTheDocument();
     expect(screen.getByText("Roast Date *")).toBeInTheDocument();
   });
@@ -297,6 +312,7 @@ describe("BagsPage", () => {
 
     expect(screen.queryByRole("heading", { name: "Grinders" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Grinder model")).not.toBeInTheDocument();
+    expect(screen.queryByRole("form", { name: /Edit a bag/i })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Edit Pilot Halo" }));
     const form = screen.getByRole("form", { name: /Edit a bag/i });

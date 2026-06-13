@@ -43,7 +43,7 @@ export function buildBag(bean: Bean, batch: BeanBatch): Bag {
 }
 
 export function isValidBag(bag: Bag): boolean {
-  return Boolean(bag.roaster?.trim() && bag.bean?.trim() && bag.roastDate?.trim() && bag.process?.trim());
+  return Boolean(bag.roaster?.trim() && bag.bean?.trim() && bag.country?.trim() && bag.roastDate?.trim() && bag.process?.trim());
 }
 
 function normalizeFilter(filter: string | undefined): string | undefined {

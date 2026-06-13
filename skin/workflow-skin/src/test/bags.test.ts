@@ -19,7 +19,7 @@ const batch: BeanBatch = {
 };
 
 describe("bag helpers", () => {
-  it("requires roaster, bean, roast date, and process for valid bags", () => {
+  it("requires roaster, bean, country, roast date, and process for valid bags", () => {
     expect(isValidBag(buildBag(bean, batch))).toBe(true);
     expect(isValidBag(buildBag({ ...bean, processing: undefined }, batch))).toBe(false);
   });
@@ -29,6 +29,8 @@ describe("bag helpers", () => {
     ["roaster blank", { roaster: "   " }],
     ["bean missing", { bean: undefined }],
     ["bean blank", { bean: "   " }],
+    ["country missing", { country: undefined }],
+    ["country blank", { country: "   " }],
     ["roast date missing", { roastDate: undefined }],
     ["roast date blank", { roastDate: "   " }],
     ["process missing", { process: undefined }],

@@ -1,10 +1,10 @@
 import type { Bag } from "../lib/bags";
 
 const fields: Array<{ key: keyof Bag; label: string; type?: string; mandatory?: boolean }> = [
-  { key: "name", label: "Bag Name" },
   { key: "roaster", label: "Roaster", mandatory: true },
+  { key: "name", label: "Bag Name" },
   { key: "bean", label: "Bean", mandatory: true },
-  { key: "country", label: "Country" },
+  { key: "country", label: "Country", mandatory: true },
   { key: "region", label: "Region" },
   { key: "process", label: "Process", mandatory: true },
   { key: "roastDate", label: "Roast Date", type: "date", mandatory: true },
@@ -48,7 +48,7 @@ export function BagForm({
           </button>
         </div>
       </div>
-      <p className="mandatory-help">Mandatory for bag suggestions: roaster, bean, process, and roast date.</p>
+      <p className="mandatory-help">Mandatory for bag suggestions: roaster, bean, country, process, and roast date.</p>
       <div className="form-grid">
         {fields.map((field) => (
           <label key={field.key} className={field.mandatory ? "mandatory-field" : undefined}>

@@ -1271,10 +1271,12 @@ describe("App shell", () => {
     const fetchState = mockReaFetch(initialSettings, { failBatchCreate: true });
     render(<App />);
     await userEvent.click(screen.getByRole("button", { name: /Bags/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Add Bag" }));
     const form = screen.getByRole("form", { name: /Create a bag/i });
 
     await userEvent.type(within(form).getByLabelText("Roaster"), "Pilot");
     await userEvent.type(within(form).getByLabelText("Bean"), "Halo");
+    await userEvent.type(within(form).getByLabelText("Country"), "Ethiopia");
     await userEvent.type(within(form).getByLabelText("Process"), "Washed");
     await userEvent.type(within(form).getByLabelText("Roast Date"), "2026-06-01");
     await userEvent.click(within(form).getByRole("button", { name: "Save" }));

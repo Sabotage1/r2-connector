@@ -475,6 +475,18 @@ textarea {
   letter-spacing: 0;
 }
 
+.panel-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.panel-title-row h2 {
+  margin: 0;
+}
+
 .wide {
   grid-column: 1 / -1;
 }

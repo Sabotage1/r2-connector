@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { BagForm } from "../components/BagForm";
 import { filterBags, isValidBag, type Bag, type BagFilters } from "../lib/bags";
@@ -34,9 +35,18 @@ export function BagsPage({
   const [filters, setFilters] = useState<BagFilters>({});
   const [draft, setDraft] = useState<Bag>(emptyBag);
   const [editingBagId, setEditingBagId] = useState<string | null>(null);
+  const [showBagForm, setShowBagForm] = useState(false);
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const visibleBags = useMemo(() => filterBags(bags, filters), [bags, filters]);
   const editingBag = editingBagId ? bags.find((bag) => bag.id === editingBagId) : undefined;
+  const formOpen = showBagForm || Boolean(editingBag);
+
+  const openCreateForm = () => {
+    setDraft(emptyBag);
+    setEditingBagId(null);
+    setShowBagForm(true);
+    setStatus(null);
+  };
 
   const saveDraft = async () => {
     if (!isValidBag(draft)) {
@@ -52,6 +62,7 @@ export function BagsPage({
       }
       setDraft(emptyBag);
       setEditingBagId(null);
+      setShowBagForm(false);
       setStatus({ type: "success", message: editingBag ? "Bag updated" : "Bag saved" });
     } catch (error) {
       setStatus({ type: "error", message: error instanceof Error ? error.message : String(error) });
@@ -96,7 +107,13 @@ export function BagsPage({
         </div>
       </section>
       <section className="panel">
-        <h2>History</h2>
+        <div className="panel-title-row">
+          <h2>History</h2>
+          <button type="button" className="primary-button compact-button" onClick={openCreateForm}>
+            <Plus aria-hidden="true" size={16} />
+            Add Bag
+          </button>
+        </div>
         {visibleBags.map((bag) => (
           <div className="list-row" key={bag.id}>
             <strong>{bagTitle(bag)}</strong>
@@ -108,6 +125,7 @@ export function BagsPage({
                 onClick={() => {
                   setDraft(bag);
                   setEditingBagId(bag.id);
+                  setShowBagForm(true);
                   setStatus(null);
                 }}
               >
@@ -122,24 +140,29 @@ export function BagsPage({
           </div>
         ))}
       </section>
-      <section className="wide">
-        <BagForm
-          value={draft}
-          onChange={setDraft}
-          mode={editingBag ? "edit" : "create"}
-          onCancel={() => {
-            setDraft(emptyBag);
-            setEditingBagId(null);
-            setStatus(null);
-          }}
-          onSave={saveDraft}
-        />
-        {status && (
+      {formOpen && (
+        <section className="wide">
+          <BagForm
+            value={draft}
+            onChange={setDraft}
+            mode={editingBag ? "edit" : "create"}
+            onCancel={() => {
+              setDraft(emptyBag);
+              setEditingBagId(null);
+              setShowBagForm(false);
+              setStatus(null);
+            }}
+            onSave={saveDraft}
+          />
+        </section>
+      )}
+      {status && (
+        <section className="wide">
           <p className={status.type === "error" ? "status-message error" : "status-message"} role={status.type === "error" ? "alert" : "status"}>
             {status.message}
           </p>
-        )}
-      </section>
+        </section>
+      )}
     </div>
   );
 }
