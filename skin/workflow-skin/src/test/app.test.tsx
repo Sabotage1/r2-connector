@@ -1181,6 +1181,42 @@ describe("App shell", () => {
     );
   });
 
+  it("installs the committed branch zip when the checked update came from the branch manifest", async () => {
+    const fetchState = mockReaFetch(
+      {
+        ...initialSettings,
+        skinUpdateRepo: "Sabotage1/r2-connector",
+        skinUpdateBranch: "codex/reaprime-workflow-skin",
+        skinUpdateAsset: "workflow-skin.zip",
+        skinUpdatePrerelease: false
+      },
+      {
+        webuiSkins: [{ id: "workflow-skin", name: "WorkFlow", version: "0.1.25", path: "/skins/workflow", isBundled: false }],
+        defaultWebuiSkin: { id: "workflow-skin", name: "WorkFlow", version: "0.1.25", path: "/skins/workflow", isBundled: false },
+        githubLatestTag: "v0.1.20",
+        githubManifestVersion: "0.1.37"
+      }
+    );
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "Skin settings" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Check for skin updates" }));
+
+    expect(await screen.findByText("Update available: v0.1.37 is available (installed v0.1.25).")).toBeInTheDocument();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Install/update from GitHub release" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Skin installed from committed workflow zip.");
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/webui/skins/install/url",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ url: "https://raw.githubusercontent.com/Sabotage1/r2-connector/codex/reaprime-workflow-skin/skin/workflow-skin/workflow-skin.zip" })
+      })
+    );
+  });
+
   it("shows downloading update while the configured skin update is installing", async () => {
     let finishInstall!: () => void;
     const installWait = new Promise<void>((resolve) => {

@@ -50,6 +50,7 @@ import { useLiveTelemetry } from "./state/useLiveTelemetry";
 import { useReaData } from "./state/useReaData";
 
 type Page = MainMenuItemId | "screensaver";
+type SkinUpdateSource = "release" | "branch";
 
 const POST_ACTIVITY_ROUTE_DELAY_MS = 1000;
 const ACTIVE_MACHINE_STATE_POLL_MS = 500;
@@ -187,13 +188,15 @@ function compareVersionStrings(left: string, right: string): number | null {
   return 0;
 }
 
-function newestVersion(...versions: Array<string | null | undefined>): string | null {
-  const validVersions = versions.filter((version): version is string => Boolean(version?.trim()));
-  if (validVersions.length === 0) return null;
-  return validVersions.reduce((best, version) => {
-    const comparison = compareVersionStrings(version, best);
-    return comparison === null || comparison <= 0 ? best : version;
-  });
+function newestSkinUpdate(releaseVersion: string | null | undefined, manifestVersion: string | null | undefined): { version: string; source: SkinUpdateSource } | null {
+  const release = releaseVersion?.trim();
+  const manifest = manifestVersion?.trim();
+  if (!release && !manifest) return null;
+  if (!release) return { version: manifest!, source: "branch" };
+  if (!manifest) return { version: release, source: "release" };
+
+  const comparison = compareVersionStrings(manifest, release);
+  return comparison !== null && comparison > 0 ? { version: manifest, source: "branch" } : { version: release, source: "release" };
 }
 
 function dateOnlyToIsoDateTime(value: string | undefined): string | undefined {
@@ -527,6 +530,7 @@ export function App() {
   const [skinUpdateBusy, setSkinUpdateBusy] = useState(false);
   const [skinUpdatePhase, setSkinUpdatePhase] = useState<SkinUpdatePhase>("idle");
   const [availableSkinVersion, setAvailableSkinVersion] = useState<string | null>(null);
+  const [availableSkinUpdateSource, setAvailableSkinUpdateSource] = useState<SkinUpdateSource | null>(null);
   const [expandedStatusId, setExpandedStatusId] = useState<TopStatusIndicatorId | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [lastUseAt, setLastUseAt] = useState(() => Date.now());
@@ -947,9 +951,12 @@ export function App() {
           fetchLatestGithubReleaseVersion(repo, data.settings.skinUpdatePrerelease).catch(() => null),
           fetchGithubSkinManifestVersion(repo, branch).catch(() => null)
         ]);
-        setAvailableSkinVersion(newestVersion(releaseVersion, manifestVersion));
+        const update = newestSkinUpdate(releaseVersion, manifestVersion);
+        setAvailableSkinVersion(update?.version ?? null);
+        setAvailableSkinUpdateSource(update?.source ?? null);
       } else {
         setAvailableSkinVersion(null);
+        setAvailableSkinUpdateSource(null);
       }
       await data.refresh();
       if (reportStatus) setStatus({ type: "success", message: statusSentence(result.message, "Skin update check completed") });
@@ -973,6 +980,14 @@ export function App() {
     setSkinUpdatePhase("downloading");
     try {
       const asset = data.settings.skinUpdateAsset.trim();
+      const branch = data.settings.skinUpdateBranch.trim();
+      const branchZipUrl = availableSkinUpdateSource === "branch" ? githubWorkflowZipUrl(repo, branch, asset) : null;
+      if (branchZipUrl) {
+        const result = await api.installSkinFromUrl({ url: branchZipUrl });
+        await data.refresh();
+        if (reportStatus) setStatus({ type: "success", message: statusSentence(result.message, "Skin installed from committed workflow zip") });
+        return;
+      }
       const result = await api.installSkinFromGithubRelease({
         repo,
         ...(asset ? { asset } : {}),
