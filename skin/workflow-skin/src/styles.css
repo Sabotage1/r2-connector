@@ -437,11 +437,24 @@ textarea {
   opacity: 0.72;
 }
 
-.page-surface h1 {
+.page-surface h1,
+.page-title-row h1 {
   margin: 0 0 10px;
   font-size: 28px;
   line-height: 1.1;
   letter-spacing: 0;
+}
+
+.page-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.page-title-row h1 {
+  margin: 0;
 }
 
 .muted {
@@ -473,18 +486,6 @@ textarea {
   font-size: 18px;
   line-height: 1.2;
   letter-spacing: 0;
-}
-
-.panel-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.panel-title-row h2 {
-  margin: 0;
 }
 
 .wide {

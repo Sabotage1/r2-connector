@@ -80,7 +80,38 @@ export function BagsPage({
   };
 
   return (
-    <div className="workflow-grid">
+    <>
+      <div className="page-title-row">
+        <h1>Bags</h1>
+        <button type="button" className="primary-button compact-button" onClick={openCreateForm}>
+          <Plus aria-hidden="true" size={16} />
+          Add Bag
+        </button>
+      </div>
+      <div className="workflow-grid">
+        {formOpen && (
+          <section className="wide">
+            <BagForm
+              value={draft}
+              onChange={setDraft}
+              mode={editingBag ? "edit" : "create"}
+              onCancel={() => {
+                setDraft(emptyBag);
+                setEditingBagId(null);
+                setShowBagForm(false);
+                setStatus(null);
+              }}
+              onSave={saveDraft}
+            />
+          </section>
+        )}
+        {status && (
+          <section className="wide">
+            <p className={status.type === "error" ? "status-message error" : "status-message"} role={status.type === "error" ? "alert" : "status"}>
+              {status.message}
+            </p>
+          </section>
+        )}
       <section className="panel wide">
         <h2>Bag Filters</h2>
         <div className="form-grid">
@@ -107,13 +138,7 @@ export function BagsPage({
         </div>
       </section>
       <section className="panel">
-        <div className="panel-title-row">
-          <h2>History</h2>
-          <button type="button" className="primary-button compact-button" onClick={openCreateForm}>
-            <Plus aria-hidden="true" size={16} />
-            Add Bag
-          </button>
-        </div>
+        <h2>History</h2>
         {visibleBags.map((bag) => (
           <div className="list-row" key={bag.id}>
             <strong>{bagTitle(bag)}</strong>
@@ -140,29 +165,7 @@ export function BagsPage({
           </div>
         ))}
       </section>
-      {formOpen && (
-        <section className="wide">
-          <BagForm
-            value={draft}
-            onChange={setDraft}
-            mode={editingBag ? "edit" : "create"}
-            onCancel={() => {
-              setDraft(emptyBag);
-              setEditingBagId(null);
-              setShowBagForm(false);
-              setStatus(null);
-            }}
-            onSave={saveDraft}
-          />
-        </section>
-      )}
-      {status && (
-        <section className="wide">
-          <p className={status.type === "error" ? "status-message error" : "status-message"} role={status.type === "error" ? "alert" : "status"}>
-            {status.message}
-          </p>
-        </section>
-      )}
-    </div>
+      </div>
+    </>
   );
 }

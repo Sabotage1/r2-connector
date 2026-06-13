@@ -267,6 +267,12 @@ describe("BagsPage", () => {
   it("includes an optional bag name field and marks mandatory bag fields", () => {
     render(<BagsPage bags={[]} onSaveBag={vi.fn()} />);
 
+    const heading = screen.getByRole("heading", { name: "Bags" });
+    const addBagButton = screen.getByRole("button", { name: "Add Bag" });
+    expect(heading.closest(".page-title-row")).toContainElement(addBagButton);
+    expect(screen.getByText("Bag Filters").compareDocumentPosition(addBagButton) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add Bag" })?.closest(".panel")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Bag Filters" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add Bag" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Create a bag" })).not.toBeInTheDocument();
   });
@@ -277,6 +283,7 @@ describe("BagsPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "Add Bag" }));
 
     expect(screen.getByRole("heading", { name: "Create a bag" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Bag Filters" }).compareDocumentPosition(screen.getByRole("form", { name: /Create a bag/i })) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     expect(screen.getByLabelText("Bag Name")).toBeInTheDocument();
     expect(screen.getByText("Roaster *")).toBeInTheDocument();
     expect(screen.getByText("Bean *")).toBeInTheDocument();

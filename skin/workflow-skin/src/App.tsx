@@ -1469,7 +1469,7 @@ export function App() {
         })}
       </nav>
       <section className="page-surface">
-        <h1>{navById[page].label}</h1>
+        {page !== "bags" && <h1>{navById[page].label}</h1>}
         {data.error && (
           <p className="muted" role="alert" aria-live="assertive">
             {data.error}
