@@ -116,7 +116,7 @@ describe("ReviewPage", () => {
     expect(onSave).toHaveBeenCalledWith("s1", expect.objectContaining({ drinkTds: 9.5, drinkEy: 21.11 }));
   });
 
-  it("can return to the live graph from review", async () => {
+  it("does not show the old live graph return button", () => {
     const onBackToGraph = vi.fn();
     render(
       <ReviewPage
@@ -130,9 +130,8 @@ describe("ReviewPage", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Back to graph" }));
-
-    expect(onBackToGraph).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Back to graph" })).not.toBeInTheDocument();
+    expect(onBackToGraph).not.toHaveBeenCalled();
   });
 
   it("shows last shot details and same-bag comparison from previous shots", () => {

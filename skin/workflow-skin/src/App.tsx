@@ -399,6 +399,22 @@ function isSleepingMode(state: string | undefined): boolean {
   return state === "sleeping";
 }
 
+async function wakeMachineIfNeeded(api: ReaPrimeApi, fallbackMachineState: MachineState | null): Promise<MachineState | null> {
+  const latestState = await api.getMachineState().catch(() => fallbackMachineState);
+  if (!isSleepingMachine(latestState)) return latestState;
+
+  await api.wakeMachine().catch(() => undefined);
+
+  let nextState: MachineState | null = latestState;
+  for (const delay of [250, 750, 1500]) {
+    await waitForNativeUpdate(delay);
+    nextState = await api.getMachineState().catch(() => nextState);
+    if (!isSleepingMachine(nextState)) return nextState;
+  }
+
+  return nextState;
+}
+
 function autoSleepCheckIntervalMs(idleLimitMs: number): number {
   return Math.min(30_000, Math.max(1_000, Math.floor(idleLimitMs / 4)));
 }
@@ -569,6 +585,7 @@ export function App() {
   const autoSleepPendingRef = useRef(false);
   const completedActivityRef = useRef<{ activity: CompletedWorkflowActivity; profileId?: string } | null>(null);
   const completedActivityTimerRef = useRef<number | null>(null);
+  const wasSleepingRef = useRef<boolean | null>(null);
   const api = useMemo(() => new ReaPrimeApi(), []);
   const data = useReaData(api);
   const liveTelemetry = useLiveTelemetry(undefined, { recordIdle: page === "live" });
@@ -604,6 +621,8 @@ export function App() {
   }, [data.settings.presetSlots, editingSlotIndex, shownProfiles]);
   const machineConnected = Boolean(data.machineState && data.machineState.connected !== false);
   const currentMachineMode = fastMachineState?.state?.state ?? liveTelemetry.machineMode?.state ?? data.machineState?.state?.state;
+  const machineSleeping = isSleepingMode(currentMachineMode) || isSleepingMachine(data.machineState);
+  const brewingCoffee = isBrewingMode(currentMachineMode);
   const statuses = useMemo(
     () =>
       buildConnectivityStatuses({
@@ -620,7 +639,10 @@ export function App() {
       }),
     [nativeDevices, data.machineState, data.sensors, data.settings.r2SensorId, liveTelemetry.scaleConnected, liveTelemetry.waterLevels, r2DeviceConnected, r2Sensor]
   );
-  const visibleMenuIds = useMemo(() => visibleMainMenuItems(data.settings), [data.settings.mainMenuItems, data.settings.hiddenMainMenuItemIds]);
+  const visibleMenuIds = useMemo(
+    () => visibleMainMenuItems(data.settings).filter((itemId) => itemId !== "live" || brewingCoffee),
+    [brewingCoffee, data.settings.mainMenuItems, data.settings.hiddenMainMenuItemIds]
+  );
   const workflowSkin = useMemo(() => workflowSkinFromList(data.webuiSkins, data.defaultWebuiSkin), [data.webuiSkins, data.defaultWebuiSkin]);
   const menuSkinVersion = workflowSkin?.version?.trim() || CURRENT_SKIN_VERSION;
   const menuSkinUpdateAvailable =
@@ -668,6 +690,31 @@ export function App() {
     }
   };
 
+  const resetStartupProfileApply = useCallback(() => {
+    const startupProfileId = data.settings.startupProfileId;
+    if (!startupProfileId) return;
+    startupProfileApplyRef.current = { profileId: startupProfileId, attempts: 0, pending: false, complete: false };
+    setStartupApplyTick((tick) => tick + 1);
+  }, [data.settings.startupProfileId]);
+
+  const connectConfiguredStartupDevices = useCallback(async () => {
+    const attemptedDeviceIds = new Set<string>();
+    const connectStartupDevices = async (quick: boolean) => {
+      const scannedDevices = await api.scanDevices({ connect: true, quick }).catch(() => [] as DeviceInfo[]);
+      const listedDevices = await api.listDevices().catch(() => data.devices ?? []);
+      const devices = uniqueDevices([...scannedDevices, ...listedDevices]);
+
+      for (const device of devices.filter((item) => isConnectableStartupDevice(item, data.settings.r2SensorId))) {
+        if (attemptedDeviceIds.has(device.id)) continue;
+        attemptedDeviceIds.add(device.id);
+        await api.connectDevice(device.id).catch(() => undefined);
+      }
+    };
+
+    await connectStartupDevices(true);
+    if (data.settings.r2SensorId) await connectStartupDevices(false);
+  }, [api, data.devices, data.settings.r2SensorId]);
+
   useEffect(() => {
     const startupProfileId = data.settings.startupProfileId;
     if (!data.loaded || !startupProfileId) {
@@ -678,6 +725,8 @@ export function App() {
     if (startupProfileApplyRef.current.profileId !== startupProfileId) {
       startupProfileApplyRef.current = { profileId: startupProfileId, attempts: 0, pending: false, complete: false };
     }
+
+    if (machineSleeping) return;
 
     if (startupProfileApplyRef.current.complete) return;
 
@@ -704,42 +753,32 @@ export function App() {
       startupProfileApplyRef.current.pending = false;
       setStartupApplyTick((tick) => tick + 1);
     });
-  }, [data.loaded, data.settings.startupProfileId, data.profiles, selectedProfileId, startupApplyTick]);
+  }, [data.loaded, data.settings.startupProfileId, data.profiles, machineSleeping, selectedProfileId, startupApplyTick]);
 
   useEffect(() => {
     if (startupConnectRef.current || !data.loaded) return;
     startupConnectRef.current = true;
 
     const connectAndWake = async () => {
-      const attemptedDeviceIds = new Set<string>();
-      const connectStartupDevices = async (quick: boolean) => {
-        const scannedDevices = await api.scanDevices({ connect: true, quick }).catch(() => [] as DeviceInfo[]);
-        const listedDevices = await api.listDevices().catch(() => data.devices ?? []);
-        const devices = uniqueDevices([...scannedDevices, ...listedDevices]);
-
-        for (const device of devices.filter((item) => isConnectableStartupDevice(item, data.settings.r2SensorId))) {
-          if (attemptedDeviceIds.has(device.id)) continue;
-          attemptedDeviceIds.add(device.id);
-          await api.connectDevice(device.id).catch(() => undefined);
-        }
-      };
-
-      await connectStartupDevices(true);
-      if (data.settings.r2SensorId) await connectStartupDevices(false);
-
-      const latestMachineState = await api.getMachineState().catch(() => data.machineState);
-      if (isSleepingMachine(latestMachineState)) {
-        await api.wakeMachine().catch(() => undefined);
-      }
-
+      await wakeMachineIfNeeded(api, data.machineState);
       await data.refresh();
+      await connectConfiguredStartupDevices();
+      await data.refresh();
+      resetStartupProfileApply();
       window.setTimeout(() => {
         void data.refresh();
       }, 1500);
     };
 
     void connectAndWake();
-  }, [api, data.devices, data.loaded, data.machineState, data.refresh, data.settings.r2SensorId]);
+  }, [api, connectConfiguredStartupDevices, data.loaded, data.machineState, data.refresh, resetStartupProfileApply]);
+
+  useEffect(() => {
+    if (!data.loaded) return;
+    const wasSleeping = wasSleepingRef.current;
+    wasSleepingRef.current = machineSleeping;
+    if (wasSleeping === true && !machineSleeping) resetStartupProfileApply();
+  }, [data.loaded, machineSleeping, resetStartupProfileApply]);
 
   useEffect(() => {
     if (!data.loaded || page === "screensaver") return;
@@ -752,8 +791,13 @@ export function App() {
 
   useEffect(() => {
     if (!data.loaded || page === "live" || page === "screensaver") return;
-    if (isBrewingMode(currentMachineMode)) setPage("live");
-  }, [currentMachineMode, data.loaded, page]);
+    if (brewingCoffee) setPage("live");
+  }, [brewingCoffee, data.loaded, page]);
+
+  useEffect(() => {
+    if (!data.loaded || page !== "live" || brewingCoffee) return;
+    setPage("brew");
+  }, [brewingCoffee, data.loaded, page]);
 
   useEffect(() => {
     if (!data.loaded) return;
@@ -930,6 +974,8 @@ export function App() {
     setR2RefreshBusy(true);
     setStatus({ type: "success", message: "Looking for DiFluid R2." });
     try {
+      await wakeMachineIfNeeded(api, data.machineState);
+      await data.refresh();
       const scannedDevices = await api.scanDevices({ connect: true, quick: false }).catch(() => [] as DeviceInfo[]);
       const listedDevices = await api.listDevices().catch(() => data.devices ?? []);
       const devices = uniqueDevices([...scannedDevices, ...listedDevices]);
@@ -1147,6 +1193,7 @@ export function App() {
     try {
       await api.requestMachineState("espresso");
       const latestMachineState = await api.getMachineState().catch(() => null);
+      if (latestMachineState) setFastMachineState(latestMachineState);
       if (isBrewingMode(latestMachineState?.state?.state)) {
         setPage("live");
         setStatus({ type: "success", message: "Brew started." });
@@ -1312,9 +1359,11 @@ export function App() {
     if (data.settings.keepScreenAwake !== false) {
       await api.requestWakeLock().catch(() => undefined);
     }
-    if (isSleepingMachine(data.machineState)) {
-      await api.wakeMachine().catch(() => undefined);
-    }
+    await wakeMachineIfNeeded(api, data.machineState);
+    await data.refresh();
+    await connectConfiguredStartupDevices();
+    resetStartupProfileApply();
+    await data.refresh();
     const now = Date.now();
     autoSleepPendingRef.current = false;
     lastUseAtRef.current = now;
@@ -1350,6 +1399,8 @@ export function App() {
   const forceScaleConnection = async () => {
     setStatus({ type: "success", message: "Scanning for scale." });
     try {
+      await wakeMachineIfNeeded(api, data.machineState);
+      await data.refresh();
       const scannedDevices = await api.scanDevices({ connect: true, quick: false }).catch(() => [] as DeviceInfo[]);
       const listedDevices = await api.listDevices().catch(() => data.devices ?? []);
       const devices = uniqueDevices([...scannedDevices, ...listedDevices]);
@@ -1583,7 +1634,7 @@ export function App() {
             }}
           />
         )}
-        {page === "live" && (
+        {page === "live" && brewingCoffee && (
           <LivePage
             workflow={data.workflow}
             activeProfile={activeProfile}
@@ -1605,7 +1656,6 @@ export function App() {
               onReadR2={readR2}
               autoReadR2={autoReadR2ShotId === reviewShot.id}
               autoReadR2DelaySeconds={data.settings.r2MeasureDelaySeconds}
-              onBackToGraph={() => setPage("live")}
             />
           ) : (
             <div className="panel wide">

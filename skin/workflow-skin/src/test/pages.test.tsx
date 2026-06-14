@@ -215,16 +215,16 @@ describe("LivePage", () => {
     expect(screen.getByLabelText("Shot Timer: 28 s")).toBeInTheDocument();
   });
 
-  it("does not show the first second of noisy live graph measurements", () => {
+  it("does not show the first two seconds of noisy live graph measurements", () => {
     render(
       <LivePage
         workflow={{ context: { targetDoseWeight: 18, targetYield: 36 } }}
         latestShot={null}
         liveMeasurements={[
           { machine: { timestamp: "2026-06-11T10:00:00.000Z", pressure: 12 }, scale: { weight: 2 } },
-          { machine: { timestamp: "2026-06-11T10:00:00.900Z", pressure: 10 }, scale: { weight: 4 } },
-          { machine: { timestamp: "2026-06-11T10:00:01.100Z", pressure: 7 }, scale: { weight: 10 } },
-          { machine: { timestamp: "2026-06-11T10:00:03.100Z", pressure: 8 }, scale: { weight: 30 } }
+          { machine: { timestamp: "2026-06-11T10:00:01.100Z", pressure: 10 }, scale: { weight: 4 } },
+          { machine: { timestamp: "2026-06-11T10:00:02.100Z", pressure: 7 }, scale: { weight: 10 } },
+          { machine: { timestamp: "2026-06-11T10:00:04.100Z", pressure: 8 }, scale: { weight: 30 } }
         ]}
         scaleSnapshot={null}
       />

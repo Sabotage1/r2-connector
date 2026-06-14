@@ -26,8 +26,8 @@ function mockReaFetch(
     machineState?: MachineState;
     appInfo?: AppInfo;
     devices?: DeviceInfo[];
-    devicesAfterScan?: DeviceInfo[];
-    scanDevicesResult?: DeviceInfo[];
+    devicesAfterScan?: DeviceInfo[] | ((context: { machineState: MachineState; quick: boolean; scanCount: number }) => DeviceInfo[]);
+    scanDevicesResult?: DeviceInfo[] | ((context: { machineState: MachineState; quick: boolean; scanCount: number }) => DeviceInfo[]);
     sensors?: SensorListItem[];
     sensorsAfterScan?: SensorListItem[];
     shots?: ShotRecord[];
@@ -50,13 +50,14 @@ function mockReaFetch(
   } = {}
 ) {
   let savedSettings = initialSettings;
-  let workflow = options.workflow ?? { context: { targetDoseWeight: 18, targetYield: 36 } };
+  let workflow: unknown = options.workflow ?? { context: { targetDoseWeight: 18, targetYield: 36 } };
   let shots = options.shots ?? [];
   let workflowUpdateCount = 0;
   let displayState = options.displayState ?? { brightness: 100, wakeLockOverride: true };
   let machineState = options.machineState ?? { connected: true, wifi: { connected: true, ipAddress: "192.168.1.20" } };
   let devices = options.devices ?? [];
   let sensors = options.sensors ?? [];
+  let scanCount = 0;
   const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init = {}) => {
     const url = new URL(String(input));
     const method = init.method ?? "GET";
@@ -112,9 +113,12 @@ function mockReaFetch(
     if (method === "GET" && url.pathname === "/api/v1/info") return responseJson(options.appInfo ?? { localIp: "192.168.1.20", version: "0.7.6" });
     if (method === "GET" && url.pathname === "/api/v1/devices") return responseJson(devices);
     if (method === "GET" && url.pathname === "/api/v1/devices/scan") {
-      devices = options.devicesAfterScan ?? devices;
+      const quick = url.searchParams.get("quick") === "true";
+      const context = { machineState, quick, scanCount };
+      scanCount += 1;
+      devices = typeof options.devicesAfterScan === "function" ? options.devicesAfterScan(context) : options.devicesAfterScan ?? devices;
       sensors = options.sensorsAfterScan ?? sensors;
-      return responseJson(options.scanDevicesResult ?? devices);
+      return responseJson(typeof options.scanDevicesResult === "function" ? options.scanDevicesResult(context) : options.scanDevicesResult ?? devices);
     }
     if ((method === "PUT" || method === "POST") && url.pathname === "/api/v1/devices/connect") {
       if (options.connectDeviceStatus) return Promise.resolve(new Response(`connect failed for ${String(init.body)}`, { status: options.connectDeviceStatus }));
@@ -215,11 +219,17 @@ function mockReaFetch(
     get workflowUpdateCount() {
       return workflowUpdateCount;
     },
+    get scanCount() {
+      return scanCount;
+    },
     get displayState() {
       return displayState;
     },
     setMachineState(next: MachineState) {
       machineState = next;
+    },
+    setWorkflow(next: unknown) {
+      workflow = next;
     },
     setShots(next: ShotRecord[]) {
       shots = next;
@@ -427,9 +437,25 @@ describe("App shell", () => {
     const navigation = await screen.findByRole("navigation", { name: "Workflow navigation" });
     const labels = Array.from(navigation.querySelectorAll(".nav-button")).map((button) => button.getAttribute("aria-label"));
 
-    expect(labels).toEqual(["Collapse menu", "Brew", "Profiles", "Grinders", "Settings", "Live", "Review", "Bags"]);
+    expect(labels).toEqual(["Collapse menu", "Brew", "Profiles", "Grinders", "Settings", "Review", "Bags"]);
     expect(screen.queryByRole("button", { name: "History" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Steam" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Live" })).not.toBeInTheDocument();
+  });
+
+  it("shows the live navigation item only while coffee is brewing", async () => {
+    const fetchState = mockReaFetch(initialSettings, {
+      machineState: { connected: true, state: { state: "idle" } }
+    });
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Brew" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Live" })).not.toBeInTheDocument();
+
+    fetchState.setMachineState({ connected: true, state: { state: "espresso", substate: "pouring" } });
+
+    expect(await screen.findByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Live" })).toBeInTheDocument();
   });
 
   it("uses compact icons and a notepad edit icon in the collapsed menu", async () => {
@@ -614,6 +640,61 @@ describe("App shell", () => {
     expect(await screen.findByRole("button", { name: "Sweet Classic" })).toHaveAttribute("aria-current", "true");
   });
 
+  it("wakes before applying the startup profile and scanning for scale and R2 devices", async () => {
+    const scaleDevice = { id: "scale-1", name: "Acaia", type: "scale", state: "discovered" };
+    const r2Device = { id: "F4:12:FA:FA:AC:E3", name: "DiFluid R2", type: "sensor", state: "discovered" };
+    const fetchState = mockReaFetch(
+      {
+        ...initialSettings,
+        startupProfileId: "p2",
+        r2SensorId: "F4:12:FA:FA:AC:E3",
+        presetSlots: [
+          { label: "Light", profileId: "p1" },
+          { label: "Sweet", profileId: "p2" },
+          { label: "Turbo" },
+          { label: "Classic" }
+        ]
+      },
+      {
+        workflow: { context: { extras: { workflowSkin: { selectedProfileId: "p1" } } } },
+        machineState: { connected: true, state: { state: "sleeping", substate: "idle" } },
+        devices: [],
+        scanDevicesResult: ({ machineState }) => (machineState.state?.state === "sleeping" ? [] : [scaleDevice, r2Device])
+      }
+    );
+    render(<App />);
+
+    await waitFor(() => {
+      expect(fetchState.workflow).toEqual(
+        expect.objectContaining({
+          context: expect.objectContaining({
+            extras: { workflowSkin: { selectedProfileId: "p2" } }
+          })
+        })
+      );
+    });
+
+    const calls = fetchState.fetchMock.mock.calls;
+    const urls = calls.map(([input]) => String(input));
+    const wakeIndex = urls.findIndex((url) => url.endsWith("/api/v1/machine/state/idle"));
+    const startupProfileIndex = calls.findIndex(([input, init]) => String(input).endsWith("/api/v1/workflow") && init?.method === "PUT");
+    const quickScanIndex = urls.findIndex((url) => url.endsWith("/api/v1/devices/scan?connect=true&quick=true"));
+    const fullScanIndex = urls.findIndex((url) => url.endsWith("/api/v1/devices/scan?connect=true&quick=false"));
+
+    expect(wakeIndex).toBeGreaterThanOrEqual(0);
+    expect(startupProfileIndex).toBeGreaterThan(wakeIndex);
+    expect(quickScanIndex).toBeGreaterThan(wakeIndex);
+    expect(fullScanIndex).toBeGreaterThan(wakeIndex);
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/devices/connect",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "scale-1" }) })
+    );
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/devices/connect",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "F4:12:FA:FA:AC:E3" }) })
+    );
+  });
+
   it("does not re-apply the startup profile after a manual preset change", async () => {
     const fetchState = mockReaFetch(
       {
@@ -639,6 +720,40 @@ describe("App shell", () => {
     await waitFor(() => expect(fetchState.workflowUpdateCount).toBe(1));
     expect(await screen.findByRole("button", { name: "Light Blooming" })).toHaveAttribute("aria-current", "true");
     expect(screen.getByRole("button", { name: "Sweet Classic" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("re-applies the startup profile and reconnects devices after waking from screensaver sleep", async () => {
+    const fetchState = mockReaFetch({
+      ...initialSettings,
+      startupProfileId: "p2",
+      r2SensorId: "F4:12:FA:FA:AC:E3",
+      presetSlots: [
+        { label: "Light", profileId: "p1" },
+        { label: "Sweet", profileId: "p2" },
+        { label: "Turbo" },
+        { label: "Classic" }
+      ]
+    });
+    render(<App />);
+
+    await waitFor(() => expect(fetchState.workflowUpdateCount).toBe(1));
+
+    await userEvent.click(await screen.findByRole("button", { name: "Sleep machine" }));
+    expect(await screen.findByText("Machine sleeping")).toBeInTheDocument();
+    fetchState.setWorkflow({ context: { extras: { workflowSkin: { selectedProfileId: "p1" } } } });
+    const scansBeforeWake = fetchState.scanCount;
+
+    await userEvent.click(screen.getByRole("button", { name: "Tap the screen to wake" }));
+
+    await waitFor(() => expect(fetchState.workflowUpdateCount).toBeGreaterThan(1));
+    await waitFor(() => expect(fetchState.scanCount).toBeGreaterThan(scansBeforeWake));
+    expect(fetchState.workflow).toEqual(
+      expect.objectContaining({
+        context: expect.objectContaining({
+          extras: { workflowSkin: { selectedProfileId: "p2" } }
+        })
+      })
+    );
   });
 
   it("wakes the machine and auto-connects machine and scale devices on startup", async () => {
@@ -760,14 +875,16 @@ describe("App shell", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(screen.getByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Live Brew" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Brew" })).toBeInTheDocument();
 
     await act(async () => {
       vi.advanceTimersByTime(999);
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(screen.getByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Live Brew" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Brew" })).toBeInTheDocument();
 
     await act(async () => {
       vi.advanceTimersByTime(1);

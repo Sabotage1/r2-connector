@@ -30,8 +30,7 @@ export function ReviewPage({
   r2Available = Boolean(r2Sensor),
   onReadR2,
   autoReadR2 = false,
-  autoReadR2DelaySeconds = DEFAULT_R2_MEASURE_DELAY_SECONDS,
-  onBackToGraph
+  autoReadR2DelaySeconds = DEFAULT_R2_MEASURE_DELAY_SECONDS
 }: {
   shot: ShotRecord;
   previousShots: ShotRecord[];
@@ -162,11 +161,6 @@ export function ReviewPage({
         <div className="review-graph-header">
           <h2>Shot Review</h2>
           <span className="muted">{selectedShotIsLatest ? "Last shot graph" : "Selected shot graph"}</span>
-          {onBackToGraph && (
-            <button type="button" className="ghost-button compact-button" onClick={onBackToGraph}>
-              Back to graph
-            </button>
-          )}
         </div>
         <div className="shot-scrubber">
           <div className="shot-scrubber-heading">
