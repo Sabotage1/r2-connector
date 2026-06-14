@@ -976,13 +976,31 @@ export function App() {
     try {
       await wakeMachineIfNeeded(api, data.machineState);
       await data.refresh();
-      const scannedDevices = await api.scanDevices({ connect: true, quick: false }).catch(() => [] as DeviceInfo[]);
-      const listedDevices = await api.listDevices().catch(() => data.devices ?? []);
-      const devices = uniqueDevices([...scannedDevices, ...listedDevices]);
-      const r2Devices = devices.filter((item) => isR2Device(item) || isConfiguredR2Device(item, data.settings.r2SensorId));
+      const collectR2Devices = async (knownDevices: DeviceInfo[] = []) => {
+        const scannedDevices = await api.scanDevices({ connect: true, quick: false }).catch(() => [] as DeviceInfo[]);
+        const listedDevices = await api.listDevices().catch(() => data.devices ?? []);
+        return uniqueDevices([...knownDevices, ...scannedDevices, ...listedDevices]).filter(
+          (item) => isR2Device(item) || isConfiguredR2Device(item, data.settings.r2SensorId)
+        );
+      };
+      const attemptedDeviceIds = new Set<string>();
+      const connectR2Devices = async (devices: DeviceInfo[], retryAttempted = false) => {
+        let attempted = false;
+        for (const device of devices.filter((item) => !isConnectedDevice(item))) {
+          if (!retryAttempted && attemptedDeviceIds.has(device.id)) continue;
+          attemptedDeviceIds.add(device.id);
+          attempted = true;
+          await api.connectDevice(device.id).catch(() => undefined);
+        }
+        return attempted;
+      };
 
-      for (const device of r2Devices.filter((device) => !isConnectedDevice(device))) {
-        await api.connectDevice(device.id).catch(() => undefined);
+      let r2Devices = await collectR2Devices();
+      const attemptedConnect = await connectR2Devices(r2Devices);
+      if (attemptedConnect) {
+        await waitForNativeUpdate(450);
+        r2Devices = await collectR2Devices(r2Devices);
+        await connectR2Devices(r2Devices, true);
       }
 
       const sensor = await findR2SensorWithRetry(api, data.sensors);

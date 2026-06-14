@@ -11,6 +11,8 @@ let profiles: ProfileRecord[] = [
   { id: "p2", profile: { title: "Classic" } }
 ];
 
+type DeviceScanContext = { machineState: MachineState; quick: boolean; scanCount: number; connectCount: number };
+
 function responseJson(value: unknown, status = 200) {
   return Promise.resolve(new Response(JSON.stringify(value), { status }));
 }
@@ -26,8 +28,8 @@ function mockReaFetch(
     machineState?: MachineState;
     appInfo?: AppInfo;
     devices?: DeviceInfo[];
-    devicesAfterScan?: DeviceInfo[] | ((context: { machineState: MachineState; quick: boolean; scanCount: number }) => DeviceInfo[]);
-    scanDevicesResult?: DeviceInfo[] | ((context: { machineState: MachineState; quick: boolean; scanCount: number }) => DeviceInfo[]);
+    devicesAfterScan?: DeviceInfo[] | ((context: DeviceScanContext) => DeviceInfo[]);
+    scanDevicesResult?: DeviceInfo[] | ((context: DeviceScanContext) => DeviceInfo[]);
     sensors?: SensorListItem[];
     sensorsAfterScan?: SensorListItem[];
     shots?: ShotRecord[];
@@ -58,6 +60,7 @@ function mockReaFetch(
   let devices = options.devices ?? [];
   let sensors = options.sensors ?? [];
   let scanCount = 0;
+  let connectCount = 0;
   const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init = {}) => {
     const url = new URL(String(input));
     const method = init.method ?? "GET";
@@ -114,7 +117,7 @@ function mockReaFetch(
     if (method === "GET" && url.pathname === "/api/v1/devices") return responseJson(devices);
     if (method === "GET" && url.pathname === "/api/v1/devices/scan") {
       const quick = url.searchParams.get("quick") === "true";
-      const context = { machineState, quick, scanCount };
+      const context = { machineState, quick, scanCount, connectCount };
       scanCount += 1;
       devices = typeof options.devicesAfterScan === "function" ? options.devicesAfterScan(context) : options.devicesAfterScan ?? devices;
       sensors = options.sensorsAfterScan ?? sensors;
@@ -122,6 +125,7 @@ function mockReaFetch(
     }
     if ((method === "PUT" || method === "POST") && url.pathname === "/api/v1/devices/connect") {
       if (options.connectDeviceStatus) return Promise.resolve(new Response(`connect failed for ${String(init.body)}`, { status: options.connectDeviceStatus }));
+      connectCount += 1;
       return Promise.resolve(new Response("", { status: 200 }));
     }
     if (method === "GET" && url.pathname === "/api/v1/display") return responseJson(displayState);
@@ -221,6 +225,9 @@ function mockReaFetch(
     },
     get scanCount() {
       return scanCount;
+    },
+    get connectCount() {
+      return connectCount;
     },
     get displayState() {
       return displayState;
@@ -1166,6 +1173,29 @@ describe("App shell", () => {
       "http://localhost:8080/api/v1/devices/connect",
       expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "F4:12:FA:FA:AC:E3" }) })
     );
+  });
+
+  it("keeps refreshing R2 after the indicator connect until the native device shows connected", async () => {
+    const r2Device = (state: string): DeviceInfo => ({ id: "F4:12:FA:FA:AC:E3", name: "DiFluid R2", type: "sensor", state });
+    const fetchState = mockReaFetch(
+      { ...initialSettings, r2SensorId: "F4:12:FA:FA:AC:E3" },
+      {
+        sensors: [],
+        devices: [r2Device("disconnected")],
+        devicesAfterScan: ({ scanCount }) => [r2Device(scanCount > 2 ? "connected" : "discovered")],
+        scanDevicesResult: ({ scanCount }) => [r2Device(scanCount > 2 ? "connected" : "discovered")]
+      }
+    );
+    render(<App />);
+
+    await waitFor(() => expect(fetchState.scanCount).toBeGreaterThanOrEqual(2));
+    expect(await screen.findByRole("button", { name: "R2" })).toHaveAttribute("title", "R2: Not connected");
+
+    await userEvent.click(screen.getByRole("button", { name: "R2" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "R2" })).toHaveAttribute("title", "R2: Connected"), { timeout: 3500 });
+    expect(fetchState.connectCount).toBeGreaterThan(0);
+    expect(fetchState.scanCount).toBeGreaterThan(3);
   });
 
   it("reveals the machine IP when the WiFi status is pressed", async () => {
