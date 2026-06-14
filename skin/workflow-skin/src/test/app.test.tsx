@@ -1089,6 +1089,32 @@ describe("App shell", () => {
     expect(fetchState.fetchMock).toHaveBeenCalledWith("http://localhost:8080/api/v1/display/wakelock", expect.objectContaining({ method: "POST" }));
   });
 
+  it("dismisses the screensaver immediately while wake polling is still pending", async () => {
+    const fetchState = mockReaFetch(
+      { ...initialSettings, keepScreenAwake: true, screensaverBrightness: 8 } as SkinSettings,
+      {
+        machineState: { connected: true, state: { state: "idle" }, wifi: { connected: true, ipAddress: "192.168.1.20" } },
+        machineStateAfterWakeRequest: { connected: true, state: { state: "sleeping", substate: "waking" } }
+      }
+    );
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Sleep machine" }));
+    expect(await screen.findByText("Tap the screen to wake")).toBeInTheDocument();
+
+    vi.useFakeTimers();
+    await act(async () => {
+      screen.getByRole("button", { name: "Tap the screen to wake" }).click();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByText("Tap the screen to wake")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Brew" })).toBeInTheDocument();
+    expect(fetchState.fetchMock).toHaveBeenCalledWith("http://localhost:8080/api/v1/machine/state/idle", expect.objectContaining({ method: "PUT" }));
+  });
+
   it("shows a fullscreen button to the right of sleep and toggles native fullscreen", async () => {
     let fullscreenElement: Element | null = null;
     const requestFullscreen = vi.fn().mockImplementation(() => {

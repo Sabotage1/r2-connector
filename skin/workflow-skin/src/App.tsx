@@ -1382,6 +1382,11 @@ export function App() {
   }, [sleepMachine]);
 
   const wakeScreen = async () => {
+    const now = Date.now();
+    autoSleepPendingRef.current = false;
+    lastUseAtRef.current = now;
+    setLastUseAt(now);
+    setPage("brew");
     await api.setDisplayBrightness(100).catch(() => undefined);
     if (data.settings.keepScreenAwake !== false) {
       await api.requestWakeLock().catch(() => undefined);
@@ -1391,11 +1396,6 @@ export function App() {
     await connectConfiguredStartupDevices();
     resetStartupProfileApply();
     await data.refresh();
-    const now = Date.now();
-    autoSleepPendingRef.current = false;
-    lastUseAtRef.current = now;
-    setLastUseAt(now);
-    setPage("brew");
   };
 
   useEffect(() => {
