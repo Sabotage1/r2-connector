@@ -23,6 +23,7 @@ import { uploadShotToVisualizer } from "./api/visualizer";
 import type { Bag } from "./lib/bags";
 import { buildConnectivityStatuses } from "./lib/connectivity";
 import type { ConnectivityStatus } from "./lib/connectivity";
+import { trimLiveGraphWarmup } from "./lib/liveMeasurements";
 import { machineModeLabel, machineTemperature } from "./lib/machineState";
 import { postActivityPage, selectedProfileIdFromWorkflow, type CompletedWorkflowActivity } from "./lib/workflowRouting";
 import { BagsPage } from "./pages/BagsPage";
@@ -407,8 +408,9 @@ function latestMachineSnapshot(measurements: ShotSnapshot[]): ShotSnapshot["mach
 }
 
 function shotWithFallbackMeasurements(shot: ShotRecord, fallbackMeasurements: ShotSnapshot[]): ShotRecord {
-  if ((shot.measurements?.length ?? 0) > 0 || fallbackMeasurements.length === 0) return shot;
-  return { ...shot, measurements: fallbackMeasurements };
+  const trimmedFallbackMeasurements = trimLiveGraphWarmup(fallbackMeasurements);
+  if ((shot.measurements?.length ?? 0) > 0 || trimmedFallbackMeasurements.length === 0) return shot;
+  return { ...shot, measurements: trimmedFallbackMeasurements };
 }
 
 function mergeReviewShot(cachedShot: ShotRecord | null, refreshedShot: ShotRecord | undefined): ShotRecord | null {

@@ -2,6 +2,7 @@ import type { JsonMap, ProfileRecord, ShotRecord, ShotSnapshot, WeightSnapshot, 
 import { MetricTile } from "../components/MetricTile";
 import { machineStateLabel } from "../lib/machineState";
 import { ShotGraph } from "../components/ShotGraph";
+import { trimLiveGraphWarmup } from "../lib/liveMeasurements";
 import { shotStats } from "../lib/shotStats";
 
 function formatSeconds(value: number | null | undefined): string {
@@ -123,7 +124,8 @@ export function LivePage({
   liveMeasurements: ShotSnapshot[];
   scaleSnapshot: WeightSnapshot | null;
 }) {
-  const measurements = liveMeasurements.length ? liveMeasurements : latestShot?.measurements ?? [];
+  const rawMeasurements = liveMeasurements.length ? liveMeasurements : latestShot?.measurements ?? [];
+  const measurements = trimLiveGraphWarmup(rawMeasurements);
   const stats = latestShot ? shotStats({ ...latestShot, measurements }) : shotStats({ id: "live", timestamp: new Date().toISOString(), workflow, measurements });
   const latest = latestMeasurement(measurements);
   const weight = liveWeight(measurements, scaleSnapshot) ?? stats.finalYield;

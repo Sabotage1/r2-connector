@@ -49,6 +49,19 @@ describe("bag helpers", () => {
     expect(result.map((shot) => shot.id)).toEqual(["s1"]);
   });
 
+  it("filters bags and shots by optional bag name", () => {
+    const namedBag = { ...buildBag(bean, batch), name: "Morning Dial" };
+    const otherBag = { ...buildBag({ ...bean, id: "bean-2", name: "Kenya" }, { ...batch, id: "batch-2", beanId: "bean-2" }), name: "Evening" };
+    const shots: ShotRecord[] = [
+      { id: "s1", timestamp: "2026-06-09T10:00:00Z", workflow: { context: { beanBatchId: "batch-1" } } },
+      { id: "s2", timestamp: "2026-06-09T11:00:00Z", workflow: { context: { beanBatchId: "batch-2" } } }
+    ];
+
+    const result = filterShotsByBagFields(shots, [namedBag, otherBag], { name: "morning" });
+
+    expect(result.map((shot) => shot.id)).toEqual(["s1"]);
+  });
+
   it("returns all shots unchanged when no bag filters are active", () => {
     const shots: ShotRecord[] = [
       { id: "s1", timestamp: "2026-06-09T10:00:00Z", workflow: { context: { beanBatchId: "batch-1" } } },

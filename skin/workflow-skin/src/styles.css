@@ -1259,6 +1259,45 @@ textarea {
   margin-bottom: 12px;
 }
 
+.recipe-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.recipe-card-header h2 {
+  margin-bottom: 0;
+}
+
+.ratio-field {
+  width: min(136px, 48%);
+  display: grid;
+  gap: 6px;
+  color: #9daab4;
+  font-size: 12px;
+  font-weight: 900;
+  text-align: right;
+}
+
+.ratio-input-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+
+.ratio-input-row strong {
+  color: #f5f7f8;
+  font-size: 14px;
+}
+
+.ratio-input-row input {
+  min-width: 0;
+  text-align: right;
+}
+
 .recipe-edit-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -9,8 +9,12 @@ import { grindSizeFromShot, previousFiveForBag, shotContext, shotStats } from ".
 import { selectedProfileIdFromWorkflow } from "../lib/workflowRouting";
 import { isProfileShown, visiblePresetSlots, type SkinSettings } from "../state/skinSettings";
 
+const DEFAULT_BREW_RATIO = 2;
+
 function cleanNumber(value: string): number | undefined {
-  const parsed = Number(value);
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
@@ -26,6 +30,35 @@ function bagTitle(bag: Bag): string {
 function formatRecipeValue(value: number | null): string {
   if (value === null) return "—";
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function formatInputNumber(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value)) return "";
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
+function formatRatioValue(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value)) return String(DEFAULT_BREW_RATIO);
+  const rounded = Math.round(value * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
+function recipeRatio(dose: number | undefined, targetYield: number | undefined): number {
+  return dose && targetYield ? targetYield / dose : DEFAULT_BREW_RATIO;
+}
+
+function initialRecipe(workflow: Workflow): { dose: string; yield: string; ratio: string } {
+  const contextDose = workflow.context?.targetDoseWeight;
+  const contextYield = workflow.context?.targetYield ?? workflow.profile?.target_weight;
+  const dose = typeof contextDose === "number" && Number.isFinite(contextDose) ? contextDose : undefined;
+  const targetYield = typeof contextYield === "number" && Number.isFinite(contextYield) ? contextYield : undefined;
+  const ratio = recipeRatio(dose, targetYield);
+  return {
+    dose: formatInputNumber(dose),
+    yield: formatInputNumber(targetYield ?? (dose ? dose * ratio : undefined)),
+    ratio: formatRatioValue(ratio)
+  };
 }
 
 function bagGuidance(shots: ShotRecord[], bagId: string | undefined) {
@@ -79,8 +112,9 @@ export function BrewPage({
   const shownProfiles = profiles.filter((profile) => isProfileShown(settings, profile.id));
   const slots = visiblePresetSlots(settings);
   const guidance = useMemo(() => bagGuidance(shots, selectedBag?.id), [shots, selectedBag?.id]);
-  const [doseText, setDoseText] = useState(String(workflow.context?.targetDoseWeight ?? ""));
-  const [yieldText, setYieldText] = useState(String(workflow.context?.targetYield ?? workflow.profile?.target_weight ?? ""));
+  const [doseText, setDoseText] = useState(() => initialRecipe(workflow).dose);
+  const [yieldText, setYieldText] = useState(() => initialRecipe(workflow).yield);
+  const [ratioText, setRatioText] = useState(() => initialRecipe(workflow).ratio);
   const recommendations = recommendProfiles({
     profiles: shownProfiles,
     shots,
@@ -90,9 +124,32 @@ export function BrewPage({
   });
 
   useEffect(() => {
-    setDoseText(String(workflow.context?.targetDoseWeight ?? ""));
-    setYieldText(String(workflow.context?.targetYield ?? workflow.profile?.target_weight ?? ""));
+    const nextRecipe = initialRecipe(workflow);
+    setDoseText(nextRecipe.dose);
+    setYieldText(nextRecipe.yield);
+    setRatioText(nextRecipe.ratio);
   }, [workflow.context?.targetDoseWeight, workflow.context?.targetYield, workflow.profile?.target_weight]);
+
+  const updateDose = (value: string) => {
+    setDoseText(value);
+    const dose = cleanNumber(value);
+    const ratio = cleanNumber(ratioText);
+    if (dose !== undefined && ratio !== undefined) setYieldText(formatInputNumber(dose * ratio));
+  };
+
+  const updateRatio = (value: string) => {
+    setRatioText(value);
+    const dose = cleanNumber(doseText);
+    const ratio = cleanNumber(value);
+    if (dose !== undefined && ratio !== undefined) setYieldText(formatInputNumber(dose * ratio));
+  };
+
+  const updateYield = (value: string) => {
+    setYieldText(value);
+    const dose = cleanNumber(doseText);
+    const targetYield = cleanNumber(value);
+    if (dose && targetYield !== undefined) setRatioText(formatRatioValue(targetYield / dose));
+  };
 
   return (
     <div className="workflow-grid">
@@ -135,15 +192,24 @@ export function BrewPage({
         </div>
       </section>
       <section className="panel">
-        <h2>Recipe</h2>
+        <div className="recipe-card-header">
+          <h2>Recipe</h2>
+          <label className="ratio-field">
+            <span>Ratio</span>
+            <span className="ratio-input-row">
+              <strong aria-hidden="true">1:</strong>
+              <input aria-label="Ratio" type="number" min={0.1} step={0.1} inputMode="decimal" value={ratioText} onChange={(event) => updateRatio(event.target.value)} />
+            </span>
+          </label>
+        </div>
         <div className="recipe-edit-grid">
           <label>
             <span>Dose</span>
-            <input aria-label="Dose" inputMode="decimal" value={doseText} onChange={(event) => setDoseText(event.target.value)} />
+            <input aria-label="Dose" inputMode="decimal" value={doseText} onChange={(event) => updateDose(event.target.value)} />
           </label>
           <label>
             <span>Yield</span>
-            <input aria-label="Yield" inputMode="decimal" value={yieldText} onChange={(event) => setYieldText(event.target.value)} />
+            <input aria-label="Yield" inputMode="decimal" value={yieldText} onChange={(event) => updateYield(event.target.value)} />
           </label>
         </div>
         {grinders.length > 0 && <MetricTile label="Grinders" value={`${grinders.length} configured`} />}

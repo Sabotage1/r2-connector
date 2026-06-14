@@ -15,6 +15,7 @@ export interface Bag {
 }
 
 export interface BagFilters {
+  name?: string;
   roaster?: string;
   bean?: string;
   country?: string;
@@ -23,7 +24,7 @@ export interface BagFilters {
   roastLevel?: string;
 }
 
-const filterKeys = ["roaster", "bean", "country", "region", "process", "roastLevel"] as const;
+const filterKeys = ["name", "roaster", "bean", "country", "region", "process", "roastLevel"] as const;
 
 export function buildBag(bean: Bean, batch: BeanBatch): Bag {
   const workflowSkin = batch.extras?.workflowSkin as { name?: unknown } | undefined;
@@ -63,6 +64,7 @@ function matches(value: string | undefined, filter: string | undefined): boolean
 
 export function filterBags(bags: Bag[], filters: BagFilters): Bag[] {
   return bags.filter((bag) =>
+    matches(bag.name, filters.name) &&
     matches(bag.roaster, filters.roaster) &&
     matches(bag.bean, filters.bean) &&
     matches(bag.country, filters.country) &&

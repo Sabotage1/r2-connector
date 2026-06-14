@@ -214,6 +214,25 @@ describe("LivePage", () => {
     expect(screen.queryByText("PreparingForShot")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Shot Timer: 28 s")).toBeInTheDocument();
   });
+
+  it("does not show the first second of noisy live graph measurements", () => {
+    render(
+      <LivePage
+        workflow={{ context: { targetDoseWeight: 18, targetYield: 36 } }}
+        latestShot={null}
+        liveMeasurements={[
+          { machine: { timestamp: "2026-06-11T10:00:00.000Z", pressure: 12 }, scale: { weight: 2 } },
+          { machine: { timestamp: "2026-06-11T10:00:00.900Z", pressure: 10 }, scale: { weight: 4 } },
+          { machine: { timestamp: "2026-06-11T10:00:01.100Z", pressure: 7 }, scale: { weight: 10 } },
+          { machine: { timestamp: "2026-06-11T10:00:03.100Z", pressure: 8 }, scale: { weight: 30 } }
+        ]}
+        scaleSnapshot={null}
+      />
+    );
+
+    expect(screen.getByLabelText("Shot Timer: 2 s")).toBeInTheDocument();
+    expect(screen.getByLabelText("Weight: 30.00 g")).toBeInTheDocument();
+  });
 });
 
 describe("BagsPage", () => {
@@ -269,12 +288,35 @@ describe("BagsPage", () => {
 
     const heading = screen.getByRole("heading", { name: "Bags" });
     const addBagButton = screen.getByRole("button", { name: "Add Bag" });
+    const filterFields = screen.getByRole("heading", { name: "Bag Filters" }).closest(".panel")!;
+    const filterLabels = Array.from(filterFields.querySelectorAll("label")).map((label) => label.textContent?.trim());
     expect(heading.closest(".page-title-row")).toContainElement(addBagButton);
     expect(screen.getByText("Bag Filters").compareDocumentPosition(addBagButton) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Add Bag" })?.closest(".panel")).toBeNull();
     expect(screen.getByRole("heading", { name: "Bag Filters" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add Bag" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Create a bag" })).not.toBeInTheDocument();
+    expect(filterLabels.slice(0, 2)).toEqual(["Roaster", "Bag Name"]);
+  });
+
+  it("filters bags by optional bag name", async () => {
+    render(
+      <BagsPage
+        bags={[
+          { id: "bag-1", beanId: "bean-1", name: "Morning Dial", roaster: "Pilot", bean: "Halo", country: "Ethiopia", process: "Washed", roastDate: "2026-06-01" },
+          { id: "bag-2", beanId: "bean-2", name: "Evening", roaster: "April", bean: "Nansebo", country: "Ethiopia", process: "Natural", roastDate: "2026-06-02" }
+        ]}
+        onSaveBag={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Morning Dial")).toBeInTheDocument();
+    expect(screen.getByText("Evening")).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText("Bag Name"), "morning");
+
+    expect(screen.getByText("Morning Dial")).toBeInTheDocument();
+    expect(screen.queryByText("Evening")).not.toBeInTheDocument();
   });
 
   it("opens the add bag card with optional name and mandatory bag fields", async () => {
@@ -284,7 +326,7 @@ describe("BagsPage", () => {
 
     expect(screen.getByRole("heading", { name: "Create a bag" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Bag Filters" }).compareDocumentPosition(screen.getByRole("form", { name: /Create a bag/i })) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
-    expect(screen.getByLabelText("Bag Name")).toBeInTheDocument();
+    expect(within(screen.getByRole("form", { name: /Create a bag/i })).getByLabelText("Bag Name")).toBeInTheDocument();
     expect(screen.getByText("Roaster *")).toBeInTheDocument();
     expect(screen.getByText("Bean *")).toBeInTheDocument();
     expect(screen.getByText("Country *")).toBeInTheDocument();
@@ -902,6 +944,39 @@ describe("SettingsPage", () => {
 });
 
 describe("BrewPage workflow controls", () => {
+  it("uses a fixed 1: ratio control to calculate recipe yield from dose", async () => {
+    const onUpdateRecipe = vi.fn();
+    render(
+      <BrewPage
+        workflow={{ context: { targetDoseWeight: 18 } }}
+        profiles={profiles}
+        bags={[]}
+        grinders={[]}
+        shots={[]}
+        settings={{ ...defaultSkinSettings, presetSlotCount: 2, shownProfileIds: ["p1", "p2"] }}
+        onApplyProfile={vi.fn()}
+        onEditSlot={vi.fn()}
+        onStartBrew={vi.fn()}
+        onUpdateRecipe={onUpdateRecipe}
+      />
+    );
+
+    expect(screen.getByText("1:")).toBeInTheDocument();
+    expect(screen.getByLabelText("Ratio")).toHaveValue(2);
+    expect(screen.getByLabelText("Dose")).toHaveValue("18");
+    expect(screen.getByLabelText("Yield")).toHaveValue("36");
+
+    fireEvent.change(screen.getByLabelText("Ratio"), { target: { value: "2.5" } });
+    expect(screen.getByLabelText("Yield")).toHaveValue("45");
+
+    fireEvent.change(screen.getByLabelText("Dose"), { target: { value: "20" } });
+    expect(screen.getByLabelText("Yield")).toHaveValue("50");
+
+    await userEvent.click(screen.getByRole("button", { name: "Save recipe" }));
+
+    expect(onUpdateRecipe).toHaveBeenCalledWith({ dose: 20, yield: 50 });
+  });
+
   it("edits recipe, changes the current bag, and shows bag-based grind guidance", async () => {
     const onUpdateRecipe = vi.fn();
     const onSelectBag = vi.fn();

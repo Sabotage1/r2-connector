@@ -120,6 +120,10 @@ export function BagsPage({
             <input value={filters.roaster ?? ""} onChange={(event) => setFilters({ ...filters, roaster: event.target.value })} />
           </label>
           <label>
+            Bag Name
+            <input value={filters.name ?? ""} onChange={(event) => setFilters({ ...filters, name: event.target.value })} />
+          </label>
+          <label>
             Bean
             <input value={filters.bean ?? ""} onChange={(event) => setFilters({ ...filters, bean: event.target.value })} />
           </label>
