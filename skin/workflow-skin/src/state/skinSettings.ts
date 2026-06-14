@@ -60,6 +60,7 @@ export interface SkinSettings {
   profileWorkflows: Record<string, ProfileWorkflowSettings>;
   lastBeanBatchId?: string;
   lastGrinderId?: string;
+  defaultGrinderId?: string;
   preferredEyMin?: number;
   preferredEyMax?: number;
   keepScreenAwake?: boolean;
@@ -402,6 +403,7 @@ export function normalizeSkinSettings(value: unknown): SkinSettings {
   if (typeof value.r2SensorId === "string") settings.r2SensorId = value.r2SensorId;
   if (typeof value.lastBeanBatchId === "string") settings.lastBeanBatchId = value.lastBeanBatchId;
   if (typeof value.lastGrinderId === "string") settings.lastGrinderId = value.lastGrinderId;
+  if (typeof value.defaultGrinderId === "string") settings.defaultGrinderId = value.defaultGrinderId;
   if (typeof value.preferredEyMin === "number" && Number.isFinite(value.preferredEyMin)) settings.preferredEyMin = value.preferredEyMin;
   if (typeof value.preferredEyMax === "number" && Number.isFinite(value.preferredEyMax)) settings.preferredEyMax = value.preferredEyMax;
 

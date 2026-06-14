@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
-import type { SensorListItem, ShotRecord } from "../api/types";
+import type { Grinder, SensorListItem, ShotRecord } from "../api/types";
 import { ReviewPage } from "../pages/ReviewPage";
 import { defaultSkinSettings } from "../state/skinSettings";
 
@@ -67,6 +67,11 @@ const nextShot: ShotRecord = {
   annotations: { actualYield: 42, drinkTds: 8.1 },
   measurements: []
 };
+
+const grinders: Grinder[] = [
+  { id: "g1", model: "EK43" },
+  { id: "g2", model: "ZP6" }
+];
 
 function appData(overrides: Partial<NonNullable<typeof appMocks.data>> = {}) {
   return {
@@ -299,6 +304,64 @@ describe("ReviewPage", () => {
           visualizer: { id: "vis-1" },
           workflowSkin: { grinderModel: "EK43", grindSize: "7.5" }
         }
+      })
+    );
+  });
+
+  it("saves taste rating and marks a ten as a golden shot", async () => {
+    const onSave = vi.fn();
+    render(
+      <ReviewPage
+        shot={shot}
+        previousShots={[]}
+        onSaveAnnotations={onSave}
+        onUploadVisualizer={vi.fn()}
+        r2Sensor={null}
+        onReadR2={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("heading", { name: "Taste" })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("slider", { name: "Taste rating" }), { target: { value: "10" } });
+
+    expect(screen.getByRole("slider", { name: "Taste rating" })).toHaveClass("gold");
+    await userEvent.click(screen.getByRole("button", { name: /Save Review/i }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      "s1",
+      expect.objectContaining({
+        enjoyment: 10,
+        extras: expect.objectContaining({
+          workflowSkin: expect.objectContaining({ goldenShot: true })
+        })
+      })
+    );
+  });
+
+  it("defaults grinder correction to the default grinder and saves it with the review", async () => {
+    const onSave = vi.fn();
+    render(
+      <ReviewPage
+        shot={{ ...shot, workflow: { context: { ...shot.workflow.context, grinderId: "g1", grinderModel: "EK43" } } }}
+        previousShots={[]}
+        onSaveAnnotations={onSave}
+        onUploadVisualizer={vi.fn()}
+        r2Sensor={null}
+        onReadR2={vi.fn()}
+        grinders={grinders}
+        defaultGrinderId="g2"
+      />
+    );
+
+    expect(screen.getByLabelText("Grinder")).toHaveValue("g2");
+    await userEvent.click(screen.getByRole("button", { name: /Save Review/i }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      "s1",
+      expect.objectContaining({
+        extras: expect.objectContaining({
+          workflowSkin: expect.objectContaining({ grinderId: "g2", grinderModel: "ZP6" })
+        })
       })
     );
   });

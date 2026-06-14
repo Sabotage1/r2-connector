@@ -74,6 +74,7 @@ describe("skin settings", () => {
         },
         lastBeanBatchId: 12,
         lastGrinderId: "g1",
+        defaultGrinderId: "g2",
         preferredEyMin: 18.5,
         preferredEyMax: Number.POSITIVE_INFINITY
       }),
@@ -110,6 +111,7 @@ describe("skin settings", () => {
     });
     expect(settings.lastBeanBatchId).toBeUndefined();
     expect(settings.lastGrinderId).toBe("g1");
+    expect(settings.defaultGrinderId).toBe("g2");
     expect(settings.preferredEyMin).toBe(18.5);
     expect(settings.preferredEyMax).toBeUndefined();
   });

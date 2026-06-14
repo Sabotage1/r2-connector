@@ -1304,6 +1304,10 @@ export function App() {
     await data.refresh();
   };
 
+  const setDefaultGrinder = async (grinderId: string) => {
+    await persistSettings({ ...data.settings, defaultGrinderId: grinderId, lastGrinderId: grinderId }, "Default grinder saved.");
+  };
+
   const saveReview = async (shotId: string, annotations: ShotAnnotations) => {
     try {
       await api.updateShot(shotId, { annotations });
@@ -1321,6 +1325,24 @@ export function App() {
       setStatus({ type: "success", message: "Shot uploaded to Visualizer." });
     } catch (error) {
       setStatus({ type: "error", message: `Could not upload to Visualizer: ${errorMessage(error)}` });
+    }
+  };
+
+  const startSteam = async () => {
+    try {
+      await api.requestMachineState("steam");
+      setStatus({ type: "success", message: "Steam started." });
+    } catch (error) {
+      setStatus({ type: "error", message: `Could not start steam: ${errorMessage(error)}` });
+    }
+  };
+
+  const stopSteam = async () => {
+    try {
+      await api.requestMachineState("idle");
+      setStatus({ type: "success", message: "Steam stopped." });
+    } catch (error) {
+      setStatus({ type: "error", message: `Could not stop steam: ${errorMessage(error)}` });
     }
   };
 
@@ -1683,6 +1705,8 @@ export function App() {
               onReadR2={readR2}
               autoReadR2={autoReadR2ShotId === reviewShot.id}
               autoReadR2DelaySeconds={data.settings.r2MeasureDelaySeconds}
+              grinders={data.grinders ?? []}
+              defaultGrinderId={data.settings.defaultGrinderId ?? data.settings.lastGrinderId}
             />
           ) : (
             <div className="panel wide">
@@ -1695,6 +1719,8 @@ export function App() {
             profileTitle={activeProfile?.profile.title ?? data.workflow.profile?.title ?? "Milk profile"}
             timers={activeProfileWorkflow.steamTimers}
             onReview={() => setPage("review")}
+            onStartSteam={startSteam}
+            onStopSteam={stopSteam}
             steamHistory={data.steams ?? []}
           />
         )}
@@ -1709,6 +1735,8 @@ export function App() {
         {page === "grinders" && (
           <GrindersPage
             grinders={data.grinders ?? []}
+            defaultGrinderId={data.settings.defaultGrinderId ?? data.settings.lastGrinderId}
+            onSetDefaultGrinder={setDefaultGrinder}
             onCreateGrinder={createGrinder}
             onUpdateGrinder={updateGrinder}
             onArchiveGrinder={archiveGrinder}

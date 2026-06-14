@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import skinManifest from "../../skin-manifest.json";
@@ -109,6 +109,10 @@ function mockReaFetch(
     }
     if (method === "PUT" && url.pathname === "/api/v1/machine/state/espresso") {
       machineState = { ...machineState, connected: true, state: { state: "espresso", substate: "preinfusion" } };
+      return Promise.resolve(new Response("", { status: 200 }));
+    }
+    if (method === "PUT" && url.pathname === "/api/v1/machine/state/steam") {
+      machineState = { ...machineState, connected: true, state: { state: "steam", substate: "heating" } };
       return Promise.resolve(new Response("", { status: 200 }));
     }
     if (method === "GET" && url.pathname === "/api/v1/machine/state") {
@@ -1033,6 +1037,40 @@ describe("App shell", () => {
 
     expect(screen.getByText("Steam Workflow")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Blooming" })).toBeInTheDocument();
+  });
+
+  it("starts native steaming and stops it when the selected steam timer ends", async () => {
+    const fetchState = mockReaFetch(
+      {
+        ...initialSettings,
+        profileWorkflows: { p1: { milkBased: true, steamTimers: { small: 2, medium: 30, large: 40 } } }
+      },
+      {
+        workflow: { profile: profiles[0].profile, context: { extras: { workflowSkin: { selectedProfileId: "p1" } } } },
+        machineState: { connected: true, state: { state: "idle" } }
+      }
+    );
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Steam" }));
+    fireEvent.click(screen.getByRole("button", { name: /Small jug/i }));
+
+    vi.useFakeTimers();
+    await act(async () => {
+      screen.getByRole("button", { name: "Start" }).click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchState.fetchMock).toHaveBeenCalledWith("http://localhost:8080/api/v1/machine/state/steam", expect.objectContaining({ method: "PUT" }));
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchState.fetchMock).toHaveBeenCalledWith("http://localhost:8080/api/v1/machine/state/idle", expect.objectContaining({ method: "PUT" }));
   });
 
   it("auto sleeps the machine after the configured idle timer", async () => {

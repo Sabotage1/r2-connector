@@ -31,11 +31,15 @@ export function SteamPage({
   profileTitle,
   timers,
   onReview,
+  onStartSteam,
+  onStopSteam,
   steamHistory = []
 }: {
   profileTitle: string;
   timers: SteamTimers;
   onReview: () => void;
+  onStartSteam?: () => Promise<void> | void;
+  onStopSteam?: () => Promise<void> | void;
   steamHistory?: SteamRecord[];
 }) {
   const [selectedJug, setSelectedJug] = useState<keyof SteamTimers>("medium");
@@ -55,15 +59,26 @@ export function SteamPage({
         if (current <= 1) {
           window.clearInterval(interval);
           setRunning(false);
+          void onStopSteam?.();
           return 0;
         }
         return current - 1;
       });
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [running]);
+  }, [onStopSteam, running]);
 
   const timerText = useMemo(() => formatSeconds(remaining), [remaining]);
+  const toggleSteam = () => {
+    if (running) {
+      setRunning(false);
+      void onStopSteam?.();
+      return;
+    }
+    setRemaining((currentRemaining) => (currentRemaining <= 0 ? selectedSeconds : currentRemaining));
+    setRunning(true);
+    void onStartSteam?.();
+  };
 
   return (
     <div className="workflow-grid">
@@ -89,7 +104,7 @@ export function SteamPage({
           ))}
         </div>
         <div className="steam-actions">
-          <button type="button" className="primary-button" onClick={() => setRunning((current) => !current)}>
+          <button type="button" className="primary-button" onClick={toggleSteam}>
             {running ? <Pause size={18} /> : <Play size={18} />}
             {running ? "Pause" : "Start"}
           </button>

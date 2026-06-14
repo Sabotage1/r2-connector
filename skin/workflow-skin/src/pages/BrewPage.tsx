@@ -223,12 +223,21 @@ export function BrewPage({
       </section>
       <section className="panel wide">
         <h2>Recommended Profiles</h2>
-        {recommendations.slice(0, 4).map((item) => (
-          <button key={item.profile.id} type="button" className="recommendation-row" onClick={() => onApplyProfile(item.profile)}>
-            <strong>{item.profile.profile.title ?? item.profile.id}</strong>
-            <span>{item.reasons.join(" · ")}</span>
-          </button>
-        ))}
+        {recommendations.slice(0, 4).map((item) => {
+          const selected = selectedProfileId === item.profile.id;
+          return (
+            <button
+              key={item.profile.id}
+              type="button"
+              className={selected ? "recommendation-row selected" : "recommendation-row"}
+              aria-current={selected ? "true" : undefined}
+              onClick={() => onApplyProfile(item.profile)}
+            >
+              <strong>{item.profile.profile.title ?? item.profile.id}</strong>
+              <span>{item.reasons.join(" · ")}</span>
+            </button>
+          );
+        })}
       </section>
     </div>
   );

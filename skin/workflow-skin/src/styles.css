@@ -930,6 +930,18 @@ textarea {
   grid-column: span 2;
 }
 
+.history-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.history-heading h2 {
+  margin: 0;
+}
+
 .history-result-count {
   margin: 0 0 12px;
   color: #9daab4;
@@ -1248,6 +1260,16 @@ textarea {
   cursor: pointer;
 }
 
+.recommendation-row.selected {
+  border-color: #5bd179;
+  background: #16251d;
+  box-shadow: inset 3px 0 0 #5bd179;
+}
+
+.recommendation-row.selected span {
+  color: #b8f0c6;
+}
+
 .inline-toggle {
   display: flex;
   align-items: center;
@@ -1354,6 +1376,73 @@ textarea {
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.gold-button,
+.grinder-star.active {
+  border-color: #f0c36a;
+  color: #fff4c2;
+  background: #2c2413;
+}
+
+.gold-button {
+  min-height: 38px;
+  border: 1px solid #6d5b2d;
+  border-radius: 8px;
+  padding: 0 14px;
+  font-weight: 900;
+}
+
+.gold-button.active {
+  box-shadow: inset 3px 0 0 #f0c36a;
+}
+
+.taste-card {
+  gap: 14px;
+}
+
+.taste-slider {
+  accent-color: #f0c36a;
+}
+
+.taste-slider.red {
+  accent-color: #e05656;
+}
+
+.taste-slider.yellow {
+  accent-color: #f0c36a;
+}
+
+.taste-slider.green {
+  accent-color: #5bd179;
+}
+
+.taste-slider.gold {
+  accent-color: #f7d36b;
+}
+
+.taste-score {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: #11171c;
+  background: #f0c36a;
+}
+
+.taste-score.red {
+  color: #fff;
+  background: #e05656;
+}
+
+.taste-score.green {
+  background: #5bd179;
+}
+
+.taste-score.gold {
+  background: #f7d36b;
 }
 
 .timer-grid,

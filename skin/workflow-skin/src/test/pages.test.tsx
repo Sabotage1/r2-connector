@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import skinManifest from "../../skin-manifest.json";
 import { ProfilePresetGrid } from "../components/ProfilePresetGrid";
 import { BagsPage } from "../pages/BagsPage";
@@ -22,6 +22,10 @@ const profiles: ProfileRecord[] = [
   { id: "p2", profile: { title: "Classic" } }
 ];
 const currentSkinVersion = skinManifest.version;
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("ProfilePresetGrid", () => {
   it("applies a slot profile when selected", async () => {
@@ -447,6 +451,30 @@ describe("HistoryPage", () => {
       await userEvent.clear(screen.getByLabelText(label));
     }
   });
+
+  it("filters history to golden shots", async () => {
+    render(
+      <HistoryPage
+        shots={[
+          {
+            ...historyShots[0],
+            annotations: { ...historyShots[0].annotations, enjoyment: 10, extras: { workflowSkin: { goldenShot: true } } }
+          },
+          historyShots[1]
+        ]}
+        bags={historyBags}
+      />
+    );
+
+    expect(screen.getByText("Blooming espresso")).toBeInTheDocument();
+    expect(screen.getByText("Turbo flow")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Gold shots" }));
+
+    expect(screen.getByText("Blooming espresso")).toBeInTheDocument();
+    expect(screen.queryByText("Turbo flow")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Gold shots" })).toHaveAttribute("aria-pressed", "true");
+  });
 });
 
 describe("SteamPage", () => {
@@ -472,6 +500,39 @@ describe("SteamPage", () => {
     expect(screen.getByRole("heading", { name: "Steam History" })).toBeInTheDocument();
     expect(screen.getByText("Silky 150ml")).toBeInTheDocument();
     expect(screen.getByText(/2 samples/i)).toBeInTheDocument();
+  });
+
+  it("starts and stops steaming from the selected timer", async () => {
+    vi.useFakeTimers();
+    const onStartSteam = vi.fn();
+    const onStopSteam = vi.fn();
+    render(
+      <SteamPage
+        {...({
+          profileTitle: "Flat white",
+          timers: { small: 2, medium: 30, large: 40 },
+          onReview: vi.fn(),
+          onStartSteam,
+          onStopSteam
+        } as any)}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Small jug/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+
+    expect(onStartSteam).toHaveBeenCalledTimes(1);
+    expect(onStopSteam).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_999);
+    });
+    expect(onStopSteam).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(onStopSteam).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -977,6 +1038,25 @@ describe("BrewPage workflow controls", () => {
     expect(onUpdateRecipe).toHaveBeenCalledWith({ dose: 20, yield: 50 });
   });
 
+  it("highlights the selected profile in the recommended list", () => {
+    render(
+      <BrewPage
+        workflow={{ profile: { title: "Classic" }, context: { targetDoseWeight: 18 } }}
+        profiles={profiles}
+        bags={[]}
+        grinders={[]}
+        shots={[]}
+        settings={{ ...defaultSkinSettings, presetSlotCount: 2, shownProfileIds: ["p1", "p2"] }}
+        onApplyProfile={vi.fn()}
+        onEditSlot={vi.fn()}
+        onStartBrew={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: /Classic/i })).toHaveAttribute("aria-current", "true");
+    expect(screen.getByRole("button", { name: /Classic/i })).toHaveClass("selected");
+  });
+
   it("edits recipe, changes the current bag, and shows bag-based grind guidance", async () => {
     const onUpdateRecipe = vi.fn();
     const onSelectBag = vi.fn();
@@ -1035,6 +1115,28 @@ describe("GrindersPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save grinder" }));
 
     expect(onCreateGrinder).toHaveBeenCalledWith(expect.objectContaining({ model: "ZP6", burrs: "MP burrs" }));
+  });
+
+  it("stars the default grinder", async () => {
+    const onSetDefaultGrinder = vi.fn();
+    render(
+      <GrindersPage
+        grinders={[
+          { id: "g1", model: "EK43" },
+          { id: "g2", model: "ZP6" }
+        ]}
+        defaultGrinderId="g1"
+        onSetDefaultGrinder={onSetDefaultGrinder}
+        onCreateGrinder={vi.fn()}
+        onUpdateGrinder={vi.fn()}
+        onArchiveGrinder={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "EK43 is default grinder" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(screen.getByRole("button", { name: "Make ZP6 default grinder" }));
+
+    expect(onSetDefaultGrinder).toHaveBeenCalledWith("g2");
   });
 });
 

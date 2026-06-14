@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { SensorListItem, ShotAnnotations, ShotRecord } from "../api/types";
+import type { Grinder, SensorListItem, ShotAnnotations, ShotRecord } from "../api/types";
 import { ShotGraph } from "../components/ShotGraph";
 import { calculateEy, cleanNumber } from "../lib/ey";
 import { grindSizeFromShot, previousFiveForBag, shotContext, shotStats } from "../lib/shotStats";
@@ -21,6 +21,18 @@ function shotTimestampLabel(timestamp: string): string {
   return date.toISOString().slice(0, 16).replace("T", " ");
 }
 
+function tasteTone(value: number): "red" | "yellow" | "green" | "gold" {
+  if (value >= 10) return "gold";
+  if (value >= 7) return "green";
+  if (value >= 4) return "yellow";
+  return "red";
+}
+
+function workflowSkinExtras(annotations: ShotAnnotations | undefined): Record<string, unknown> {
+  const value = annotations?.extras?.workflowSkin;
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
 export function ReviewPage({
   shot,
   previousShots,
@@ -30,7 +42,9 @@ export function ReviewPage({
   r2Available = Boolean(r2Sensor),
   onReadR2,
   autoReadR2 = false,
-  autoReadR2DelaySeconds = DEFAULT_R2_MEASURE_DELAY_SECONDS
+  autoReadR2DelaySeconds = DEFAULT_R2_MEASURE_DELAY_SECONDS,
+  grinders = [],
+  defaultGrinderId
 }: {
   shot: ShotRecord;
   previousShots: ShotRecord[];
@@ -41,15 +55,26 @@ export function ReviewPage({
   onReadR2: () => Promise<number | null> | number | null;
   autoReadR2?: boolean;
   autoReadR2DelaySeconds?: number;
+  grinders?: Grinder[];
+  defaultGrinderId?: string;
   onBackToGraph?: () => void;
 }) {
   const stats = shotStats(shot);
   const context = shotContext(shot);
+  const grinderById = useMemo(() => new Map(grinders.map((grinder) => [grinder.id, grinder])), [grinders]);
+  const savedWorkflowSkin = workflowSkinExtras(shot.annotations);
+  const initialGrinderId =
+    (defaultGrinderId && grinderById.has(defaultGrinderId) ? defaultGrinderId : undefined) ??
+    (typeof savedWorkflowSkin.grinderId === "string" ? savedWorkflowSkin.grinderId : undefined) ??
+    context?.grinderId ??
+    "";
   const [selectedShotId, setSelectedShotId] = useState(shot.id);
   const [tdsText, setTdsText] = useState(String(shot.annotations?.drinkTds ?? ""));
   const [doseText, setDoseText] = useState(String(shot.annotations?.actualDoseWeight ?? context?.targetDoseWeight ?? ""));
   const [yieldText, setYieldText] = useState(String(shot.annotations?.actualYield ?? stats.finalYield ?? ""));
   const [grindSize, setGrindSize] = useState(grindSizeFromShot(shot) ?? "");
+  const [selectedGrinderId, setSelectedGrinderId] = useState(initialGrinderId);
+  const [tasteRating, setTasteRating] = useState(shot.annotations?.enjoyment ?? 7);
   const [notes, setNotes] = useState(shot.annotations?.espressoNotes ?? "");
   const [r2Busy, setR2Busy] = useState(false);
   const [r2Status, setR2Status] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
@@ -88,7 +113,16 @@ export function ReviewPage({
   };
 
   async function save() {
-    const workflowSkin = (shot.annotations?.extras?.workflowSkin as Record<string, unknown> | undefined) ?? {};
+    const workflowSkin = workflowSkinExtras(shot.annotations);
+    const selectedGrinder = selectedGrinderId ? grinderById.get(selectedGrinderId) : undefined;
+    const grinderExtras =
+      selectedGrinderId.length > 0
+        ? {
+            grinderId: selectedGrinder?.id ?? selectedGrinderId,
+            grinderModel: selectedGrinder?.model ?? (typeof workflowSkin.grinderModel === "string" ? workflowSkin.grinderModel : undefined)
+          }
+        : {};
+    const goldenExtras = tasteRating === 10 ? { goldenShot: true } : {};
     await onSaveAnnotations(
       shot.id,
       {
@@ -97,12 +131,15 @@ export function ReviewPage({
         actualYield: cleanNumber(yieldText) ?? undefined,
         drinkTds: cleanNumber(tdsText) ?? undefined,
         drinkEy: ey ?? undefined,
+        enjoyment: tasteRating,
         espressoNotes: notes,
         extras: {
           ...shot.annotations?.extras,
           workflowSkin: {
             ...workflowSkin,
-            grindSize
+            grindSize,
+            ...grinderExtras,
+            ...goldenExtras
           }
         }
       }
@@ -249,11 +286,41 @@ export function ReviewPage({
       </section>
       <section className="panel review-form">
         <h2>Dial In</h2>
+        {grinders.length > 0 && (
+          <label>
+            Grinder
+            <select aria-label="Grinder" value={selectedGrinderId} onChange={(event) => setSelectedGrinderId(event.target.value)}>
+              <option value="">No grinder selected</option>
+              {grinders.map((grinder) => (
+                <option key={grinder.id} value={grinder.id}>
+                  {grinder.model}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label>
           Grind size
           <input value={grindSize} onChange={(event) => setGrindSize(event.target.value)} />
         </label>
         <p>Previous grind sizes: {sameBagShots.map(grindSizeFromShot).filter(Boolean).join(", ") || "—"}</p>
+      </section>
+      <section className="panel review-form taste-card">
+        <h2>Taste</h2>
+        <label>
+          <span>Taste rating</span>
+          <input
+            aria-label="Taste rating"
+            className={`taste-slider ${tasteTone(tasteRating)}`}
+            type="range"
+            min={1}
+            max={10}
+            step={1}
+            value={tasteRating}
+            onChange={(event) => setTasteRating(Number(event.currentTarget.value))}
+          />
+        </label>
+        <strong className={`taste-score ${tasteTone(tasteRating)}`}>{tasteRating}/10</strong>
       </section>
       <section className="panel wide">
         <h2>Tasting Notes</h2>

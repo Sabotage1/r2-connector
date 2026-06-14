@@ -1,3 +1,4 @@
+import { Star } from "lucide-react";
 import { useState } from "react";
 import type { Grinder } from "../api/types";
 
@@ -32,11 +33,15 @@ function grinderPayload(draft: GrinderDraft) {
 
 export function GrindersPage({
   grinders,
+  defaultGrinderId,
+  onSetDefaultGrinder,
   onCreateGrinder,
   onUpdateGrinder,
   onArchiveGrinder
 }: {
   grinders: Grinder[];
+  defaultGrinderId?: string;
+  onSetDefaultGrinder?: (grinderId: string) => Promise<void> | void;
   onCreateGrinder: (payload: ReturnType<typeof grinderPayload>) => Promise<void> | void;
   onUpdateGrinder: (id: string, payload: ReturnType<typeof grinderPayload>) => Promise<void> | void;
   onArchiveGrinder: (grinder: Grinder) => Promise<void> | void;
@@ -83,6 +88,16 @@ export function GrindersPage({
             <strong>{grinder.model}</strong>
             <span>{[grinder.burrs, grinder.settingType, grinder.notes].filter(Boolean).join(" · ")}</span>
             <div className="row-actions">
+              <button
+                type="button"
+                className={defaultGrinderId === grinder.id ? "ghost-button compact-button grinder-star active" : "ghost-button compact-button grinder-star"}
+                aria-pressed={defaultGrinderId === grinder.id}
+                aria-label={defaultGrinderId === grinder.id ? `${grinder.model} is default grinder` : `Make ${grinder.model} default grinder`}
+                onClick={() => void onSetDefaultGrinder?.(grinder.id)}
+              >
+                <Star size={16} fill={defaultGrinderId === grinder.id ? "currentColor" : "none"} />
+                Default
+              </button>
               <button type="button" className="ghost-button compact-button" onClick={() => setDraft(grinderDraftFrom(grinder))}>
                 Edit {grinder.model}
               </button>

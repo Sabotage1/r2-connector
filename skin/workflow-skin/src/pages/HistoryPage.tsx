@@ -71,14 +71,22 @@ function historySearchText(shot: ShotRecord, bag: Bag | undefined): string {
     .join(" ");
 }
 
+function isGoldenShot(shot: ShotRecord): boolean {
+  const workflowSkin = shot.annotations?.extras?.workflowSkin;
+  const markedGolden = Boolean(workflowSkin && typeof workflowSkin === "object" && !Array.isArray(workflowSkin) && (workflowSkin as { goldenShot?: unknown }).goldenShot === true);
+  return markedGolden || shot.annotations?.enjoyment === 10;
+}
+
 export function HistoryPage({ shots, bags }: { shots: ShotRecord[]; bags: Bag[] }) {
   const [filters, setFilters] = useState<HistoryFilters>(emptyFilters);
+  const [goldOnly, setGoldOnly] = useState(false);
   const bagById = useMemo(() => new Map(bags.map((bag) => [bag.id, bag])), [bags]);
   const filteredShots = useMemo(
     () =>
       shots.filter((shot) => {
         const bag = shotBag(shot, bagById);
         return (
+          (!goldOnly || isGoldenShot(shot)) &&
           matchesFilter(historySearchText(shot, bag), filters.search) &&
           matchesFilter(profileTitle(shot), filters.profile) &&
           matchesFilter(bag?.name, filters.bagName) &&
@@ -91,7 +99,7 @@ export function HistoryPage({ shots, bags }: { shots: ShotRecord[]; bags: Bag[] 
           matchesFilter(bag?.roastLevel, filters.roastLevel)
         );
       }),
-    [bagById, filters, shots]
+    [bagById, filters, goldOnly, shots]
   );
 
   const updateFilter = (key: keyof HistoryFilters, value: string) => {
@@ -100,7 +108,12 @@ export function HistoryPage({ shots, bags }: { shots: ShotRecord[]; bags: Bag[] 
 
   return (
     <div className="panel wide">
-      <h2>Shot History</h2>
+      <div className="history-heading">
+        <h2>Shot History</h2>
+        <button type="button" className={goldOnly ? "gold-button active" : "gold-button"} aria-pressed={goldOnly} onClick={() => setGoldOnly((current) => !current)}>
+          Gold shots
+        </button>
+      </div>
       <div className="form-grid history-filter-grid" aria-label="History filters">
         <label className="history-search-field">
           Search
