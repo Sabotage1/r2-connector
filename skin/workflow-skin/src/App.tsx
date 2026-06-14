@@ -404,6 +404,7 @@ async function wakeMachineIfNeeded(api: ReaPrimeApi, fallbackMachineState: Machi
   if (!isSleepingMachine(latestState)) return latestState;
 
   await api.wakeMachine().catch(() => undefined);
+  void scanScaleDuringMachineWake(api);
 
   let nextState: MachineState | null = latestState;
   for (const delay of [250, 750, 1500]) {
@@ -413,6 +414,14 @@ async function wakeMachineIfNeeded(api: ReaPrimeApi, fallbackMachineState: Machi
   }
 
   return nextState;
+}
+
+async function scanScaleDuringMachineWake(api: ReaPrimeApi): Promise<void> {
+  const scannedDevices = await api.scanDevices({ connect: true, quick: false }).catch(() => [] as DeviceInfo[]);
+  const scaleDevices = scannedDevices.filter((device) => isScaleDeviceCandidate(device) && !isConnectedDevice(device) && !isR2Device(device));
+  for (const device of scaleDevices) {
+    await api.connectDevice(device.id).catch(() => undefined);
+  }
 }
 
 function autoSleepCheckIntervalMs(idleLimitMs: number): number {

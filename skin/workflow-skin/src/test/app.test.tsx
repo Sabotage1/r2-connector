@@ -26,6 +26,7 @@ function mockReaFetch(
     rejectProfileUpdate?: boolean;
     updatedProfileId?: string;
     machineState?: MachineState;
+    machineStateAfterWakeRequest?: MachineState;
     appInfo?: AppInfo;
     devices?: DeviceInfo[];
     devicesAfterScan?: DeviceInfo[] | ((context: DeviceScanContext) => DeviceInfo[]);
@@ -103,7 +104,7 @@ function mockReaFetch(
       return Promise.resolve(new Response("", { status: 200 }));
     }
     if (method === "PUT" && url.pathname === "/api/v1/machine/state/idle") {
-      machineState = { ...machineState, connected: true, state: { state: "idle" } };
+      machineState = options.machineStateAfterWakeRequest ?? { ...machineState, connected: true, state: { state: "idle" } };
       return Promise.resolve(new Response("", { status: 200 }));
     }
     if (method === "PUT" && url.pathname === "/api/v1/machine/state/espresso") {
@@ -699,6 +700,34 @@ describe("App shell", () => {
     expect(fetchState.fetchMock).toHaveBeenCalledWith(
       "http://localhost:8080/api/v1/devices/connect",
       expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "F4:12:FA:FA:AC:E3" }) })
+    );
+  });
+
+  it("starts a full scale scan while the machine wake request is still settling", async () => {
+    vi.useFakeTimers();
+    const scaleDevice = { id: "scale-1", name: "Acaia", type: "scale", state: "discovered" };
+    const fetchState = mockReaFetch(initialSettings, {
+      machineState: { connected: true, state: { state: "sleeping", substate: "idle" } },
+      machineStateAfterWakeRequest: { connected: true, state: { state: "sleeping", substate: "waking" } },
+      devices: [],
+      scanDevicesResult: [scaleDevice]
+    });
+    render(<App />);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchState.fetchMock).toHaveBeenCalledWith("http://localhost:8080/api/v1/machine/state/idle", expect.objectContaining({ method: "PUT" }));
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/devices/scan?connect=true&quick=false",
+      expect.objectContaining({ method: "GET" })
+    );
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/devices/connect",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "scale-1" }) })
     );
   });
 
