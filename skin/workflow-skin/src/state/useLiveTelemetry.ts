@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { apiWebSocketBaseUrl } from "../api/reaprime";
 import type { ShotSnapshot, WaterLevels, WeightSnapshot } from "../api/types";
-
-const MAX_LIVE_SAMPLES = 180;
+import { appendLiveMeasurement } from "../lib/liveMeasurements";
 
 export interface LiveTelemetryOptions {
   recordIdle?: boolean;
@@ -74,6 +73,15 @@ function isTestBrowser(): boolean {
   return typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("jsdom");
 }
 
+function compactMode(value: string | undefined): string {
+  return value?.toLowerCase().replace(/[^a-z]/g, "") ?? "";
+}
+
+function isBrewingState(value: string | undefined): boolean {
+  const state = compactMode(value);
+  return state === "espresso" || state === "brewing";
+}
+
 export function useLiveTelemetry(baseUrl = apiWebSocketBaseUrl(), options: LiveTelemetryOptions = {}) {
   const [measurements, setMeasurements] = useState<ShotSnapshot[]>([]);
   const [scaleSnapshot, setScaleSnapshot] = useState<WeightSnapshot | null>(null);
@@ -103,12 +111,14 @@ export function useLiveTelemetry(baseUrl = apiWebSocketBaseUrl(), options: LiveT
       const machine = parseMachineSnapshot(data);
       if (!machine) return;
       lastMachineRef.current = machine;
-      brewingRef.current = machine.state?.state === "espresso";
+      const nextBrewing = isBrewingState(machine.state?.state);
+      const startsNewBrew = nextBrewing && !brewingRef.current;
+      brewingRef.current = nextBrewing;
       const nextMode = { state: machine.state?.state, substate: machine.state?.substate };
       setMachineMode((current) => (current?.state === nextMode.state && current?.substate === nextMode.substate ? current : nextMode));
 
       if (recordIdleRef.current || brewingRef.current) {
-        setMeasurements((current) => [...current.slice(-(MAX_LIVE_SAMPLES - 1)), { machine, scale: lastScaleRef.current ?? undefined }]);
+        setMeasurements((current) => appendLiveMeasurement(current, { machine, scale: lastScaleRef.current ?? undefined }, startsNewBrew));
       }
     });
 
@@ -125,7 +135,7 @@ export function useLiveTelemetry(baseUrl = apiWebSocketBaseUrl(), options: LiveT
       setScaleConnected((current) => (current ? current : true));
       if (recordIdleRef.current || brewingRef.current) setScaleSnapshot(scale);
       if ((recordIdleRef.current || brewingRef.current) && lastMachineRef.current) {
-        setMeasurements((current) => [...current.slice(-(MAX_LIVE_SAMPLES - 1)), { machine: lastMachineRef.current ?? undefined, scale }]);
+        setMeasurements((current) => appendLiveMeasurement(current, { machine: lastMachineRef.current ?? undefined, scale }));
       }
     });
 

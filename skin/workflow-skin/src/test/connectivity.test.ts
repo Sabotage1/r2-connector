@@ -115,6 +115,24 @@ describe("buildConnectivityStatuses", () => {
     });
   });
 
+  it("marks scale disconnected when native device state is explicitly disconnected even if a scale sensor is listed", () => {
+    const statuses = buildConnectivityStatuses({
+      apiHost: "192.168.1.88",
+      machineState: { connected: true },
+      sensors: [scaleSensor],
+      devices: [{ id: "scale-1", name: "Acaia", type: "scale", state: "disconnected" }],
+      r2SensorId: undefined,
+      r2Sensor: null
+    });
+
+    expect(statuses.find((status) => status.id === "scale")).toEqual({
+      id: "scale",
+      label: "Scale",
+      detail: "Not connected",
+      connected: false
+    });
+  });
+
   it("marks water red when it is at or below the refill level", () => {
     const statuses = buildConnectivityStatuses({
       apiHost: "192.168.1.88",

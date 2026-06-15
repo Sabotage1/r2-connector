@@ -450,14 +450,14 @@ describe("ReviewPage", () => {
 
   it("shows the native R2 sensor error message when measurement fails", async () => {
     appMocks.data = appData({ sensors: [r2Sensor] });
-    appMocks.executeSensor.mockResolvedValue({ status: "error", message: "R2 is not connected" });
+    appMocks.executeSensor.mockResolvedValue({ status: "error", message: "Measurement command failed" });
 
     render(<App />);
 
     await userEvent.click(screen.getByRole("button", { name: "Review" }));
     await userEvent.click(screen.getByRole("button", { name: "Read from R2" }));
 
-    expect(await screen.findByText("Could not read R2: R2 is not connected")).toBeInTheDocument();
+    expect(await screen.findByText("Could not read R2: Measurement command failed")).toBeInTheDocument();
     expect(screen.getByText("R2 did not return a TDS reading.")).toBeInTheDocument();
     expect(appMocks.executeSensor).toHaveBeenCalledWith("sensor-r2", "measure", { timeout: 30 });
   });

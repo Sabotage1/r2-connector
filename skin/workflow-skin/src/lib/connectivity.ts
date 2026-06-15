@@ -93,6 +93,10 @@ function isConnectedDeviceState(state: unknown): boolean {
   return connectedText(state) === true;
 }
 
+function isDisconnectedDeviceState(state: unknown): boolean {
+  return connectedText(state) === false;
+}
+
 function scaleConnectedFromMachineState(machineState: MachineState | null): boolean {
   if (!machineState) return false;
   const direct =
@@ -108,6 +112,10 @@ function scaleConnectedFromMachineState(machineState: MachineState | null): bool
 
 function scaleConnectedFromDevices(devices: DeviceInfo[] | undefined): boolean {
   return Boolean(devices?.some((device) => isScaleDevice(device) && isConnectedDeviceState(device.state)));
+}
+
+function scaleExplicitlyDisconnectedFromDevices(devices: DeviceInfo[] | undefined): boolean {
+  return Boolean(devices?.some((device) => isScaleDevice(device) && isDisconnectedDeviceState(device.state)));
 }
 
 function waterTankFullLevel(waterLevels: WaterLevels | null | undefined): number {
@@ -161,7 +169,9 @@ export function buildConnectivityStatuses({
   const machineConnected = Boolean(machineState && machineState.connected !== false);
   const ip = machineIp(machineState, appInfo, apiHost);
   const wifiConnected = Boolean(machineState && ip && machineState.wifi?.connected !== false && machineState.network?.connected !== false);
-  const hasScale = Boolean(scaleConnected) || scaleConnectedFromMachineState(machineState) || scaleConnectedFromDevices(devices) || sensors.some(isScaleSensor);
+  const scaleConnectedByDevice = scaleConnectedFromDevices(devices);
+  const scaleExplicitlyDisconnected = !scaleConnectedByDevice && scaleExplicitlyDisconnectedFromDevices(devices);
+  const hasScale = Boolean(scaleConnected) || scaleConnectedFromMachineState(machineState) || scaleConnectedByDevice || (!scaleExplicitlyDisconnected && sensors.some(isScaleSensor));
 
   const statuses: ConnectivityStatus[] = [
     { id: "machine", label: "Machine", detail: machineConnected ? "Connected" : "Not connected", connected: machineConnected },

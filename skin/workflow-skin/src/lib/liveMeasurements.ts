@@ -1,6 +1,7 @@
 import type { ShotSnapshot } from "../api/types";
 
 export const LIVE_GRAPH_WARMUP_MS = 2000;
+export const MAX_LIVE_SAMPLES = 180;
 
 function snapshotTimestampMs(snapshot: ShotSnapshot): number | null {
   const timestamp = snapshot.machine?.timestamp ?? snapshot.scale?.timestamp;
@@ -19,4 +20,14 @@ export function trimLiveGraphWarmup(measurements: ShotSnapshot[]): ShotSnapshot[
     const timestamp = snapshotTimestampMs(snapshot);
     return timestamp === null || timestamp - startTimestamp >= LIVE_GRAPH_WARMUP_MS;
   });
+}
+
+export function appendLiveMeasurement(
+  measurements: ShotSnapshot[],
+  nextMeasurement: ShotSnapshot,
+  resetForNewBrew = false,
+  maxSamples = MAX_LIVE_SAMPLES
+): ShotSnapshot[] {
+  const base = resetForNewBrew ? [] : measurements;
+  return [...base.slice(-(maxSamples - 1)), nextMeasurement];
 }

@@ -50,6 +50,7 @@ function mockReaFetch(
     githubManifestVersion?: string;
     githubManifestStatus?: number;
     connectDeviceStatus?: number;
+    sensorExecuteResults?: Array<{ body: unknown; status?: number }>;
   } = {}
 ) {
   let savedSettings = initialSettings;
@@ -62,6 +63,7 @@ function mockReaFetch(
   let sensors = options.sensors ?? [];
   let scanCount = 0;
   let connectCount = 0;
+  let sensorExecuteCount = 0;
   const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init = {}) => {
     const url = new URL(String(input));
     const method = init.method ?? "GET";
@@ -157,6 +159,11 @@ function mockReaFetch(
     }
     if (method === "GET" && url.pathname === "/api/v1/steams") return responseJson(options.steams ?? []);
     if (method === "GET" && url.pathname === "/api/v1/sensors") return responseJson(sensors);
+    if (method === "POST" && url.pathname.startsWith("/api/v1/sensors/") && url.pathname.endsWith("/execute")) {
+      const result = options.sensorExecuteResults?.[sensorExecuteCount] ?? { body: { status: "ok", result: { reading: { tds: 9.8 } } } };
+      sensorExecuteCount += 1;
+      return responseJson(result.body, result.status);
+    }
     if (method === "GET" && url.pathname === "/api/v1/plugins") return responseJson(options.plugins ?? []);
     if (method === "GET" && url.pathname === "/api/v1/plugins/visualizer.reaplugin/settings") return responseJson(options.pluginSettings ?? {});
     if (method === "GET" && url.pathname.startsWith("/api/v1/plugins/visualizer.reaplugin/")) {
@@ -233,6 +240,9 @@ function mockReaFetch(
     },
     get connectCount() {
       return connectCount;
+    },
+    get sensorExecuteCount() {
+      return sensorExecuteCount;
     },
     get displayState() {
       return displayState;
@@ -464,9 +474,14 @@ describe("App shell", () => {
     expect(await screen.findByRole("heading", { name: "Brew" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Live" })).not.toBeInTheDocument();
 
+    vi.useFakeTimers();
     fetchState.setMachineState({ connected: true, state: { state: "espresso", substate: "pouring" } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    vi.useRealTimers();
 
-    expect(await screen.findByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Live" })).toBeInTheDocument();
   });
 
@@ -874,6 +889,36 @@ describe("App shell", () => {
     );
   });
 
+  it("rechecks the scale connection before requesting espresso mode", async () => {
+    const fetchState = mockReaFetch(initialSettings, {
+      devices: [{ id: "scale-1", name: "Acaia Lunar", type: "scale", state: "disconnected" }],
+      scanDevicesResult: [{ id: "scale-1", name: "Acaia Lunar", type: "scale", state: "discovered" }]
+    });
+    render(<App />);
+
+    await screen.findByRole("button", { name: "Start Brew" });
+    await waitFor(() => expect(fetchState.scanCount).toBeGreaterThan(0));
+    fetchState.fetchMock.mockClear();
+
+    await userEvent.click(screen.getByRole("button", { name: "Start Brew" }));
+
+    await waitFor(() => {
+      expect(fetchState.fetchMock).toHaveBeenCalledWith("http://localhost:8080/api/v1/machine/state/espresso", expect.objectContaining({ method: "PUT" }));
+    });
+    const calls = fetchState.fetchMock.mock.calls.map(([url, init]) => ({
+      url: String(url),
+      method: (init as RequestInit | undefined)?.method ?? "GET"
+    }));
+    const scanIndex = calls.findIndex((call) => call.url.includes("/api/v1/devices/scan?connect=true&quick=false"));
+    const connectIndex = calls.findIndex((call) => call.url.endsWith("/api/v1/devices/connect") && call.method === "PUT");
+    const espressoIndex = calls.findIndex((call) => call.url.endsWith("/api/v1/machine/state/espresso") && call.method === "PUT");
+
+    expect(scanIndex).toBeGreaterThanOrEqual(0);
+    expect(connectIndex).toBeGreaterThanOrEqual(0);
+    expect(scanIndex).toBeLessThan(espressoIndex);
+    expect(connectIndex).toBeLessThan(espressoIndex);
+  });
+
   it("opens live data when the machine is already brewing", async () => {
     mockReaFetch(initialSettings, {
       machineState: { connected: true, state: { state: "espresso", substate: "pouring" } }
@@ -1037,6 +1082,47 @@ describe("App shell", () => {
 
     expect(screen.getByText("Steam Workflow")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Blooming" })).toBeInTheDocument();
+  });
+
+  it("reconnects and retries R2 when the native measure command times out", async () => {
+    const shot: ShotRecord = {
+      id: "shot-r2-retry",
+      timestamp: "2026-06-15T08:00:00.000Z",
+      workflow: {
+        profile: profiles[0].profile,
+        context: { extras: { workflowSkin: { selectedProfileId: "p1" } } }
+      },
+      measurements: []
+    };
+    const fetchState = mockReaFetch(
+      { ...initialSettings, r2SensorId: "F4:12:FA:FA:AC:E3" },
+      {
+        sensors: [detectedR2Sensor],
+        devices: [{ id: "F4:12:FA:FA:AC:E3", name: "DiFluid R2", type: "sensor", state: "connected" }],
+        scanDevicesResult: [{ id: "F4:12:FA:FA:AC:E3", name: "DiFluid R2", type: "sensor", state: "discovered" }],
+        devicesAfterScan: [{ id: "F4:12:FA:FA:AC:E3", name: "DiFluid R2", type: "sensor", state: "connected" }],
+        shots: [shot],
+        sensorExecuteResults: [
+          { status: 500, body: { error: "FlutterBluePlusException | connect | fbp-code: 1 | Timed out after 15s" } },
+          { body: { status: "ok", result: { reading: { tds: 9.7 } } } }
+        ]
+      }
+    );
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Review" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Read from R2" }));
+
+    expect(await screen.findByText("R2 TDS 9.7 imported.")).toBeInTheDocument();
+    expect(fetchState.sensorExecuteCount).toBe(2);
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/devices/scan?connect=true&quick=false",
+      expect.objectContaining({ method: "GET" })
+    );
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/devices/connect",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "F4:12:FA:FA:AC:E3" }) })
+    );
   });
 
   it("starts native steaming and stops it when the selected steam timer ends", async () => {
@@ -1325,7 +1411,7 @@ describe("App shell", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: "Scale" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Scale connection requested.");
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Scale connection requested."));
     expect(fetchState.fetchMock).toHaveBeenCalledWith(
       "http://localhost:8080/api/v1/devices/scan?connect=true&quick=false",
       expect.objectContaining({ method: "GET" })
@@ -1355,7 +1441,7 @@ describe("App shell", () => {
         expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "acaia-lunar" }) })
       );
     });
-    expect(await screen.findByRole("status")).toHaveTextContent("Scale connection requested.");
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Scale connection requested."));
   });
 
   it("keeps force scale connection usable when explicit connect returns 404 after scan", async () => {

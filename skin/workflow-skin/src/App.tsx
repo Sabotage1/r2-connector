@@ -369,24 +369,43 @@ async function findR2SensorWithRetry(api: ReaPrimeApi, fallbackSensors: SensorLi
   return findDifluidR2Sensor(latestSensors);
 }
 
+function r2MeasurementNeedsReconnect(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("flutterblueplus") ||
+    normalized.includes("fbp-code") ||
+    normalized.includes("timed out") ||
+    normalized.includes("timeout") ||
+    normalized.includes("not connected") ||
+    normalized.includes("disconnected") ||
+    normalized.includes("connect failed")
+  );
+}
+
 function isSleepingMachine(machineState: MachineState | null): boolean {
-  return machineState?.state?.state === "sleeping";
+  return isSleepingMode(machineState?.state?.state);
 }
 
 function screensaverBrightnessValue(value: number | undefined): number {
   return Math.min(100, Math.max(0, Math.round(value ?? 8)));
 }
 
+function compactMachineMode(state: string | undefined): string {
+  return state?.trim().toLowerCase().replace(/[^a-z]/g, "") ?? "";
+}
+
 function isBrewingMode(state: string | undefined): boolean {
-  return state === "espresso" || state === "brewing";
+  const mode = compactMachineMode(state);
+  return mode === "espresso" || mode === "brewing";
 }
 
 function isSteamingMode(state: string | undefined): boolean {
-  return state === "steam" || state === "steaming";
+  const mode = compactMachineMode(state);
+  return mode === "steam" || mode === "steaming";
 }
 
 function isIdleMode(state: string | undefined): boolean {
-  return state === "idle";
+  return compactMachineMode(state) === "idle";
 }
 
 function workflowActivityForMode(state: string | undefined): CompletedWorkflowActivity | null {
@@ -396,7 +415,7 @@ function workflowActivityForMode(state: string | undefined): CompletedWorkflowAc
 }
 
 function isSleepingMode(state: string | undefined): boolean {
-  return state === "sleeping";
+  return compactMachineMode(state) === "sleeping";
 }
 
 async function wakeMachineIfNeeded(api: ReaPrimeApi, fallbackMachineState: MachineState | null): Promise<MachineState | null> {
@@ -632,6 +651,7 @@ export function App() {
   const currentMachineMode = fastMachineState?.state?.state ?? liveTelemetry.machineMode?.state ?? data.machineState?.state?.state;
   const machineSleeping = isSleepingMode(currentMachineMode) || isSleepingMachine(data.machineState);
   const brewingCoffee = isBrewingMode(currentMachineMode);
+  const steamingMilk = isSteamingMode(currentMachineMode);
   const statuses = useMemo(
     () =>
       buildConnectivityStatuses({
@@ -1214,10 +1234,48 @@ export function App() {
     setLastUseAt(Date.now());
   };
 
+  const requestScaleConnection = async () => {
+    await wakeMachineIfNeeded(api, data.machineState);
+    await data.refresh();
+    const scannedDevices = await api.scanDevices({ connect: true, quick: false }).catch(() => [] as DeviceInfo[]);
+    const listedDevices = await api.listDevices().catch(() => data.devices ?? []);
+    const devices = uniqueDevices([...scannedDevices, ...listedDevices]);
+    const scanSawScale = scannedDevices.some((device) => isScaleDeviceCandidate(device) && !isR2Device(device));
+
+    if (hasConnectedScale(devices)) {
+      await data.refresh();
+      return { connected: true, requested: false, found: true, scanSawScale, firstError: null };
+    }
+
+    const scaleDevices = devices.filter((device) => isScaleDeviceCandidate(device) && !isConnectedDevice(device) && !isR2Device(device));
+    let requested = false;
+    let firstError: unknown = null;
+    for (const device of scaleDevices) {
+      try {
+        await api.connectDevice(device.id);
+        requested = true;
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+
+    if (requested) await waitForNativeUpdate(300);
+    await data.refresh();
+    const refreshedDevices = await api.listDevices().catch(() => [] as DeviceInfo[]);
+    return {
+      connected: hasConnectedScale(refreshedDevices),
+      requested,
+      found: scanSawScale || scaleDevices.length > 0,
+      scanSawScale,
+      firstError
+    };
+  };
+
   const startBrew = async () => {
     setBrewPending(true);
     setLastUseAt(Date.now());
     try {
+      await requestScaleConnection().catch(() => undefined);
       await api.requestMachineState("espresso");
       const latestMachineState = await api.getMachineState().catch(() => null);
       if (latestMachineState) setFastMachineState(latestMachineState);
@@ -1346,15 +1404,56 @@ export function App() {
     }
   };
 
+  const reconnectR2ForMeasurement = async (sensorId: string): Promise<string> => {
+    await wakeMachineIfNeeded(api, data.machineState);
+    const scannedDevices = await api.scanDevices({ connect: true, quick: false }).catch(() => [] as DeviceInfo[]);
+    const listedDevices = await api.listDevices().catch(() => data.devices ?? []);
+    const r2Devices = uniqueDevices([...scannedDevices, ...listedDevices]).filter(
+      (device) => isR2Device(device) || isConfiguredR2Device(device, sensorId) || isConfiguredR2Device(device, data.settings.r2SensorId)
+    );
+    const reconnectIds = new Set([sensorId, ...r2Devices.map((device) => device.id)]);
+    for (const deviceId of reconnectIds) {
+      await api.connectDevice(deviceId).catch(() => undefined);
+    }
+
+    await waitForNativeUpdate(750);
+    const sensor = await findR2SensorWithRetry(api, data.sensors);
+    const nextSensorId = sensor?.id ?? sensorId;
+    if (sensor?.id && data.settings.r2SensorId !== sensor.id) {
+      await Promise.resolve(data.persistSettings({ ...data.settings, r2SensorId: sensor.id })).catch(() => undefined);
+    }
+    await data.refresh();
+    return nextSensorId;
+  };
+
+  const executeR2Measurement = async (sensorId: string) => {
+    return api.executeSensor(sensorId, "measure", { timeout: 30 });
+  };
+
   const readR2 = async () => {
-    const sensorId = r2Sensor?.id ?? data.settings.r2SensorId;
+    let sensorId = r2Sensor?.id ?? data.settings.r2SensorId;
     if (!sensorId) {
       setStatus({ type: "error", message: "No DiFluid R2 sensor detected." });
       return null;
     }
 
     try {
-      const result = await api.executeSensor(sensorId, "measure", { timeout: 30 });
+      let result;
+      try {
+        result = await executeR2Measurement(sensorId);
+      } catch (error) {
+        if (!r2MeasurementNeedsReconnect(errorMessage(error))) throw error;
+        sensorId = await reconnectR2ForMeasurement(sensorId);
+        result = await executeR2Measurement(sensorId);
+      }
+
+      if (result.status === "error") {
+        if (r2MeasurementNeedsReconnect(result.message ?? "")) {
+          sensorId = await reconnectR2ForMeasurement(sensorId);
+          result = await executeR2Measurement(sensorId);
+        }
+      }
+
       if (result.status === "error") {
         setStatus({ type: "error", message: `Could not read R2: ${result.message ?? "Measurement command failed."}` });
         return null;
@@ -1448,50 +1547,28 @@ export function App() {
   const forceScaleConnection = async () => {
     setStatus({ type: "success", message: "Scanning for scale." });
     try {
-      await wakeMachineIfNeeded(api, data.machineState);
-      await data.refresh();
-      const scannedDevices = await api.scanDevices({ connect: true, quick: false }).catch(() => [] as DeviceInfo[]);
-      const listedDevices = await api.listDevices().catch(() => data.devices ?? []);
-      const devices = uniqueDevices([...scannedDevices, ...listedDevices]);
-      const scanSawScale = scannedDevices.some((device) => isScaleDeviceCandidate(device) && !isR2Device(device));
-
-      if (hasConnectedScale(devices)) {
-        await data.refresh();
+      const result = await requestScaleConnection();
+      if (result.connected) {
         setStatus({ type: "success", message: "Scale connected." });
         return;
       }
 
-      const scaleDevices = devices.filter((device) => isScaleDeviceCandidate(device) && !isConnectedDevice(device) && !isR2Device(device));
-
-      if (scaleDevices.length === 0) {
+      if (!result.found) {
         setStatus({ type: "error", message: "No scale found after scan." });
         return;
       }
 
-      let connectedCount = 0;
-      let firstError: unknown = null;
-      for (const device of scaleDevices) {
-        try {
-          await api.connectDevice(device.id);
-          connectedCount += 1;
-        } catch (error) {
-          firstError ??= error;
-        }
-      }
-
-      await data.refresh();
-      const refreshedDevices = await api.listDevices().catch(() => [] as DeviceInfo[]);
-      if (connectedCount > 0 || hasConnectedScale(refreshedDevices)) {
+      if (result.requested) {
         setStatus({ type: "success", message: "Scale connection requested." });
         return;
       }
 
-      if (scanSawScale && firstError) {
+      if (result.scanSawScale && result.firstError) {
         setStatus({ type: "success", message: "Scale scan requested. Wake the scale if it stays disconnected." });
         return;
       }
 
-      if (firstError) throw firstError;
+      if (result.firstError) throw result.firstError;
       setStatus({ type: "success", message: "Scale scan requested. Wake the scale if it stays disconnected." });
     } catch (error) {
       setStatus({ type: "error", message: `Could not connect scale: ${errorMessage(error)}` });
@@ -1721,6 +1798,7 @@ export function App() {
             onReview={() => setPage("review")}
             onStartSteam={startSteam}
             onStopSteam={stopSteam}
+            steamActive={steamingMilk}
             steamHistory={data.steams ?? []}
           />
         )}

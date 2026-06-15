@@ -1,5 +1,5 @@
 import { Pause, Play, RotateCcw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { SteamRecord } from "../api/types";
 import type { SteamTimers } from "../state/skinSettings";
 
@@ -33,6 +33,7 @@ export function SteamPage({
   onReview,
   onStartSteam,
   onStopSteam,
+  steamActive = false,
   steamHistory = []
 }: {
   profileTitle: string;
@@ -40,17 +41,30 @@ export function SteamPage({
   onReview: () => void;
   onStartSteam?: () => Promise<void> | void;
   onStopSteam?: () => Promise<void> | void;
+  steamActive?: boolean;
   steamHistory?: SteamRecord[];
 }) {
   const [selectedJug, setSelectedJug] = useState<keyof SteamTimers>("medium");
   const [remaining, setRemaining] = useState(timers.medium);
   const [running, setRunning] = useState(false);
+  const nativeSteamActiveRef = useRef(false);
   const selectedSeconds = timers[selectedJug];
 
   useEffect(() => {
     setRemaining(selectedSeconds);
-    setRunning(false);
-  }, [selectedSeconds]);
+    if (!steamActive) setRunning(false);
+  }, [selectedSeconds, steamActive]);
+
+  useEffect(() => {
+    const wasActive = nativeSteamActiveRef.current;
+    nativeSteamActiveRef.current = steamActive;
+    if (steamActive && !wasActive) {
+      setRemaining(selectedSeconds);
+      setRunning(true);
+      return;
+    }
+    if (!steamActive && wasActive) setRunning(false);
+  }, [selectedSeconds, steamActive]);
 
   useEffect(() => {
     if (!running) return;

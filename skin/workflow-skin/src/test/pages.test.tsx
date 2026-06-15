@@ -534,6 +534,32 @@ describe("SteamPage", () => {
     });
     expect(onStopSteam).toHaveBeenCalledTimes(1);
   });
+
+  it("starts the selected timer when native steaming begins from GHC", async () => {
+    vi.useFakeTimers();
+    const onStartSteam = vi.fn();
+    const onStopSteam = vi.fn();
+    const props = {
+      profileTitle: "Flat white",
+      timers: { small: 2, medium: 30, large: 40 },
+      onReview: vi.fn(),
+      onStartSteam,
+      onStopSteam
+    };
+    const { rerender } = render(<SteamPage {...props} steamActive={false} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Small jug/i }));
+    rerender(<SteamPage {...props} steamActive />);
+
+    expect(onStartSteam).not.toHaveBeenCalled();
+    expect(onStopSteam).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    expect(onStopSteam).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("ProfilesPage", () => {
