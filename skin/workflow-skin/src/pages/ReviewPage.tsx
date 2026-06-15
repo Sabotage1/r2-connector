@@ -44,7 +44,8 @@ export function ReviewPage({
   autoReadR2 = false,
   autoReadR2DelaySeconds = DEFAULT_R2_MEASURE_DELAY_SECONDS,
   grinders = [],
-  defaultGrinderId
+  defaultGrinderId,
+  onLoadShot
 }: {
   shot: ShotRecord;
   previousShots: ShotRecord[];
@@ -57,6 +58,7 @@ export function ReviewPage({
   autoReadR2DelaySeconds?: number;
   grinders?: Grinder[];
   defaultGrinderId?: string;
+  onLoadShot?: (shotId: string) => Promise<ShotRecord | null> | ShotRecord | null;
   onBackToGraph?: () => void;
 }) {
   const stats = shotStats(shot);
@@ -78,7 +80,9 @@ export function ReviewPage({
   const [notes, setNotes] = useState(shot.annotations?.espressoNotes ?? "");
   const [r2Busy, setR2Busy] = useState(false);
   const [r2Status, setR2Status] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
+  const [loadedShotsById, setLoadedShotsById] = useState<Record<string, ShotRecord>>({});
   const autoReadShotRef = useRef<string | null>(null);
+  const requestedShotIdsRef = useRef<Set<string>>(new Set());
 
   const ey = useMemo(
     () =>
@@ -91,7 +95,7 @@ export function ReviewPage({
   );
 
   const sameBagShots = context?.beanBatchId ? previousFiveForBag(previousShots, context.beanBatchId, shot.id) : [];
-  const reviewShots = [shot, ...sameBagShots];
+  const reviewShots = [shot, ...sameBagShots].map((item) => loadedShotsById[item.id] ?? item);
   const selectedShotIndex = Math.max(0, reviewShots.findIndex((item) => item.id === selectedShotId));
   const selectedShot = reviewShots[selectedShotIndex] ?? shot;
   const selectedShotIsLatest = selectedShot.id === shot.id;
@@ -103,13 +107,14 @@ export function ReviewPage({
   const selectedEy = selectedShotIsLatest ? ey : selectedShot.annotations?.drinkEy ?? null;
   const selectedGrindSize = selectedShotIsLatest ? grindSize : grindSizeFromShot(selectedShot) ?? "";
   const selectedShotLabel = selectedShotIsLatest ? "Latest shot" : shotTimestampLabel(selectedShot.timestamp);
-  const sameBagStats = sameBagShots.map((item) => ({ shot: item, stats: shotStats(item), grindSize: grindSizeFromShot(item) }));
+  const sameBagReviewShots = reviewShots.slice(1);
+  const sameBagStats = sameBagReviewShots.map((item) => ({ shot: item, stats: shotStats(item), grindSize: grindSizeFromShot(item) }));
   const sameBagGrinds = sameBagStats.map((item) => item.grindSize).filter((value): value is string => Boolean(value));
   const sameBagAverages = {
     duration: averageNumbers(sameBagStats.map((item) => item.stats.durationSeconds)),
     yield: averageNumbers(sameBagStats.map((item) => item.stats.finalYield)),
-    tds: averageNumbers(sameBagShots.map((item) => item.annotations?.drinkTds)),
-    ey: averageNumbers(sameBagShots.map((item) => item.annotations?.drinkEy))
+    tds: averageNumbers(sameBagReviewShots.map((item) => item.annotations?.drinkTds)),
+    ey: averageNumbers(sameBagReviewShots.map((item) => item.annotations?.drinkEy))
   };
 
   async function save() {
@@ -190,7 +195,28 @@ export function ReviewPage({
 
   useEffect(() => {
     setSelectedShotId(shot.id);
+    setLoadedShotsById({});
+    requestedShotIdsRef.current.clear();
   }, [shot.id]);
+
+  useEffect(() => {
+    if (!onLoadShot || !selectedShot.id || (selectedShot.measurements?.length ?? 0) > 0) return;
+    if (requestedShotIdsRef.current.has(selectedShot.id)) return;
+    requestedShotIdsRef.current.add(selectedShot.id);
+
+    let cancelled = false;
+    void Promise.resolve(onLoadShot(selectedShot.id))
+      .then((fullShot) => {
+        if (!cancelled && fullShot) {
+          setLoadedShotsById((current) => ({ ...current, [fullShot.id]: fullShot }));
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onLoadShot, selectedShot.id, selectedShot.measurements?.length]);
 
   return (
     <div className="workflow-grid">

@@ -1784,6 +1784,7 @@ export function App() {
               autoReadR2DelaySeconds={data.settings.r2MeasureDelaySeconds}
               grinders={data.grinders ?? []}
               defaultGrinderId={data.settings.defaultGrinderId ?? data.settings.lastGrinderId}
+              onLoadShot={(shotId) => api.getShot(shotId)}
             />
           ) : (
             <div className="panel wide">

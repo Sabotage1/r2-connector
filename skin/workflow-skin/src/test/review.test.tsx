@@ -271,6 +271,47 @@ describe("ReviewPage", () => {
     expect(screen.getByText("Grind: 7.0")).toBeInTheDocument();
   });
 
+  it("loads full selected shot data when the scrubbed previous shot has no graph measurements", async () => {
+    const currentShot: ShotRecord = {
+      ...shot,
+      measurements: [{ machine: { timestamp: "2026-06-09T10:00:00.000Z", pressure: 7 } }]
+    };
+    const previousSummary: ShotRecord = {
+      id: "same-1",
+      timestamp: "2026-06-09T09:55:00Z",
+      workflow: { context: { beanBatchId: "batch-1" } },
+      annotations: { actualYield: 38, drinkTds: 8.8, drinkEy: 18.1 },
+      measurements: []
+    };
+    const previousFull: ShotRecord = {
+      ...previousSummary,
+      measurements: [
+        { machine: { timestamp: "2026-06-09T09:55:00.000Z", pressure: 2, flow: 1 } },
+        { machine: { timestamp: "2026-06-09T09:55:27.000Z", pressure: 8, flow: 2 } }
+      ]
+    };
+    const onLoadShot = vi.fn().mockResolvedValue(previousFull);
+
+    render(
+      <ReviewPage
+        shot={currentShot}
+        previousShots={[previousSummary]}
+        onSaveAnnotations={vi.fn()}
+        onUploadVisualizer={vi.fn()}
+        r2Sensor={null}
+        onReadR2={vi.fn()}
+        onLoadShot={onLoadShot}
+      />
+    );
+
+    expect(screen.queryByText("Flow")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Shot scrubber"), { target: { value: "1" } });
+
+    expect(onLoadShot).toHaveBeenCalledWith("same-1");
+    expect(await screen.findByText("Flow")).toBeInTheDocument();
+    expect(screen.getByText("Duration: 27s")).toBeInTheDocument();
+  });
+
   it("preserves unrelated annotation extras when saving review fields", async () => {
     const onSave = vi.fn();
     render(
@@ -434,6 +475,40 @@ describe("ReviewPage", () => {
 
     expect(screen.getByLabelText("TDS")).toHaveValue("8.1");
     expect(screen.getByLabelText("Dose")).toHaveValue("20");
+  });
+
+  it("loads a full previous shot through App when scrubbing to a summary-only shot", async () => {
+    const currentShot: ShotRecord = {
+      ...shot,
+      measurements: [{ machine: { timestamp: "2026-06-09T10:00:00.000Z", pressure: 7 } }]
+    };
+    const previousSummary: ShotRecord = {
+      id: "same-1",
+      timestamp: "2026-06-09T09:55:00Z",
+      workflow: { context: { beanBatchId: "batch-1" } },
+      annotations: { actualYield: 38 },
+      measurements: []
+    };
+    const previousFull: ShotRecord = {
+      ...previousSummary,
+      measurements: [
+        { machine: { timestamp: "2026-06-09T09:55:00.000Z", pressure: 2, flow: 1 } },
+        { machine: { timestamp: "2026-06-09T09:55:27.000Z", pressure: 8, flow: 2 } }
+      ]
+    };
+    appMocks.data = appData({ shots: [currentShot, previousSummary] });
+    appMocks.getShot.mockResolvedValue(previousFull);
+
+    render(<App />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Review" }));
+    expect(screen.queryByText("Flow")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Shot scrubber"), { target: { value: "1" } });
+
+    expect(appMocks.getShot).toHaveBeenCalledWith("same-1");
+    expect(await screen.findByText("Flow")).toBeInTheDocument();
+    expect(screen.getByText("Duration: 27s")).toBeInTheDocument();
   });
 
   it("shows an error when no native R2 sensor is detected", async () => {
