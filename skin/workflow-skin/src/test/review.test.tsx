@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
@@ -224,6 +224,7 @@ describe("ReviewPage", () => {
   it("starts on the latest shot and scrubs through previous same-bag shot details", () => {
     const currentShot: ShotRecord = {
       ...shot,
+      workflow: { profile: { title: "Blooming profile" }, context: { ...shot.workflow.context } },
       annotations: {
         actualDoseWeight: 18,
         actualYield: 40,
@@ -239,7 +240,7 @@ describe("ReviewPage", () => {
     const previousShot: ShotRecord = {
       id: "same-1",
       timestamp: "2026-06-09T09:55:00Z",
-      workflow: { context: { beanBatchId: "batch-1" } },
+      workflow: { profile: { title: "Turbo milk profile" }, context: { beanBatchId: "batch-1" } },
       annotations: { actualYield: 38, drinkTds: 8.8, drinkEy: 18.1, extras: { workflowSkin: { grindSize: "7.0" } } },
       measurements: [
         { machine: { timestamp: "2026-06-09T09:55:00.000Z", pressure: 2, flow: 1 } },
@@ -260,10 +261,13 @@ describe("ReviewPage", () => {
 
     expect(screen.getByText("Selected shot: Latest shot")).toBeInTheDocument();
     expect(screen.getByText("Yield: 40 g")).toBeInTheDocument();
+    const reviewCard = screen.getByRole("heading", { name: "Shot Review" }).closest("section")!;
+    expect(within(reviewCard).getByText("Blooming profile")).toHaveClass("review-profile-title");
 
     fireEvent.change(screen.getByLabelText("Shot scrubber"), { target: { value: "1" } });
 
     expect(screen.getByText("Selected shot: 2026-06-09 09:55")).toBeInTheDocument();
+    expect(within(reviewCard).getByText("Turbo milk profile")).toHaveClass("review-profile-title");
     expect(screen.getByText("Duration: 27s")).toBeInTheDocument();
     expect(screen.getByText("Yield: 38 g")).toBeInTheDocument();
     expect(screen.getByText("TDS: 8.8%")).toBeInTheDocument();
@@ -363,9 +367,14 @@ describe("ReviewPage", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Taste" })).toBeInTheDocument();
+    const tasteScore = screen.getByText("7/10");
+    expect(tasteScore).toHaveClass("taste-score", "green");
+    expect(tasteScore.closest(".taste-slider-shell")).toContainElement(screen.getByRole("slider", { name: "Taste rating" }));
+
     fireEvent.change(screen.getByRole("slider", { name: "Taste rating" }), { target: { value: "10" } });
 
     expect(screen.getByRole("slider", { name: "Taste rating" })).toHaveClass("gold");
+    expect(screen.getByText("10/10 🔥")).toHaveClass("taste-score", "gold");
     await userEvent.click(screen.getByRole("button", { name: /Save Review/i }));
 
     expect(onSave).toHaveBeenCalledWith(

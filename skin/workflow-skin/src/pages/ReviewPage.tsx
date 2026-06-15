@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { Grinder, SensorListItem, ShotAnnotations, ShotRecord } from "../api/types";
 import { ShotGraph } from "../components/ShotGraph";
 import { calculateEy, cleanNumber } from "../lib/ey";
@@ -28,9 +28,20 @@ function tasteTone(value: number): "red" | "yellow" | "green" | "gold" {
   return "red";
 }
 
+const tasteToneStyles = {
+  red: { color: "#e05656", glow: "rgb(224 86 86 / 36%)", rest: "#362026" },
+  yellow: { color: "#f0c36a", glow: "rgb(240 195 106 / 30%)", rest: "#352c18" },
+  green: { color: "#5bd179", glow: "rgb(91 209 121 / 34%)", rest: "#1c3325" },
+  gold: { color: "#ffd43b", glow: "rgb(255 156 28 / 48%)", rest: "#392a10" }
+} satisfies Record<ReturnType<typeof tasteTone>, { color: string; glow: string; rest: string }>;
+
 function workflowSkinExtras(annotations: ShotAnnotations | undefined): Record<string, unknown> {
   const value = annotations?.extras?.workflowSkin;
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function shotProfileTitle(shot: ShotRecord): string {
+  return typeof shot.workflow?.profile?.title === "string" ? shot.workflow.profile.title.trim() : "";
 }
 
 export function ReviewPage({
@@ -107,6 +118,17 @@ export function ReviewPage({
   const selectedEy = selectedShotIsLatest ? ey : selectedShot.annotations?.drinkEy ?? null;
   const selectedGrindSize = selectedShotIsLatest ? grindSize : grindSizeFromShot(selectedShot) ?? "";
   const selectedShotLabel = selectedShotIsLatest ? "Latest shot" : shotTimestampLabel(selectedShot.timestamp);
+  const selectedProfileTitle = shotProfileTitle(selectedShot);
+  const selectedTasteTone = tasteTone(tasteRating);
+  const selectedTasteToneStyle = tasteToneStyles[selectedTasteTone];
+  const tasteFillPercent = ((tasteRating - 1) / 9) * 100;
+  const tasteScoreLabel = `${tasteRating}/10${tasteRating === 10 ? " 🔥" : ""}`;
+  const tasteStyle = {
+    "--taste-color": selectedTasteToneStyle.color,
+    "--taste-glow": selectedTasteToneStyle.glow,
+    "--taste-rest": selectedTasteToneStyle.rest,
+    "--taste-fill": `${tasteFillPercent}%`
+  } as CSSProperties;
   const sameBagReviewShots = reviewShots.slice(1);
   const sameBagStats = sameBagReviewShots.map((item) => ({ shot: item, stats: shotStats(item), grindSize: grindSizeFromShot(item) }));
   const sameBagGrinds = sameBagStats.map((item) => item.grindSize).filter((value): value is string => Boolean(value));
@@ -223,6 +245,11 @@ export function ReviewPage({
       <section className="panel wide">
         <div className="review-graph-header">
           <h2>Shot Review</h2>
+          {selectedProfileTitle && (
+            <strong className="review-profile-title" title={selectedProfileTitle}>
+              {selectedProfileTitle}
+            </strong>
+          )}
           <span className="muted">{selectedShotIsLatest ? "Last shot graph" : "Selected shot graph"}</span>
         </div>
         <div className="shot-scrubber">
@@ -333,20 +360,24 @@ export function ReviewPage({
       </section>
       <section className="panel review-form taste-card">
         <h2>Taste</h2>
-        <label>
+        <label className="taste-slider-field">
           <span>Taste rating</span>
-          <input
-            aria-label="Taste rating"
-            className={`taste-slider ${tasteTone(tasteRating)}`}
-            type="range"
-            min={1}
-            max={10}
-            step={1}
-            value={tasteRating}
-            onChange={(event) => setTasteRating(Number(event.currentTarget.value))}
-          />
+          <div className={`taste-slider-shell ${selectedTasteTone}`} style={tasteStyle}>
+            <output className={`taste-score ${selectedTasteTone}`} aria-live="polite">
+              {tasteScoreLabel}
+            </output>
+            <input
+              aria-label="Taste rating"
+              className={`taste-slider ${selectedTasteTone}`}
+              type="range"
+              min={1}
+              max={10}
+              step={1}
+              value={tasteRating}
+              onChange={(event) => setTasteRating(Number(event.currentTarget.value))}
+            />
+          </div>
         </label>
-        <strong className={`taste-score ${tasteTone(tasteRating)}`}>{tasteRating}/10</strong>
       </section>
       <section className="panel wide">
         <h2>Tasting Notes</h2>
