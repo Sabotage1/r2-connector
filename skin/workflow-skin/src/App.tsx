@@ -401,7 +401,7 @@ function isBrewingMode(state: string | undefined): boolean {
 
 function isSteamingMode(state: string | undefined): boolean {
   const mode = compactMachineMode(state);
-  return mode === "steam" || mode === "steaming";
+  return mode === "steam" || mode === "steaming" || mode.includes("steam");
 }
 
 function isIdleMode(state: string | undefined): boolean {

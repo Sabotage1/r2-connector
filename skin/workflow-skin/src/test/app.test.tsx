@@ -1159,6 +1159,50 @@ describe("App shell", () => {
     expect(fetchState.fetchMock).toHaveBeenCalledWith("http://localhost:8080/api/v1/machine/state/idle", expect.objectContaining({ method: "PUT" }));
   });
 
+  it("starts the steam timer for GHC steam-like native state names", async () => {
+    vi.useFakeTimers();
+    const fetchState = mockReaFetch(
+      {
+        ...initialSettings,
+        profileWorkflows: { p1: { milkBased: true, steamTimers: { small: 20, medium: 2, large: 40 } } }
+      },
+      {
+        workflow: { profile: profiles[0].profile, context: { extras: { workflowSkin: { selectedProfileId: "p1" } } } },
+        machineState: { connected: true, state: { state: "idle" } }
+      }
+    );
+    render(<App />);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Steam" }));
+    expect(screen.getByText("0:02")).toBeInTheDocument();
+
+    fetchState.fetchMock.mockClear();
+    fetchState.setMachineState({ connected: true, state: { state: "steamRinse", substate: "steaming" } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+      await Promise.resolve();
+    });
+    expect(screen.getByText("0:01")).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchState.fetchMock).toHaveBeenCalledWith("http://localhost:8080/api/v1/machine/state/idle", expect.objectContaining({ method: "PUT" }));
+  });
+
   it("auto sleeps the machine after the configured idle timer", async () => {
     const fetchState = mockReaFetch(
       { ...initialSettings, autoSleepMinutes: 0.001, screensaverBrightness: 13 },

@@ -38,7 +38,7 @@ export function machineStateLabel(rawState: string | undefined, rawSubstate?: st
 
   if (state === "preparingforshot") return "Heating";
   if (state === "espresso" || state === "brewing") return "Brew";
-  if (state === "steam" || state === "steaming") return "Steam";
+  if (state === "steam" || state === "steaming" || state.includes("steam")) return "Steam";
   if (state === "sleeping") return "Sleep";
   if (state === "refillrequired") return "Refill";
   if (state === "hotwater" || state === "hotwaterrinse") return "Water";
