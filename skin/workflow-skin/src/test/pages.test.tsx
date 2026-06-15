@@ -560,6 +560,28 @@ describe("SteamPage", () => {
 
     expect(onStopSteam).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps counting down during parent rerenders while native steam stays active", async () => {
+    vi.useFakeTimers();
+    const props = {
+      profileTitle: "Flat white",
+      timers: { small: 20, medium: 20, large: 40 },
+      onReview: vi.fn(),
+      onStartSteam: vi.fn()
+    };
+    const { rerender } = render(<SteamPage {...props} onStopSteam={vi.fn()} steamActive />);
+
+    expect(screen.getByText("0:20")).toBeInTheDocument();
+
+    for (let i = 0; i < 4; i += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(500);
+      });
+      rerender(<SteamPage {...props} onStopSteam={vi.fn()} steamActive />);
+    }
+
+    expect(screen.getByText("0:18")).toBeInTheDocument();
+  });
 });
 
 describe("ProfilesPage", () => {

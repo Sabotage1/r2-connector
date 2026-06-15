@@ -48,7 +48,12 @@ export function SteamPage({
   const [remaining, setRemaining] = useState(timers.medium);
   const [running, setRunning] = useState(false);
   const nativeSteamActiveRef = useRef(false);
+  const onStopSteamRef = useRef(onStopSteam);
   const selectedSeconds = timers[selectedJug];
+
+  useEffect(() => {
+    onStopSteamRef.current = onStopSteam;
+  }, [onStopSteam]);
 
   useEffect(() => {
     setRemaining(selectedSeconds);
@@ -73,14 +78,14 @@ export function SteamPage({
         if (current <= 1) {
           window.clearInterval(interval);
           setRunning(false);
-          void onStopSteam?.();
+          void onStopSteamRef.current?.();
           return 0;
         }
         return current - 1;
       });
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [onStopSteam, running]);
+  }, [running]);
 
   const timerText = useMemo(() => formatSeconds(remaining), [remaining]);
   const toggleSteam = () => {
