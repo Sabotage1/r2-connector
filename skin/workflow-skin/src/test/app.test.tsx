@@ -963,16 +963,16 @@ describe("App shell", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(screen.queryByRole("heading", { name: "Live Brew" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Brew" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Brew" })).not.toBeInTheDocument();
 
     await act(async () => {
       vi.advanceTimersByTime(999);
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(screen.queryByRole("heading", { name: "Live Brew" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Brew" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Brew" })).not.toBeInTheDocument();
 
     await act(async () => {
       vi.advanceTimersByTime(1);
@@ -1026,6 +1026,9 @@ describe("App shell", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
+    expect(screen.getByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Brew" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Shot Review" })).not.toBeInTheDocument();
 
     await act(async () => {
       vi.advanceTimersByTime(1_000);

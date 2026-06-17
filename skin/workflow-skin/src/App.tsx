@@ -668,6 +668,8 @@ export function App() {
   const currentMachineMode = fastMachineState?.state?.state ?? liveTelemetry.machineMode?.state ?? data.machineState?.state?.state;
   const machineSleeping = isSleepingMode(currentMachineMode) || isSleepingMachine(data.machineState);
   const brewingCoffee = isBrewingMode(currentMachineMode);
+  const holdingCompletedBrewOnLivePage = page === "live" && !brewingCoffee && completedActivityRef.current?.activity === "brew";
+  const showLivePage = page === "live" && (brewingCoffee || holdingCompletedBrewOnLivePage);
   const steamingMilk = isSteamingMode(currentMachineMode);
   const statuses = useMemo(
     () =>
@@ -686,8 +688,8 @@ export function App() {
     [nativeDevices, data.machineState, data.sensors, data.settings.r2SensorId, liveTelemetry.scaleConnected, liveTelemetry.waterLevels, r2DeviceConnected, r2Sensor]
   );
   const visibleMenuIds = useMemo(
-    () => visibleMainMenuItems(data.settings).filter((itemId) => itemId !== "live" || brewingCoffee),
-    [brewingCoffee, data.settings.mainMenuItems, data.settings.hiddenMainMenuItemIds]
+    () => visibleMainMenuItems(data.settings).filter((itemId) => itemId !== "live" || brewingCoffee || holdingCompletedBrewOnLivePage),
+    [brewingCoffee, data.settings.mainMenuItems, data.settings.hiddenMainMenuItemIds, holdingCompletedBrewOnLivePage]
   );
   const workflowSkin = useMemo(() => workflowSkinFromList(data.webuiSkins, data.defaultWebuiSkin), [data.webuiSkins, data.defaultWebuiSkin]);
   const menuSkinVersion = workflowSkin?.version?.trim() || CURRENT_SKIN_VERSION;
@@ -842,6 +844,7 @@ export function App() {
 
   useEffect(() => {
     if (!data.loaded || page !== "live" || brewingCoffee) return;
+    if (completedActivityRef.current?.activity === "brew" || completedActivityTimerRef.current !== null) return;
     setPage("brew");
   }, [brewingCoffee, data.loaded, page]);
 
@@ -1802,7 +1805,7 @@ export function App() {
             }}
           />
         )}
-        {page === "live" && brewingCoffee && (
+        {showLivePage && (
           <LivePage
             workflow={data.workflow}
             activeProfile={activeProfile}
