@@ -368,10 +368,14 @@ describe("ReviewPage", () => {
 
     expect(screen.getByRole("heading", { name: "Taste" })).toBeInTheDocument();
     const tasteScore = screen.getByText("7/10");
+    const tasteField = tasteScore.closest(".taste-slider-field")!;
+    const tasteSlider = screen.getByRole("slider", { name: "Taste rating" });
     expect(tasteScore).toHaveClass("taste-score", "green");
-    expect(tasteScore.closest(".taste-slider-shell")).toContainElement(screen.getByRole("slider", { name: "Taste rating" }));
+    expect(tasteScore.closest(".taste-slider-shell")).toBeNull();
+    expect(tasteField.querySelector(".taste-slider-shell")).toContainElement(tasteSlider);
+    expect(tasteField.lastElementChild).toBe(tasteScore);
 
-    fireEvent.change(screen.getByRole("slider", { name: "Taste rating" }), { target: { value: "10" } });
+    fireEvent.change(tasteSlider, { target: { value: "10" } });
 
     expect(screen.getByRole("slider", { name: "Taste rating" })).toHaveClass("gold");
     expect(screen.getByText("10/10 🔥")).toHaveClass("taste-score", "gold");

@@ -363,9 +363,6 @@ export function ReviewPage({
         <label className="taste-slider-field">
           <span>Taste rating</span>
           <div className={`taste-slider-shell ${selectedTasteTone}`} style={tasteStyle}>
-            <output className={`taste-score ${selectedTasteTone}`} aria-live="polite">
-              {tasteScoreLabel}
-            </output>
             <input
               aria-label="Taste rating"
               className={`taste-slider ${selectedTasteTone}`}
@@ -377,6 +374,9 @@ export function ReviewPage({
               onChange={(event) => setTasteRating(Number(event.currentTarget.value))}
             />
           </div>
+          <output className={`taste-score ${selectedTasteTone}`} aria-live="polite">
+            {tasteScoreLabel}
+          </output>
         </label>
       </section>
       <section className="panel wide">

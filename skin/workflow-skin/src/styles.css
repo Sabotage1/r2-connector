@@ -1457,17 +1457,18 @@ textarea {
 }
 
 .taste-score {
-  width: max-content;
+  justify-self: center;
+  width: 100%;
   max-width: 100%;
-  margin-left: clamp(34px, var(--taste-fill), calc(100% - 34px));
+  margin: -2px 0 0;
   overflow: hidden;
   color: var(--taste-color);
   font-size: 18px;
   font-weight: 900;
   line-height: 1;
+  text-align: center;
   text-overflow: ellipsis;
   text-shadow: 0 0 18px var(--taste-glow);
-  transform: translateX(-50%);
   white-space: nowrap;
 }
 
