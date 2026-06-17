@@ -635,15 +635,15 @@ export function App() {
   const data = useReaData(api);
   const liveTelemetry = useLiveTelemetry(undefined, { recordIdle: page === "live" });
   const latestShot = data.shots[0] ?? null;
+  const nativeDevices = data.devices ?? [];
   const detectedR2Sensor = findDifluidR2Sensor(data.sensors);
   const configuredR2Sensor = data.settings.r2SensorId ? data.sensors.find((sensor) => sensor.id === data.settings.r2SensorId) ?? null : null;
   const r2Sensor = configuredR2Sensor ?? detectedR2Sensor;
-  const r2Available = Boolean(r2Sensor || data.settings.r2SensorId);
-  const nativeDevices = data.devices ?? [];
-  const r2DeviceConnected = Boolean(
-    data.settings.r2SensorId &&
-      nativeDevices.some((device) => (isConfiguredR2Device(device, data.settings.r2SensorId) || isR2Device(device)) && isConnectedDevice(device))
+  const connectedR2Device = nativeDevices.find(
+    (device) => (isConfiguredR2Device(device, data.settings.r2SensorId) || isR2Device(device)) && isConnectedDevice(device)
   );
+  const r2DeviceConnected = Boolean(connectedR2Device);
+  const r2Available = Boolean(r2Sensor || data.settings.r2SensorId || connectedR2Device);
   const selectedProfileId = selectedProfileIdFromWorkflow(data.workflow, data.profiles);
   const workflowPageProfileId = selectedProfileId ?? (page === "steam" || page === "review" ? lastCompletedProfileId : undefined);
   const activeProfile = data.profiles.find((profile) => profile.id === workflowPageProfileId);
@@ -1472,7 +1472,7 @@ export function App() {
   };
 
   const readR2 = async () => {
-    let sensorId = r2Sensor?.id ?? data.settings.r2SensorId;
+    let sensorId = r2Sensor?.id ?? data.settings.r2SensorId ?? connectedR2Device?.id;
     if (!sensorId) {
       setStatus({ type: "error", message: "No DiFluid R2 sensor detected." });
       return null;
@@ -1505,8 +1505,9 @@ export function App() {
         setStatus({ type: "error", message: "R2 did not return a TDS reading." });
         return null;
       }
-      if (r2Sensor?.id && data.settings.r2SensorId !== r2Sensor.id) {
-        await Promise.resolve(data.persistSettings({ ...data.settings, r2SensorId: r2Sensor.id })).catch(() => undefined);
+      const discoveredSensorId = r2Sensor?.id ?? connectedR2Device?.id;
+      if (discoveredSensorId && data.settings.r2SensorId !== discoveredSensorId) {
+        await Promise.resolve(data.persistSettings({ ...data.settings, r2SensorId: discoveredSensorId })).catch(() => undefined);
       }
       return tds;
     } catch (error) {

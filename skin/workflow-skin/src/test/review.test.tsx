@@ -151,7 +151,7 @@ describe("ReviewPage", () => {
       },
       measurements: [
         { machine: { timestamp: "2026-06-09T10:00:00.000Z", pressure: 2, flow: 1 }, scale: { weight: 5 } },
-        { machine: { timestamp: "2026-06-09T10:00:28.000Z", pressure: 9, flow: 2 }, scale: { weight: 40 } }
+        { machine: { timestamp: "2026-06-09T10:00:28.000Z", pressure: 9.129, flow: 2 }, scale: { weight: 40 } }
       ]
     };
     const previousSameBag: ShotRecord[] = [
@@ -203,6 +203,7 @@ describe("ReviewPage", () => {
     expect(screen.getByText("TDS: 9%")).toBeInTheDocument();
     expect(screen.getByText("Current EY: 20%")).toBeInTheDocument();
     expect(screen.getByText("Grind: 7.2")).toBeInTheDocument();
+    expect(screen.getByText("Peak pressure: 9.13 bar")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Same Bag Comparison" })).toBeInTheDocument();
     expect(screen.getByText("Previous same-bag shots: 2")).toBeInTheDocument();
     expect(screen.getByText("Avg yield: 38.5 g")).toBeInTheDocument();
@@ -582,6 +583,22 @@ describe("ReviewPage", () => {
     expect(appMocks.executeSensor).toHaveBeenCalledWith("F4:12:FA:FA:AC:E3", "measure", { timeout: 30 });
   });
 
+  it("imports an R2 TDS reading from a connected native R2 device when sensors are stale", async () => {
+    appMocks.data = appData({ devices: [{ id: "F4:12:FA:FA:AC:E3", name: "DiFluid R2", type: "sensor", state: "connected" }] });
+    appMocks.executeSensor.mockResolvedValue({
+      status: "ok",
+      result: { reading: { tds: 9.5 } }
+    });
+
+    render(<App />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Review" }));
+    await userEvent.click(screen.getByRole("button", { name: "Read from R2" }));
+
+    expect(await screen.findByDisplayValue("9.5")).toBeInTheDocument();
+    expect(appMocks.executeSensor).toHaveBeenCalledWith("F4:12:FA:FA:AC:E3", "measure", { timeout: 30 });
+  });
+
   it("shows local R2 reading feedback in the extraction panel", async () => {
     const onReadR2 = vi.fn().mockResolvedValue(9.7);
     render(
@@ -631,6 +648,32 @@ describe("ReviewPage", () => {
     expect(screen.getByText("R2 TDS 9.8 imported.")).toBeInTheDocument();
     expect(screen.getByLabelText("TDS")).toHaveValue("9.8");
     expect(onReadR2).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the automatic R2 timer when availability is stale while the review page opens", async () => {
+    vi.useFakeTimers();
+    const onReadR2 = vi.fn().mockResolvedValue(9.6);
+    render(
+      <ReviewPage
+        shot={shot}
+        previousShots={[]}
+        onSaveAnnotations={vi.fn()}
+        onUploadVisualizer={vi.fn()}
+        r2Sensor={null}
+        r2Available={false}
+        onReadR2={onReadR2}
+        autoReadR2
+        autoReadR2DelaySeconds={20}
+      />
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(20_000);
+      await Promise.resolve();
+    });
+
+    expect(onReadR2).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("TDS")).toHaveValue("9.6");
   });
 
   it("shows local feedback when R2 is unavailable", async () => {

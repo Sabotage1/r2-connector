@@ -9,6 +9,10 @@ function formatStat(value: number | null, unit: string): string {
   return value == null ? "—" : `${value}${unit}`;
 }
 
+function formatDecimalStat(value: number | null, unit: string, digits: number): string {
+  return value == null ? "—" : `${value.toFixed(digits)}${unit}`;
+}
+
 function averageNumbers(values: Array<number | null | undefined>): number | null {
   const numbers = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
   if (numbers.length === 0) return null;
@@ -93,6 +97,7 @@ export function ReviewPage({
   const [r2Status, setR2Status] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
   const [loadedShotsById, setLoadedShotsById] = useState<Record<string, ShotRecord>>({});
   const autoReadShotRef = useRef<string | null>(null);
+  const readR2Ref = useRef<((options?: { allowUnavailable?: boolean }) => Promise<void>) | null>(null);
   const requestedShotIdsRef = useRef<Set<string>>(new Set());
 
   const ey = useMemo(
@@ -173,14 +178,14 @@ export function ReviewPage({
     );
   }
 
-  async function readR2() {
-    if (!r2Available) {
+  async function readR2(options: { allowUnavailable?: boolean } = {}) {
+    if (!r2Available && !options.allowUnavailable) {
       setR2Status({ type: "error", message: "No DiFluid R2 sensor detected." });
       return;
     }
 
     setR2Busy(true);
-    setR2Status({ type: "info", message: "Reading from R2..." });
+    setR2Status({ type: "info", message: r2Available ? "Reading from R2..." : "Looking for R2..." });
     try {
       const value = await onReadR2();
       if (typeof value === "number") {
@@ -197,23 +202,27 @@ export function ReviewPage({
   }
 
   useEffect(() => {
-    if (!autoReadR2 || !r2Available || autoReadShotRef.current === shot.id) return;
+    readR2Ref.current = readR2;
+  });
+
+  useEffect(() => {
+    if (!autoReadR2 || autoReadShotRef.current === shot.id) return;
     autoReadShotRef.current = shot.id;
     const delayMs = Math.max(0, Math.round(autoReadR2DelaySeconds) * 1000);
     if (delayMs === 0) {
-      void readR2();
+      void readR2Ref.current?.({ allowUnavailable: true });
       return;
     }
 
     const timer = window.setTimeout(() => {
-      void readR2();
+      void readR2Ref.current?.({ allowUnavailable: true });
     }, delayMs);
 
     return () => {
       window.clearTimeout(timer);
       if (autoReadShotRef.current === shot.id) autoReadShotRef.current = null;
     };
-  }, [autoReadR2, autoReadR2DelaySeconds, r2Available, shot.id]);
+  }, [autoReadR2, autoReadR2DelaySeconds, shot.id]);
 
   useEffect(() => {
     setSelectedShotId(shot.id);
@@ -284,7 +293,7 @@ export function ReviewPage({
         <p>TDS: {formatStat(selectedTds, "%")}</p>
         <p>Current EY: {formatStat(selectedEy, "%")}</p>
         <p>Grind: {selectedGrindSize || "—"}</p>
-        <p>Peak pressure: {formatStat(selectedStats.peakPressure, " bar")}</p>
+        <p>Peak pressure: {formatDecimalStat(selectedStats.peakPressure, " bar", 2)}</p>
         <p>Average flow: {formatStat(selectedStats.averageFlow, " mL/s")}</p>
       </section>
       <section className="panel review-form">
@@ -302,7 +311,7 @@ export function ReviewPage({
           <input aria-label="TDS" value={tdsText} onChange={(event) => setTdsText(event.target.value)} inputMode="decimal" />
         </label>
         <p>EY: {ey ?? "—"}%</p>
-        <button type="button" className="ghost-button" disabled={r2Busy} onClick={readR2}>
+        <button type="button" className="ghost-button" disabled={r2Busy} onClick={() => void readR2()}>
           {r2Busy ? "Reading R2" : "Read from R2"}
         </button>
         {r2Status && (

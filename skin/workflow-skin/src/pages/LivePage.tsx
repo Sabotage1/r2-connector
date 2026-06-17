@@ -4,6 +4,7 @@ import { machineStateLabel } from "../lib/machineState";
 import { ShotGraph } from "../components/ShotGraph";
 import { trimLiveGraphWarmup } from "../lib/liveMeasurements";
 import { shotStats } from "../lib/shotStats";
+import { useEffect, useRef } from "react";
 
 function formatSeconds(value: number | null | undefined): string {
   return typeof value === "number" && Number.isFinite(value) ? String(Math.round(value)) : "—";
@@ -135,6 +136,16 @@ export function LivePage({
   const waitingForData = measurements.length === 0 && !scaleSnapshot;
   const steps = profileSteps(activeProfile, workflow);
   const stepInfo = currentStepInfo(steps, time);
+  const stepPanelRef = useRef<HTMLElement | null>(null);
+  const focusedStepPanelRef = useRef(false);
+
+  useEffect(() => {
+    if (focusedStepPanelRef.current || !stepInfo || !stepPanelRef.current) return;
+    focusedStepPanelRef.current = true;
+    if (typeof stepPanelRef.current.scrollIntoView === "function") {
+      stepPanelRef.current.scrollIntoView({ block: "start", inline: "nearest" });
+    }
+  }, [stepInfo]);
 
   return (
     <div className="live-grid">
@@ -150,7 +161,7 @@ export function LivePage({
         </div>
       </section>
       {stepInfo && (
-        <section className="panel wide live-step-panel">
+        <section className="panel wide live-step-panel" ref={stepPanelRef}>
           <div className="live-step-heading">
             <div>
               <span className="eyebrow">Step {stepInfo.index + 1} of {steps.length}</span>

@@ -1,6 +1,6 @@
 import type { ShotSnapshot } from "../api/types";
 
-export const LIVE_GRAPH_WARMUP_MS = 2000;
+export const LIVE_GRAPH_WARMUP_MS = 3000;
 export const MAX_LIVE_SAMPLES = 180;
 
 function snapshotTimestampMs(snapshot: ShotSnapshot): number | null {

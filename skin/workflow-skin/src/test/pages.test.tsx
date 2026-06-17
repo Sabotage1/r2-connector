@@ -219,7 +219,35 @@ describe("LivePage", () => {
     expect(screen.getByLabelText("Shot Timer: 28 s")).toBeInTheDocument();
   });
 
-  it("does not show the first two seconds of noisy live graph measurements", () => {
+  it("scrolls the live page to the current step card when steps are available", () => {
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scrollIntoView });
+
+    try {
+      render(
+        <LivePage
+          workflow={{ context: { targetDoseWeight: 18, targetYield: 36 } }}
+          activeProfile={{
+            id: "p1",
+            profile: {
+              title: "Blooming",
+              steps: [{ name: "Bloom", pump: "pressure", seconds: 10, pressure: 3 }]
+            }
+          }}
+          latestShot={null}
+          liveMeasurements={[{ machine: { timestamp: "2026-06-11T10:00:03.000Z", pressure: 3 }, scale: { weight: 5 } }]}
+          scaleSnapshot={null}
+        />
+      );
+
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "start", inline: "nearest" });
+    } finally {
+      Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: originalScrollIntoView });
+    }
+  });
+
+  it("does not show the first three seconds of noisy live graph measurements", () => {
     render(
       <LivePage
         workflow={{ context: { targetDoseWeight: 18, targetYield: 36 } }}
@@ -228,13 +256,14 @@ describe("LivePage", () => {
           { machine: { timestamp: "2026-06-11T10:00:00.000Z", pressure: 12 }, scale: { weight: 2 } },
           { machine: { timestamp: "2026-06-11T10:00:01.100Z", pressure: 10 }, scale: { weight: 4 } },
           { machine: { timestamp: "2026-06-11T10:00:02.100Z", pressure: 7 }, scale: { weight: 10 } },
+          { machine: { timestamp: "2026-06-11T10:00:03.100Z", pressure: 7.5 }, scale: { weight: 18 } },
           { machine: { timestamp: "2026-06-11T10:00:04.100Z", pressure: 8 }, scale: { weight: 30 } }
         ]}
         scaleSnapshot={null}
       />
     );
 
-    expect(screen.getByLabelText("Shot Timer: 2 s")).toBeInTheDocument();
+    expect(screen.getByLabelText("Shot Timer: 1 s")).toBeInTheDocument();
     expect(screen.getByLabelText("Weight: 30.00 g")).toBeInTheDocument();
   });
 });
