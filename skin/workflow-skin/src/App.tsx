@@ -824,11 +824,10 @@ export function App() {
   }, [data.loaded, data.settings.startupProfileId, data.profiles, machineSleeping, selectedProfileId, startupApplyTick]);
 
   useEffect(() => {
-    if (startupConnectRef.current || !data.loaded) return;
+    if (startupConnectRef.current || !data.loaded || machineSleeping) return;
     startupConnectRef.current = true;
 
-    const connectAndWake = async () => {
-      await wakeMachineIfNeeded(api, data.machineState);
+    const connectOnStartup = async () => {
       await data.refresh();
       await connectConfiguredStartupDevices();
       await data.refresh();
@@ -838,8 +837,8 @@ export function App() {
       }, 1500);
     };
 
-    void connectAndWake();
-  }, [api, connectConfiguredStartupDevices, data.loaded, data.machineState, data.refresh, resetStartupProfileApply]);
+    void connectOnStartup();
+  }, [connectConfiguredStartupDevices, data.loaded, data.refresh, machineSleeping, resetStartupProfileApply]);
 
   useEffect(() => {
     if (!data.loaded) return;
@@ -1347,7 +1346,7 @@ export function App() {
   };
 
   useEffect(() => {
-    if (!data.loaded) return;
+    if (!data.loaded || page === "screensaver" || machineSleeping) return;
     const disconnectedScales = disconnectedScaleDevices(nativeDevices);
     if (disconnectedScales.length === 0 || hasConnectedScale(nativeDevices)) {
       scaleReconnectRef.current.signature = null;
@@ -1368,7 +1367,7 @@ export function App() {
       .finally(() => {
         scaleReconnectRef.current.pending = false;
       });
-  }, [data.loaded, nativeDevices]);
+  }, [data.loaded, machineSleeping, nativeDevices, page]);
 
   const startBrew = async () => {
     setBrewPending(true);

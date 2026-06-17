@@ -724,9 +724,7 @@ describe("App shell", () => {
     expect(await screen.findByRole("button", { name: "Sweet Classic" })).toHaveAttribute("aria-current", "true");
   });
 
-  it("wakes before applying the startup profile and scanning for scale and R2 devices", async () => {
-    const scaleDevice = { id: "scale-1", name: "Acaia", type: "scale", state: "discovered" };
-    const r2Device = { id: "F4:12:FA:FA:AC:E3", name: "DiFluid R2", type: "sensor", state: "discovered" };
+  it("does not wake, scan, or apply startup profile while the machine is sleeping in the background", async () => {
     const fetchState = mockReaFetch(
       {
         ...initialSettings,
@@ -742,55 +740,38 @@ describe("App shell", () => {
       {
         workflow: { context: { extras: { workflowSkin: { selectedProfileId: "p1" } } } },
         machineState: { connected: true, state: { state: "sleeping", substate: "idle" } },
-        devices: [],
-        scanDevicesResult: ({ machineState }) => (machineState.state?.state === "sleeping" ? [] : [scaleDevice, r2Device])
+        devices: [{ id: "scale-1", name: "BooKoo", type: "scale", state: "disconnected" }]
       }
     );
     render(<App />);
 
-    await waitFor(() => {
-      expect(fetchState.workflow).toEqual(
-        expect.objectContaining({
-          context: expect.objectContaining({
-            extras: { workflowSkin: { selectedProfileId: "p2" } }
-          })
-        })
-      );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
-    const calls = fetchState.fetchMock.mock.calls;
-    const urls = calls.map(([input]) => String(input));
-    const wakeIndex = urls.findIndex((url) => url.endsWith("/api/v1/machine/state/idle"));
-    const startupProfileIndex = calls.findIndex(([input, init]) => String(input).endsWith("/api/v1/workflow") && init?.method === "PUT");
-    const quickScanIndex = urls.findIndex((url) => url.endsWith("/api/v1/devices/scan?connect=true&quick=true"));
-    const fullScanIndex = urls.findIndex((url) => url.endsWith("/api/v1/devices/scan?connect=true&quick=false"));
-
-    expect(wakeIndex).toBeGreaterThanOrEqual(0);
-    expect(startupProfileIndex).toBeGreaterThan(wakeIndex);
-    expect(quickScanIndex).toBeGreaterThan(wakeIndex);
-    expect(fullScanIndex).toBeGreaterThan(wakeIndex);
-    expect(fetchState.fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8080/api/v1/devices/connect",
-      expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "scale-1" }) })
-    );
-    expect(fetchState.fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8080/api/v1/devices/connect",
-      expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "F4:12:FA:FA:AC:E3" }) })
-    );
+    expect(fetchState.fetchMock).not.toHaveBeenCalledWith("http://localhost:8080/api/v1/machine/state/idle", expect.objectContaining({ method: "PUT" }));
+    expect(fetchState.scanCount).toBe(0);
+    expect(fetchState.connectCount).toBe(0);
+    expect(fetchState.workflowUpdateCount).toBe(0);
   });
 
-  it("starts a full scale scan while the machine wake request is still settling", async () => {
-    vi.useFakeTimers();
+  it("starts a full scale scan while an explicit wake request is still settling", async () => {
     const scaleDevice = { id: "scale-1", name: "Acaia", type: "scale", state: "discovered" };
-    const fetchState = mockReaFetch(initialSettings, {
-      machineState: { connected: true, state: { state: "sleeping", substate: "idle" } },
+    const fetchState = mockReaFetch({ ...initialSettings, keepScreenAwake: true, screensaverBrightness: 8 } as SkinSettings, {
+      machineState: { connected: true, state: { state: "idle" } },
       machineStateAfterWakeRequest: { connected: true, state: { state: "sleeping", substate: "waking" } },
       devices: [],
       scanDevicesResult: [scaleDevice]
     });
     render(<App />);
 
+    await userEvent.click(await screen.findByRole("button", { name: "Sleep machine" }));
+    expect(await screen.findByText("Tap the screen to wake")).toBeInTheDocument();
+
     await act(async () => {
+      screen.getByRole("button", { name: "Tap the screen to wake" }).click();
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
@@ -868,9 +849,9 @@ describe("App shell", () => {
     );
   });
 
-  it("wakes the machine and auto-connects machine and scale devices on startup", async () => {
+  it("auto-connects machine and scale devices on startup when the machine is already awake", async () => {
     const fetchState = mockReaFetch(initialSettings, {
-      machineState: { connected: true, state: { state: "sleeping", substate: "idle" } },
+      machineState: { connected: true, state: { state: "idle" } },
       devices: [
         { id: "machine-1", name: "DE1", type: "machine", state: "disconnected" },
         { id: "scale-1", name: "Acaia", type: "scale", state: "discovered" }
@@ -892,7 +873,7 @@ describe("App shell", () => {
       "http://localhost:8080/api/v1/devices/connect",
       expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "scale-1" }) })
     );
-    expect(fetchState.fetchMock).toHaveBeenCalledWith("http://localhost:8080/api/v1/machine/state/idle", expect.objectContaining({ method: "PUT" }));
+    expect(fetchState.fetchMock).not.toHaveBeenCalledWith("http://localhost:8080/api/v1/machine/state/idle", expect.objectContaining({ method: "PUT" }));
   });
 
   it("auto-connects a configured R2 on startup using the full scan when needed", async () => {
