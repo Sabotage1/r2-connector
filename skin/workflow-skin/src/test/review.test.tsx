@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
@@ -276,7 +276,7 @@ describe("ReviewPage", () => {
     expect(screen.getByText("Grind: 7.0")).toBeInTheDocument();
   });
 
-  it("loads full selected shot data when the scrubbed previous shot has no graph measurements", async () => {
+  it("shows Loading Graph until the scrubbed previous shot graph is loaded", async () => {
     const currentShot: ShotRecord = {
       ...shot,
       measurements: [{ machine: { timestamp: "2026-06-09T10:00:00.000Z", pressure: 7 } }]
@@ -295,7 +295,13 @@ describe("ReviewPage", () => {
         { machine: { timestamp: "2026-06-09T09:55:27.000Z", pressure: 8, flow: 2 } }
       ]
     };
-    const onLoadShot = vi.fn().mockResolvedValue(previousFull);
+    let resolveLoadShot: (shot: ShotRecord | null) => void = () => undefined;
+    const onLoadShot = vi.fn(
+      () =>
+        new Promise<ShotRecord | null>((resolve) => {
+          resolveLoadShot = resolve;
+        })
+    );
 
     render(
       <ReviewPage
@@ -312,9 +318,67 @@ describe("ReviewPage", () => {
     expect(screen.queryByText("Flow")).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Shot scrubber"), { target: { value: "1" } });
 
-    expect(onLoadShot).toHaveBeenCalledWith("same-1");
+    await waitFor(() => expect(onLoadShot).toHaveBeenCalledWith("same-1"));
+    expect(screen.getByText("Loading Graph")).toBeInTheDocument();
+    expect(screen.queryByText("Flow")).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveLoadShot(previousFull);
+    });
+
     expect(await screen.findByText("Flow")).toBeInTheDocument();
     expect(screen.getByText("Duration: 27s")).toBeInTheDocument();
+  });
+
+  it("refreshes the selected graph after saving review fields", async () => {
+    const currentShot: ShotRecord = {
+      ...shot,
+      measurements: [
+        { machine: { timestamp: "2026-06-09T10:00:00.000Z", pressure: 2, flow: 1 } },
+        { machine: { timestamp: "2026-06-09T10:00:28.000Z", pressure: 4, flow: 2 } }
+      ]
+    };
+    const refreshedShot: ShotRecord = {
+      ...currentShot,
+      measurements: [
+        { machine: { timestamp: "2026-06-09T10:00:00.000Z", pressure: 2, flow: 1 } },
+        { machine: { timestamp: "2026-06-09T10:00:30.000Z", pressure: 9, flow: 2 }, scale: { weight: 42 } }
+      ]
+    };
+    let resolveReload: (shot: ShotRecord | null) => void = () => undefined;
+    const onLoadShot = vi.fn(
+      () =>
+        new Promise<ShotRecord | null>((resolve) => {
+          resolveReload = resolve;
+        })
+    );
+    const onSave = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ReviewPage
+        shot={currentShot}
+        previousShots={[]}
+        onSaveAnnotations={onSave}
+        onUploadVisualizer={vi.fn()}
+        r2Sensor={null}
+        onReadR2={vi.fn()}
+        onLoadShot={onLoadShot}
+      />
+    );
+
+    expect(screen.getByText("Peak pressure: 4.00 bar")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Save Review/i }));
+
+    await waitFor(() => expect(onLoadShot).toHaveBeenCalledWith("s1"));
+    expect(screen.getByText("Loading Graph")).toBeInTheDocument();
+
+    await act(async () => {
+      resolveReload(refreshedShot);
+    });
+
+    expect(await screen.findByText("Peak pressure: 9.00 bar")).toBeInTheDocument();
+    expect(screen.getByText("Duration: 30s")).toBeInTheDocument();
   });
 
   it("preserves unrelated annotation extras when saving review fields", async () => {
@@ -475,7 +539,15 @@ describe("ReviewPage", () => {
   });
 
   it("remounts the review form when App receives a newer latest shot", async () => {
-    const data = appData({ shots: [shot] });
+    const currentShot = {
+      ...shot,
+      measurements: [{ machine: { timestamp: "2026-06-09T10:00:00.000Z", pressure: 7 } }]
+    };
+    const newerShot = {
+      ...nextShot,
+      measurements: [{ machine: { timestamp: "2026-06-09T10:05:00.000Z", pressure: 8 } }]
+    };
+    const data = appData({ shots: [currentShot] });
     appMocks.data = data;
     const { rerender } = render(<App />);
 
@@ -484,7 +556,7 @@ describe("ReviewPage", () => {
     await userEvent.type(screen.getByLabelText("TDS"), "9.5");
     expect(screen.getByLabelText("TDS")).toHaveValue("9.5");
 
-    data.shots = [nextShot, shot];
+    data.shots = [newerShot, currentShot];
     rerender(<App />);
 
     expect(screen.getByLabelText("TDS")).toHaveValue("8.1");

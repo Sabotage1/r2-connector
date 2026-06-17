@@ -985,7 +985,7 @@ describe("App shell", () => {
     expect(await screen.findByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
   });
 
-  it("routes one second after espresso returns idle without sending non-milk shots to steam", async () => {
+  it("opens review as soon as espresso returns idle without sending non-milk shots to steam", async () => {
     vi.useFakeTimers();
     const shot: ShotRecord = {
       id: "shot-idle-1",
@@ -1016,26 +1016,11 @@ describe("App shell", () => {
       vi.advanceTimersByTime(500);
       await Promise.resolve();
       await Promise.resolve();
+      await Promise.resolve();
     });
-    expect(screen.getByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Shot Review" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Live Brew" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Brew" })).not.toBeInTheDocument();
-
-    await act(async () => {
-      vi.advanceTimersByTime(999);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(screen.getByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Brew" })).not.toBeInTheDocument();
-
-    await act(async () => {
-      vi.advanceTimersByTime(1);
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(screen.getByRole("heading", { name: "Brew" })).toBeInTheDocument();
     expect(screen.queryByText("Steam Workflow")).not.toBeInTheDocument();
   });
 
@@ -1077,15 +1062,6 @@ describe("App shell", () => {
 
     await act(async () => {
       vi.advanceTimersByTime(500);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(screen.getByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Brew" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Shot Review" })).not.toBeInTheDocument();
-
-    await act(async () => {
-      vi.advanceTimersByTime(1_000);
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
@@ -1132,11 +1108,6 @@ describe("App shell", () => {
       vi.advanceTimersByTime(500);
       await Promise.resolve();
       await Promise.resolve();
-    });
-    await act(async () => {
-      vi.advanceTimersByTime(1_000);
-      await Promise.resolve();
-      await Promise.resolve();
       await Promise.resolve();
     });
 
@@ -1159,7 +1130,7 @@ describe("App shell", () => {
     expect(screen.getByText("R2 TDS 9.8 imported.")).toBeInTheDocument();
   });
 
-  it("routes milk profiles to steam one second after espresso returns idle when review is disabled", async () => {
+  it("opens review as soon as espresso returns idle for milk profiles too", async () => {
     vi.useFakeTimers();
     const shot: ShotRecord = {
       id: "shot-milk-1",
@@ -1194,16 +1165,11 @@ describe("App shell", () => {
       vi.advanceTimersByTime(500);
       await Promise.resolve();
       await Promise.resolve();
-    });
-    await act(async () => {
-      vi.advanceTimersByTime(1_000);
-      await Promise.resolve();
-      await Promise.resolve();
       await Promise.resolve();
     });
 
-    expect(screen.getByText("Steam Workflow")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Blooming" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Shot Review" })).toBeInTheDocument();
+    expect(screen.queryByText("Steam Workflow")).not.toBeInTheDocument();
   });
 
   it("reconnects and retries R2 when the native measure command times out", async () => {

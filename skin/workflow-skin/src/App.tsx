@@ -40,7 +40,7 @@ import { buildConnectivityStatuses } from "./lib/connectivity";
 import type { ConnectivityStatus } from "./lib/connectivity";
 import { trimLiveGraphWarmup } from "./lib/liveMeasurements";
 import { machineModeLabel, machineTemperature } from "./lib/machineState";
-import { postActivityPage, selectedProfileIdFromWorkflow, type CompletedWorkflowActivity } from "./lib/workflowRouting";
+import { selectedProfileIdFromWorkflow, type CompletedWorkflowActivity } from "./lib/workflowRouting";
 import { BagsPage } from "./pages/BagsPage";
 import { BrewPage } from "./pages/BrewPage";
 import { GrindersPage } from "./pages/GrindersPage";
@@ -894,6 +894,7 @@ export function App() {
 
   const routeCompletedActivity = useCallback(
     async (completed: { activity: CompletedWorkflowActivity; profileId?: string }) => {
+      if (completed.activity === "brew") setPage("review");
       await data.refresh();
       if (completed.activity === "brew") {
         const latestCompletedShot = await api.getLatestShot().catch(() => latestShot);
@@ -907,14 +908,13 @@ export function App() {
 
         const completedProfileId = completed.profileId ?? selectedProfileIdFromWorkflow(completedShotForReview?.workflow, data.profiles);
         setLastCompletedProfileId(completedProfileId);
-        const nextPage = postActivityPage("brew", completedProfileId, data.settings);
-        setPage(nextPage ?? "brew");
+        setPage("review");
         return;
       }
 
       setPage("review");
     },
-    [api, data.profiles, data.refresh, data.settings, latestShot, liveTelemetry.measurements, r2Available]
+    [api, data.profiles, data.refresh, latestShot, liveTelemetry.measurements, r2Available]
   );
 
   useEffect(() => {
@@ -930,9 +930,16 @@ export function App() {
       return;
     }
 
-    if (!isIdleMode(currentMachineMode) || !completedActivityRef.current || completedActivityTimerRef.current !== null) return;
+    if (!isIdleMode(currentMachineMode) || !completedActivityRef.current) return;
 
     const completed = completedActivityRef.current;
+    if (completed.activity === "brew") {
+      completedActivityRef.current = null;
+      void routeCompletedActivity(completed);
+      return;
+    }
+
+    if (completedActivityTimerRef.current !== null) return;
     completedActivityTimerRef.current = window.setTimeout(() => {
       completedActivityTimerRef.current = null;
       completedActivityRef.current = null;

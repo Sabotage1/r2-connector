@@ -651,6 +651,18 @@ textarea {
   max-height: 280px;
 }
 
+.shot-graph-loading {
+  display: grid;
+  min-height: 270px;
+  place-items: center;
+  border: 1px solid rgba(120, 142, 154, 0.34);
+  border-radius: 8px;
+  background: #0d141a;
+  color: #d8e1e6;
+  font-size: 18px;
+  font-weight: 900;
+}
+
 .shot-graph-plot {
   fill: rgba(10, 16, 20, 0.7);
   stroke: rgba(120, 142, 154, 0.45);

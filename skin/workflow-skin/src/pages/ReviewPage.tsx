@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { Grinder, SensorListItem, ShotAnnotations, ShotRecord } from "../api/types";
 import { ShotGraph } from "../components/ShotGraph";
 import { calculateEy, cleanNumber } from "../lib/ey";
@@ -83,6 +83,8 @@ export function ReviewPage({
   const [r2Busy, setR2Busy] = useState(false);
   const [r2Status, setR2Status] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
   const [loadedShotsById, setLoadedShotsById] = useState<Record<string, ShotRecord>>({});
+  const [loadingGraphShotIds, setLoadingGraphShotIds] = useState<Record<string, boolean>>({});
+  const [failedGraphShotIds, setFailedGraphShotIds] = useState<Record<string, boolean>>({});
   const autoReadShotRef = useRef<string | null>(null);
   const readR2Ref = useRef<((options?: { allowUnavailable?: boolean }) => Promise<void>) | null>(null);
   const requestedShotIdsRef = useRef<Set<string>>(new Set());
@@ -102,7 +104,7 @@ export function ReviewPage({
   const selectedShotIndex = Math.max(0, reviewShots.findIndex((item) => item.id === selectedShotId));
   const selectedShot = reviewShots[selectedShotIndex] ?? shot;
   const selectedShotIsLatest = selectedShot.id === shot.id;
-  const selectedStats = selectedShotIsLatest ? stats : shotStats(selectedShot);
+  const selectedStats = shotStats(selectedShot);
   const selectedContext = selectedShotIsLatest ? context : shotContext(selectedShot);
   const selectedDose = selectedShotIsLatest ? cleanNumber(doseText) : selectedShot.annotations?.actualDoseWeight ?? selectedContext?.targetDoseWeight ?? null;
   const selectedYield = selectedShotIsLatest ? cleanNumber(yieldText) ?? selectedStats.finalYield : selectedStats.finalYield;
@@ -130,6 +132,46 @@ export function ReviewPage({
     tds: averageNumbers(sameBagReviewShots.map((item) => item.annotations?.drinkTds)),
     ey: averageNumbers(sameBagReviewShots.map((item) => item.annotations?.drinkEy))
   };
+  const selectedShotHasGraph = (selectedShot.measurements?.length ?? 0) > 0;
+  const selectedGraphLoading =
+    Boolean(loadingGraphShotIds[selectedShot.id]) ||
+    Boolean(onLoadShot && selectedShot.id && !selectedShotHasGraph && !failedGraphShotIds[selectedShot.id]);
+
+  const loadShotGraph = useCallback(
+    async (shotId: string, options: { force?: boolean } = {}) => {
+      if (!onLoadShot || !shotId) return null;
+      if (!options.force && requestedShotIdsRef.current.has(shotId)) return null;
+
+      requestedShotIdsRef.current.add(shotId);
+      setLoadingGraphShotIds((current) => ({ ...current, [shotId]: true }));
+      setFailedGraphShotIds((current) => {
+        if (!current[shotId]) return current;
+        const next = { ...current };
+        delete next[shotId];
+        return next;
+      });
+
+      try {
+        const fullShot = await Promise.resolve(onLoadShot(shotId));
+        if (fullShot) {
+          setLoadedShotsById((current) => ({ ...current, [fullShot.id]: fullShot }));
+          if ((fullShot.measurements?.length ?? 0) === 0) {
+            setFailedGraphShotIds((current) => ({ ...current, [shotId]: true }));
+          }
+          return fullShot;
+        }
+
+        setFailedGraphShotIds((current) => ({ ...current, [shotId]: true }));
+        return null;
+      } catch {
+        setFailedGraphShotIds((current) => ({ ...current, [shotId]: true }));
+        return null;
+      } finally {
+        setLoadingGraphShotIds((current) => ({ ...current, [shotId]: false }));
+      }
+    },
+    [onLoadShot]
+  );
 
   async function save() {
     const workflowSkin = workflowSkinExtras(shot.annotations);
@@ -163,6 +205,7 @@ export function ReviewPage({
         }
       }
     );
+    await loadShotGraph(shot.id, { force: true });
   }
 
   async function readR2(options: { allowUnavailable?: boolean } = {}) {
@@ -214,27 +257,16 @@ export function ReviewPage({
   useEffect(() => {
     setSelectedShotId(shot.id);
     setLoadedShotsById({});
+    setLoadingGraphShotIds({});
+    setFailedGraphShotIds({});
     requestedShotIdsRef.current.clear();
   }, [shot.id]);
 
   useEffect(() => {
     if (!onLoadShot || !selectedShot.id || (selectedShot.measurements?.length ?? 0) > 0) return;
-    if (requestedShotIdsRef.current.has(selectedShot.id)) return;
-    requestedShotIdsRef.current.add(selectedShot.id);
-
-    let cancelled = false;
-    void Promise.resolve(onLoadShot(selectedShot.id))
-      .then((fullShot) => {
-        if (!cancelled && fullShot) {
-          setLoadedShotsById((current) => ({ ...current, [fullShot.id]: fullShot }));
-        }
-      })
-      .catch(() => undefined);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [onLoadShot, selectedShot.id, selectedShot.measurements?.length]);
+    if (failedGraphShotIds[selectedShot.id]) return;
+    void loadShotGraph(selectedShot.id);
+  }, [failedGraphShotIds, loadShotGraph, onLoadShot, selectedShot.id, selectedShot.measurements?.length]);
 
   return (
     <div className="workflow-grid">
@@ -270,7 +302,13 @@ export function ReviewPage({
             />
           )}
         </div>
-        <ShotGraph measurements={selectedShot.measurements ?? []} />
+        {selectedGraphLoading ? (
+          <div className="shot-graph shot-graph-loading" role="status" aria-live="polite">
+            <span>Loading Graph</span>
+          </div>
+        ) : (
+          <ShotGraph measurements={selectedShot.measurements ?? []} />
+        )}
       </section>
       <section className="panel">
         <h2>{selectedShotIsLatest ? "Last Shot Details" : "Selected Shot Details"}</h2>
