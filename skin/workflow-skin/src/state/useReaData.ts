@@ -4,6 +4,9 @@ import type {
   AppInfo,
   Bean,
   BeanBatch,
+  De1AdvancedMachineSettings,
+  De1MachineCalibration,
+  De1MachineSettings,
   DeviceInfo,
   DisplayState,
   Grinder,
@@ -38,6 +41,9 @@ export function useReaData(api: ReaPrimeApi) {
   const [webuiSkins, setWebuiSkins] = useState<WebUISkin[]>([]);
   const [defaultWebuiSkin, setDefaultWebuiSkin] = useState<WebUISkin | null>(null);
   const [displayState, setDisplayState] = useState<DisplayState | null>(null);
+  const [machineSettings, setMachineSettings] = useState<De1MachineSettings | null>(null);
+  const [advancedMachineSettings, setAdvancedMachineSettings] = useState<De1AdvancedMachineSettings | null>(null);
+  const [machineCalibration, setMachineCalibration] = useState<De1MachineCalibration | null>(null);
   const [machineState, setMachineState] = useState<MachineState | null>(null);
   const [shots, setShots] = useState<ShotRecord[]>([]);
   const [steams, setSteams] = useState<SteamRecord[]>([]);
@@ -60,6 +66,9 @@ export function useReaData(api: ReaPrimeApi) {
         info,
         state,
         display,
+        de1Settings,
+        de1AdvancedSettings,
+        de1Calibration,
         pluginList,
         skinList,
         defaultSkin
@@ -76,6 +85,9 @@ export function useReaData(api: ReaPrimeApi) {
         api.getAppInfo().catch(() => null as AppInfo | null),
         api.getMachineState().catch(() => null as MachineState | null),
         api.getDisplay().catch(() => null as DisplayState | null),
+        api.getMachineSettings().catch(() => null as De1MachineSettings | null),
+        api.getAdvancedMachineSettings().catch(() => null as De1AdvancedMachineSettings | null),
+        api.getMachineCalibration().catch(() => null as De1MachineCalibration | null),
         api.listPlugins().catch(() => [] as PluginManifest[]),
         api.listWebUISkins().catch(() => [] as WebUISkin[]),
         api.getDefaultWebUISkin().catch(() => null as WebUISkin | null)
@@ -105,6 +117,9 @@ export function useReaData(api: ReaPrimeApi) {
       setWebuiSkins(skinList);
       setDefaultWebuiSkin(defaultSkin);
       setDisplayState(display);
+      setMachineSettings(de1Settings);
+      setAdvancedMachineSettings(de1AdvancedSettings);
+      setMachineCalibration(de1Calibration);
       setMachineState(state);
       setShots(Array.isArray(shotPage) ? shotPage : shotPage.items);
       setSteams(steamList);
@@ -166,6 +181,9 @@ export function useReaData(api: ReaPrimeApi) {
     webuiSkins,
     defaultWebuiSkin,
     displayState,
+    machineSettings,
+    advancedMachineSettings,
+    machineCalibration,
     machineState,
     shots,
     steams,

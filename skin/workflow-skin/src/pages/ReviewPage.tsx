@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import type { Grinder, SensorListItem, ShotAnnotations, ShotRecord } from "../api/types";
 import { ShotGraph } from "../components/ShotGraph";
 import { calculateEy, cleanNumber } from "../lib/ey";
+import { tasteScoreLabel, tasteTone, tasteToneStyles } from "../lib/shotTaste";
 import { grindSizeFromShot, previousFiveForBag, shotContext, shotStats } from "../lib/shotStats";
 import { DEFAULT_R2_MEASURE_DELAY_SECONDS } from "../state/skinSettings";
 
@@ -24,20 +25,6 @@ function shotTimestampLabel(timestamp: string): string {
   if (!Number.isFinite(date.getTime())) return timestamp;
   return date.toISOString().slice(0, 16).replace("T", " ");
 }
-
-function tasteTone(value: number): "red" | "yellow" | "green" | "gold" {
-  if (value >= 10) return "gold";
-  if (value >= 7) return "green";
-  if (value >= 4) return "yellow";
-  return "red";
-}
-
-const tasteToneStyles = {
-  red: { color: "#e05656", glow: "rgb(224 86 86 / 36%)", rest: "#362026" },
-  yellow: { color: "#f0c36a", glow: "rgb(240 195 106 / 30%)", rest: "#352c18" },
-  green: { color: "#5bd179", glow: "rgb(91 209 121 / 34%)", rest: "#1c3325" },
-  gold: { color: "#ffd43b", glow: "rgb(255 156 28 / 48%)", rest: "#392a10" }
-} satisfies Record<ReturnType<typeof tasteTone>, { color: string; glow: string; rest: string }>;
 
 function workflowSkinExtras(annotations: ShotAnnotations | undefined): Record<string, unknown> {
   const value = annotations?.extras?.workflowSkin;
@@ -127,7 +114,7 @@ export function ReviewPage({
   const selectedTasteTone = tasteTone(tasteRating);
   const selectedTasteToneStyle = tasteToneStyles[selectedTasteTone];
   const tasteFillPercent = ((tasteRating - 1) / 9) * 100;
-  const tasteScoreLabel = `${tasteRating}/10${tasteRating === 10 ? " 🔥" : ""}`;
+  const tasteScore = tasteScoreLabel(tasteRating);
   const tasteStyle = {
     "--taste-color": selectedTasteToneStyle.color,
     "--taste-glow": selectedTasteToneStyle.glow,
@@ -384,7 +371,7 @@ export function ReviewPage({
             />
           </div>
           <output className={`taste-score ${selectedTasteTone}`} aria-live="polite">
-            {tasteScoreLabel}
+            {tasteScore}
           </output>
         </label>
       </section>

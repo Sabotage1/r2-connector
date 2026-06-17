@@ -222,6 +222,35 @@ export interface DisplayState {
   lowBatteryBrightnessLimitActive?: boolean;
 }
 
+export interface De1MachineSettings {
+  usb?: boolean;
+  fan?: number;
+  flushTemp?: number;
+  flushFlow?: number;
+  flushTimeout?: number;
+  hotWaterFlow?: number;
+  steamFlow?: number;
+  tankTemp?: number;
+  steamPurgeMode?: number;
+}
+
+export interface UpdateDe1MachineSettings extends Partial<Omit<De1MachineSettings, "usb">> {
+  usb?: boolean;
+}
+
+export interface De1AdvancedMachineSettings {
+  heaterPh1Flow?: number;
+  heaterPh2Flow?: number;
+  heaterIdleTemp?: number;
+  heaterPh2Timeout?: number;
+  heaterVoltage?: number;
+  refillKitSetting?: number;
+}
+
+export interface De1MachineCalibration {
+  flowMultiplier?: number;
+}
+
 export interface PluginManifest {
   id: string;
   name?: string;

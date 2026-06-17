@@ -51,11 +51,35 @@ function mockReaFetch(
     githubManifestStatus?: number;
     connectDeviceStatus?: number;
     sensorExecuteResults?: Array<{ body: unknown; status?: number }>;
+    shotDetailsById?: Record<string, ShotRecord>;
+    machineSettings?: Record<string, unknown>;
+    advancedMachineSettings?: Record<string, unknown>;
+    machineCalibration?: Record<string, unknown>;
   } = {}
 ) {
   let savedSettings = initialSettings;
   let workflow: unknown = options.workflow ?? { context: { targetDoseWeight: 18, targetYield: 36 } };
   let shots = options.shots ?? [];
+  let machineSettings = options.machineSettings ?? {
+    usb: true,
+    fan: 40,
+    flushTemp: 90,
+    flushFlow: 6,
+    flushTimeout: 5,
+    hotWaterFlow: 6,
+    steamFlow: 1.2,
+    tankTemp: 0,
+    steamPurgeMode: 0
+  };
+  let advancedMachineSettings = options.advancedMachineSettings ?? {
+    heaterPh1Flow: 4,
+    heaterPh2Flow: 4,
+    heaterIdleTemp: 85,
+    heaterPh2Timeout: 10,
+    heaterVoltage: 230,
+    refillKitSetting: 2
+  };
+  let machineCalibration = options.machineCalibration ?? { flowMultiplier: 1 };
   let workflowUpdateCount = 0;
   let displayState = options.displayState ?? { brightness: 100, wakeLockOverride: true };
   let machineState = options.machineState ?? { connected: true, wifi: { connected: true, ipAddress: "192.168.1.20" } };
@@ -120,6 +144,27 @@ function mockReaFetch(
     if (method === "GET" && url.pathname === "/api/v1/machine/state") {
       return responseJson(machineState);
     }
+    if (method === "GET" && url.pathname === "/api/v1/machine/settings") return responseJson(machineSettings);
+    if (method === "POST" && url.pathname === "/api/v1/machine/settings") {
+      const body = JSON.parse(String(init.body));
+      machineSettings = { ...machineSettings, ...body, usb: body.usb === "enable" ? true : body.usb === "disable" ? false : body.usb };
+      return Promise.resolve(new Response("", { status: 200 }));
+    }
+    if (method === "GET" && url.pathname === "/api/v1/machine/settings/advanced") return responseJson(advancedMachineSettings);
+    if (method === "POST" && url.pathname === "/api/v1/machine/settings/advanced") {
+      advancedMachineSettings = { ...advancedMachineSettings, ...JSON.parse(String(init.body)) };
+      return Promise.resolve(new Response("", { status: 200 }));
+    }
+    if (method === "DELETE" && url.pathname === "/api/v1/machine/settings/reset") {
+      machineSettings = {};
+      advancedMachineSettings = {};
+      return Promise.resolve(new Response("", { status: 200 }));
+    }
+    if (method === "GET" && url.pathname === "/api/v1/machine/calibration") return responseJson(machineCalibration);
+    if (method === "POST" && url.pathname === "/api/v1/machine/calibration") {
+      machineCalibration = { ...machineCalibration, ...JSON.parse(String(init.body)) };
+      return Promise.resolve(new Response("", { status: 200 }));
+    }
     if (method === "GET" && url.pathname === "/api/v1/info") return responseJson(options.appInfo ?? { localIp: "192.168.1.20", version: "0.7.6" });
     if (method === "GET" && url.pathname === "/api/v1/devices") return responseJson(devices);
     if (method === "GET" && url.pathname === "/api/v1/devices/scan") {
@@ -154,7 +199,7 @@ function mockReaFetch(
     if (method === "GET" && url.pathname === "/api/v1/shots/latest") return responseJson(shots[0] ?? null);
     if (method === "GET" && url.pathname.startsWith("/api/v1/shots/")) {
       const shotId = decodeURIComponent(url.pathname.split("/").pop() ?? "");
-      const shot = shots.find((item) => item.id === shotId);
+      const shot = options.shotDetailsById?.[shotId] ?? shots.find((item) => item.id === shotId);
       return shot ? responseJson(shot) : Promise.resolve(new Response("Shot not found", { status: 404 }));
     }
     if (method === "GET" && url.pathname === "/api/v1/steams") return responseJson(options.steams ?? []);
@@ -246,6 +291,15 @@ function mockReaFetch(
     },
     get displayState() {
       return displayState;
+    },
+    get machineSettings() {
+      return machineSettings;
+    },
+    get advancedMachineSettings() {
+      return advancedMachineSettings;
+    },
+    get machineCalibration() {
+      return machineCalibration;
     },
     setMachineState(next: MachineState) {
       machineState = next;
@@ -1423,6 +1477,84 @@ describe("App shell", () => {
     expect(within(actions).getByRole("button", { name: "Enter fullscreen" })).not.toHaveTextContent(/Full|Exit/);
   });
 
+  it("opens a history shot in review with full shot details", async () => {
+    const listShot: ShotRecord = {
+      id: "history-shot",
+      timestamp: "2026-06-18T08:00:00.000Z",
+      workflow: {
+        profile: { title: "History espresso" },
+        context: { extras: { workflowSkin: { selectedProfileId: "p1" } }, targetDoseWeight: 18 }
+      },
+      annotations: { actualYield: 0, enjoyment: 8 }
+    };
+    const fullShot: ShotRecord = {
+      ...listShot,
+      annotations: { ...listShot.annotations, actualYield: 24 },
+      measurements: [
+        { machine: { timestamp: "2026-06-18T08:00:00.000Z", pressure: 1, flow: 1 }, scale: { weight: 0 } },
+        { machine: { timestamp: "2026-06-18T08:00:12.000Z", pressure: 8, flow: 2 }, scale: { weight: 24 } }
+      ]
+    };
+    mockReaFetch(initialSettings, {
+      shots: [listShot],
+      shotDetailsById: { "history-shot": fullShot }
+    });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "History" }));
+    await userEvent.click(await screen.findByRole("button", { name: /History espresso/i }));
+
+    expect(await screen.findByRole("heading", { name: "Shot Review" })).toBeInTheDocument();
+    expect(screen.getByText("Duration: 12s")).toBeInTheDocument();
+    expect(screen.getByText("Yield: 24 g")).toBeInTheDocument();
+  });
+
+  it("saves Beanie machine settings through native machine endpoints", async () => {
+    const fetchState = mockReaFetch(initialSettings, {
+      machineSettings: {
+        usb: true,
+        fan: 40,
+        flushTemp: 90,
+        flushFlow: 6,
+        flushTimeout: 5,
+        hotWaterFlow: 6,
+        steamFlow: 1.2,
+        tankTemp: 0,
+        steamPurgeMode: 0
+      },
+      advancedMachineSettings: {
+        heaterPh1Flow: 4,
+        heaterPh2Flow: 4,
+        heaterIdleTemp: 85,
+        heaterPh2Timeout: 10,
+        heaterVoltage: 230,
+        refillKitSetting: 2
+      },
+      machineCalibration: { flowMultiplier: 1 }
+    });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    fireEvent.change(await screen.findByLabelText("Steam flow"), { target: { value: "1.6" } });
+    fireEvent.change(screen.getByLabelText("Flow calibration"), { target: { value: "1.08" } });
+    await userEvent.click(screen.getByRole("button", { name: "Save machine settings" }));
+
+    await waitFor(() => {
+      expect(fetchState.fetchMock).toHaveBeenCalledWith(
+        "http://localhost:8080/api/v1/machine/settings",
+        expect.objectContaining({ method: "POST", body: expect.stringContaining('"steamFlow":1.6') })
+      );
+    });
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/machine/settings/advanced",
+      expect.objectContaining({ method: "POST", body: expect.stringContaining('"heaterPh1Flow":4') })
+    );
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/machine/calibration",
+      expect.objectContaining({ method: "POST", body: expect.stringContaining('"flowMultiplier":1.08') })
+    );
+  });
+
   it("refreshes and connects the R2 sensor from settings", async () => {
     const fetchState = mockReaFetch(initialSettings, {
       sensors: [],
@@ -1432,6 +1564,7 @@ describe("App shell", () => {
     render(<App />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "Skin settings" }));
     await userEvent.click(await screen.findByRole("button", { name: "Refresh R2" }));
 
     await waitFor(() => expect(fetchState.savedSettings.r2SensorId).toBe("F4:12:FA:FA:AC:E3"));
@@ -1454,6 +1587,7 @@ describe("App shell", () => {
     render(<App />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "Skin settings" }));
     await userEvent.click(await screen.findByRole("button", { name: "Refresh R2" }));
 
     await waitFor(() => expect(fetchState.savedSettings.r2SensorId).toBe("F4:12:FA:FA:AC:E3"));

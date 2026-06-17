@@ -481,6 +481,37 @@ describe("HistoryPage", () => {
     }
   });
 
+  it("shows ranking color and opens a shot review from history", async () => {
+    const onOpenShot = vi.fn();
+    render(
+      <HistoryPage
+        shots={[
+          {
+            ...historyShots[0],
+            annotations: { ...historyShots[0].annotations, enjoyment: 10, extras: { workflowSkin: { goldenShot: true } } }
+          },
+          {
+            ...historyShots[1],
+            annotations: { ...historyShots[1].annotations, enjoyment: 4 }
+          }
+        ]}
+        bags={historyBags}
+        onOpenShot={onOpenShot}
+      />
+    );
+
+    const goldShot = screen.getByRole("button", { name: /Blooming espresso/i });
+    expect(goldShot).toHaveClass("history-shot-row", "taste-gold", "golden");
+    expect(within(goldShot).getByText("10/10 🔥")).toHaveClass("history-rating", "gold");
+
+    const yellowShot = screen.getByRole("button", { name: /Turbo flow/i });
+    expect(yellowShot).toHaveClass("history-shot-row", "taste-yellow");
+    expect(within(yellowShot).getByText("4/10")).toHaveClass("history-rating", "yellow");
+
+    await userEvent.click(goldShot);
+    expect(onOpenShot).toHaveBeenCalledWith(expect.objectContaining({ id: "shot-1" }));
+  });
+
   it("filters history to golden shots", async () => {
     render(
       <HistoryPage
@@ -900,15 +931,77 @@ describe("SettingsPage", () => {
     const onUpdateSettings = vi.fn();
     render(<SettingsPage settings={defaultSkinSettings} r2Sensor={null} onUpdateSettings={onUpdateSettings} />);
 
+    fireEvent.change(screen.getByLabelText("Auto sleep after last use"), { target: { value: "45" } });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Skin settings" }));
     expect(screen.getByLabelText("Measure delay")).toHaveValue(20);
     expect(screen.getByText("Delay is in seconds after the shot is done brewing and the skin moves to the Review page.")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Auto sleep after last use"), { target: { value: "45" } });
     fireEvent.change(screen.getByLabelText("Measure delay"), { target: { value: "55" } });
 
     expect(onUpdateSettings).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
 
     expect(onUpdateSettings).toHaveBeenLastCalledWith(expect.objectContaining({ autoSleepMinutes: 45, r2MeasureDelaySeconds: 55 }));
+  });
+
+  it("shows Beanie machine settings and keeps R2 controls under skin settings", async () => {
+    const onSaveMachineSettings = vi.fn().mockResolvedValue(undefined);
+    const onResetMachineSettings = vi.fn().mockResolvedValue(undefined);
+    render(
+      <SettingsPage
+        {...({
+          settings: { ...defaultSkinSettings, r2SensorId: "r2-sensor" },
+          r2Sensor: null,
+          machineSettings: {
+            usb: true,
+            fan: 40,
+            flushTemp: 90,
+            flushFlow: 6,
+            flushTimeout: 5,
+            hotWaterFlow: 6,
+            steamFlow: 1.2,
+            tankTemp: 0,
+            steamPurgeMode: 0
+          },
+          advancedMachineSettings: {
+            heaterPh1Flow: 4,
+            heaterPh2Flow: 4,
+            heaterIdleTemp: 85,
+            heaterPh2Timeout: 10,
+            heaterVoltage: 230,
+            refillKitSetting: 2
+          },
+          machineCalibration: { flowMultiplier: 1 },
+          onUpdateSettings: vi.fn(),
+          onSaveMachineSettings,
+          onResetMachineSettings
+        } as any)}
+      />
+    );
+
+    expect(screen.getByLabelText("Tank preheat target")).toHaveValue(0);
+    expect(screen.getByLabelText("Steam flow")).toHaveValue(1.2);
+    expect(screen.getByLabelText("Steam purge mode")).toHaveValue("0");
+    expect(screen.getByLabelText("Heater phase 1 flow")).toHaveValue(4);
+    expect(screen.getByLabelText("Mains voltage hint")).toHaveValue("230");
+    expect(screen.getByLabelText("Flow calibration")).toHaveValue(1);
+    expect(screen.queryByText("DiFluid R2 status")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Steam flow"), { target: { value: "1.6" } });
+    fireEvent.change(screen.getByLabelText("Flow calibration"), { target: { value: "1.08" } });
+    await userEvent.click(screen.getByRole("button", { name: "Save machine settings" }));
+
+    expect(onSaveMachineSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ steamFlow: 1.6 }),
+      expect.objectContaining({ heaterPh1Flow: 4 }),
+      expect.objectContaining({ flowMultiplier: 1.08 })
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Reset machine settings" }));
+    expect(onResetMachineSettings).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Skin settings" }));
+    expect(screen.getByText("DiFluid R2 status")).toBeInTheDocument();
   });
 
   it("edits skin updater settings and triggers native update actions", async () => {

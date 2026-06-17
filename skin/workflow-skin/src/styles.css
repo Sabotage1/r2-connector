@@ -965,6 +965,69 @@ textarea {
   font-weight: 800;
 }
 
+.history-shot-row {
+  grid-template-columns: minmax(150px, 0.9fr) minmax(160px, 1.1fr) minmax(160px, 1fr) minmax(140px, 0.9fr) auto;
+  align-items: center;
+  cursor: pointer;
+}
+
+.history-shot-row.taste-red {
+  border-color: #6c3136;
+  background: linear-gradient(90deg, rgb(224 86 86 / 13%), rgb(18 25 31 / 92%) 28%), #12191f;
+  box-shadow: inset 4px 0 0 #e05656;
+}
+
+.history-shot-row.taste-yellow {
+  border-color: #725b2a;
+  background: linear-gradient(90deg, rgb(240 195 106 / 14%), rgb(18 25 31 / 92%) 28%), #12191f;
+  box-shadow: inset 4px 0 0 #f0c36a;
+}
+
+.history-shot-row.taste-green {
+  border-color: #316540;
+  background: linear-gradient(90deg, rgb(91 209 121 / 14%), rgb(18 25 31 / 92%) 28%), #12191f;
+  box-shadow: inset 4px 0 0 #5bd179;
+}
+
+.history-shot-row.taste-gold,
+.history-shot-row.golden {
+  border-color: #ffd43b;
+  background: linear-gradient(90deg, rgb(255 212 59 / 18%), rgb(18 25 31 / 90%) 32%), #12191f;
+  box-shadow:
+    inset 4px 0 0 #ffd43b,
+    0 0 22px rgb(255 156 28 / 14%);
+}
+
+.history-shot-row:hover,
+.history-shot-row:focus-visible {
+  transform: translateY(-1px);
+  border-color: var(--skin-accent);
+}
+
+.history-rating {
+  justify-self: end;
+  min-width: 76px;
+  text-align: right;
+  font-weight: 950;
+}
+
+.history-rating.red {
+  color: #e05656;
+}
+
+.history-rating.yellow {
+  color: #f0c36a;
+}
+
+.history-rating.green {
+  color: #5bd179;
+}
+
+.history-rating.gold {
+  color: #ffd43b;
+  text-shadow: 0 0 18px rgb(255 156 28 / 48%);
+}
+
 .mandatory-help {
   margin: 0 0 14px;
   color: #f7d680;
@@ -1032,6 +1095,21 @@ textarea {
 .settings-section {
   display: grid;
   gap: 12px;
+}
+
+.settings-machine-row {
+  gap: 12px;
+}
+
+.machine-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.machine-usb-toggle {
+  align-self: end;
+  min-height: 48px;
 }
 
 .settings-slider-row {
@@ -1847,6 +1925,7 @@ textarea {
   .theme-editor-grid,
   .theme-color-grid,
   .indicator-toggle-grid,
+  .machine-settings-grid,
   .status-bar,
   .timer-grid,
   .jug-grid,
@@ -1854,8 +1933,14 @@ textarea {
   .profile-step-grid,
   .profile-step-limits,
   .review-comparison-grid,
-  .review-shot-row {
+  .review-shot-row,
+  .history-shot-row {
     grid-template-columns: 1fr;
+  }
+
+  .history-rating {
+    justify-self: start;
+    text-align: left;
   }
 
   .live-hero,

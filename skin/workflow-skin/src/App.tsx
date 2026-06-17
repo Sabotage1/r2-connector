@@ -18,7 +18,22 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import skinManifest from "../skin-manifest.json";
 import { apiBaseUrl, ReaPrimeApi, ReaPrimeApiError, type CreateGrinderPayload } from "./api/reaprime";
 import { findDifluidR2Sensor } from "./api/sensors";
-import type { DeviceInfo, Grinder, MachineState, Profile, ProfileRecord, SensorListItem, ShotAnnotations, ShotRecord, ShotSnapshot, WebUISkin, Workflow } from "./api/types";
+import type {
+  De1AdvancedMachineSettings,
+  De1MachineCalibration,
+  DeviceInfo,
+  Grinder,
+  MachineState,
+  Profile,
+  ProfileRecord,
+  SensorListItem,
+  ShotAnnotations,
+  ShotRecord,
+  ShotSnapshot,
+  UpdateDe1MachineSettings,
+  WebUISkin,
+  Workflow
+} from "./api/types";
 import { uploadShotToVisualizer } from "./api/visualizer";
 import type { Bag } from "./lib/bags";
 import { buildConnectivityStatuses } from "./lib/connectivity";
@@ -475,11 +490,16 @@ function mergeReviewShot(cachedShot: ShotRecord | null, refreshedShot: ShotRecor
 
   const cachedMeasurements = cachedShot.measurements ?? [];
   const refreshedMeasurements = refreshedShot.measurements ?? [];
+  const preferRefreshed = refreshedMeasurements.length >= cachedMeasurements.length && (refreshedMeasurements.length > 0 || cachedMeasurements.length === 0);
+  const primaryShot = preferRefreshed ? refreshedShot : cachedShot;
+  const secondaryShot = preferRefreshed ? cachedShot : refreshedShot;
   return {
-    ...cachedShot,
-    ...refreshedShot,
-    annotations: { ...cachedShot.annotations, ...refreshedShot.annotations },
-    measurements: refreshedMeasurements.length >= cachedMeasurements.length ? refreshedMeasurements : cachedMeasurements
+    ...secondaryShot,
+    ...primaryShot,
+    annotations: preferRefreshed
+      ? { ...cachedShot.annotations, ...refreshedShot.annotations }
+      : { ...refreshedShot.annotations, ...cachedShot.annotations },
+    measurements: preferRefreshed ? refreshedMeasurements : cachedMeasurements
   };
 }
 
@@ -1001,6 +1021,34 @@ export function App() {
     }
   };
 
+  const saveMachineSettings = async (
+    machineSettings: UpdateDe1MachineSettings,
+    advancedMachineSettings: De1AdvancedMachineSettings,
+    machineCalibration: De1MachineCalibration
+  ) => {
+    try {
+      await Promise.all([
+        api.updateMachineSettings(machineSettings),
+        api.updateAdvancedMachineSettings(advancedMachineSettings),
+        api.updateMachineCalibration(machineCalibration)
+      ]);
+      await data.refresh();
+      setStatus({ type: "success", message: "Machine settings saved." });
+    } catch (error) {
+      setStatus({ type: "error", message: `Could not save machine settings: ${errorMessage(error)}` });
+    }
+  };
+
+  const resetMachineSettings = async () => {
+    try {
+      await api.resetMachineSettings();
+      await data.refresh();
+      setStatus({ type: "success", message: "Machine settings reset." });
+    } catch (error) {
+      setStatus({ type: "error", message: `Could not reset machine settings: ${errorMessage(error)}` });
+    }
+  };
+
   const setStartupProfile = async (profileId?: string) => {
     await persistSettings({ ...data.settings, startupProfileId: profileId }, "Startup profile saved.");
   };
@@ -1418,6 +1466,26 @@ export function App() {
     } catch (error) {
       setStatus({ type: "error", message: `Could not save review: ${errorMessage(error)}` });
     }
+  };
+
+  const openHistoryShotReview = async (shot: ShotRecord) => {
+    setStatus(null);
+    autoReadR2ShotIdRef.current = null;
+    setAutoReadR2ShotId(null);
+
+    let reviewShot = shot;
+
+    if ((shot.measurements?.length ?? 0) === 0) {
+      try {
+        reviewShot = await api.getShot(shot.id);
+      } catch (error) {
+        setStatus({ type: "error", message: `Could not load shot: ${errorMessage(error)}` });
+      }
+    }
+
+    setCompletedReviewShot(reviewShot);
+    setLastCompletedProfileId(selectedProfileIdFromWorkflow(reviewShot.workflow, data.profiles));
+    setPage("review");
   };
 
   const uploadReviewToVisualizer = async () => {
@@ -1881,12 +1949,15 @@ export function App() {
             onSaveProfile={saveProfile}
           />
         )}
-        {page === "history" && <HistoryPage shots={data.shots} bags={data.bags} />}
+        {page === "history" && <HistoryPage shots={data.shots} bags={data.bags} onOpenShot={(shot) => void openHistoryShotReview(shot)} />}
         {page === "settings" && (
           <SettingsPage
             settings={data.settings}
             r2Sensor={r2Sensor}
             displayState={data.displayState}
+            machineSettings={data.machineSettings}
+            advancedMachineSettings={data.advancedMachineSettings}
+            machineCalibration={data.machineCalibration}
             visualizerPlugin={visualizerPlugin}
             visualizerSettings={data.visualizerSettings}
             visualizerStatus={data.visualizerStatus}
@@ -1898,6 +1969,8 @@ export function App() {
             availableSkinVersion={availableSkinVersion}
             r2RefreshBusy={r2RefreshBusy}
             onRefreshR2={refreshR2Sensor}
+            onSaveMachineSettings={saveMachineSettings}
+            onResetMachineSettings={resetMachineSettings}
             onCheckSkinUpdates={() => checkSkinUpdates()}
             onInstallSkinUpdate={() => installSkinUpdate()}
             onUpdateSettings={(next) => void persistSettings(next, "Settings saved.")}

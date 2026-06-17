@@ -1,6 +1,17 @@
 import { useEffect, useState } from "react";
 import skinManifest from "../../skin-manifest.json";
-import type { DisplayState, JsonMap, PluginManifest, SensorListItem, VisualizerStatus, WebUISkin } from "../api/types";
+import type {
+  De1AdvancedMachineSettings,
+  De1MachineCalibration,
+  De1MachineSettings,
+  DisplayState,
+  JsonMap,
+  PluginManifest,
+  SensorListItem,
+  UpdateDe1MachineSettings,
+  VisualizerStatus,
+  WebUISkin
+} from "../api/types";
 import {
   DEFAULT_SKIN_THEMES,
   DEFAULT_SKIN_UPDATE_BRANCH,
@@ -43,6 +54,67 @@ const themeColorFields: Array<{ key: keyof Omit<SkinThemePalette, "name">; label
   { key: "accent", label: "Accent" },
   { key: "accentAlt", label: "Second accent" }
 ];
+
+const defaultMachineSettings: Required<De1MachineSettings> = {
+  usb: true,
+  fan: 40,
+  flushTemp: 90,
+  flushFlow: 6,
+  flushTimeout: 5,
+  hotWaterFlow: 6,
+  steamFlow: 1.2,
+  tankTemp: 0,
+  steamPurgeMode: 0
+};
+
+const defaultAdvancedMachineSettings: Required<De1AdvancedMachineSettings> = {
+  heaterPh1Flow: 4,
+  heaterPh2Flow: 4,
+  heaterIdleTemp: 85,
+  heaterPh2Timeout: 10,
+  heaterVoltage: 230,
+  refillKitSetting: 2
+};
+
+const defaultMachineCalibration: Required<De1MachineCalibration> = {
+  flowMultiplier: 1
+};
+
+function boundedNumber(value: number | undefined, fallback: number, min: number, max: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalizeMachineSettingsDraft(settings: De1MachineSettings | null | undefined): Required<De1MachineSettings> {
+  return {
+    usb: typeof settings?.usb === "boolean" ? settings.usb : defaultMachineSettings.usb,
+    fan: boundedNumber(settings?.fan, defaultMachineSettings.fan, 0, 100),
+    flushTemp: boundedNumber(settings?.flushTemp, defaultMachineSettings.flushTemp, 0, 110),
+    flushFlow: boundedNumber(settings?.flushFlow, defaultMachineSettings.flushFlow, 0, 20),
+    flushTimeout: boundedNumber(settings?.flushTimeout, defaultMachineSettings.flushTimeout, 0, 120),
+    hotWaterFlow: boundedNumber(settings?.hotWaterFlow, defaultMachineSettings.hotWaterFlow, 0, 20),
+    steamFlow: boundedNumber(settings?.steamFlow, defaultMachineSettings.steamFlow, 0, 5),
+    tankTemp: boundedNumber(settings?.tankTemp, defaultMachineSettings.tankTemp, 0, 99),
+    steamPurgeMode: Math.round(boundedNumber(settings?.steamPurgeMode, defaultMachineSettings.steamPurgeMode, 0, 3))
+  };
+}
+
+function normalizeAdvancedMachineSettingsDraft(settings: De1AdvancedMachineSettings | null | undefined): Required<De1AdvancedMachineSettings> {
+  return {
+    heaterPh1Flow: boundedNumber(settings?.heaterPh1Flow, defaultAdvancedMachineSettings.heaterPh1Flow, 0, 20),
+    heaterPh2Flow: boundedNumber(settings?.heaterPh2Flow, defaultAdvancedMachineSettings.heaterPh2Flow, 0, 20),
+    heaterIdleTemp: boundedNumber(settings?.heaterIdleTemp, defaultAdvancedMachineSettings.heaterIdleTemp, 0, 110),
+    heaterPh2Timeout: boundedNumber(settings?.heaterPh2Timeout, defaultAdvancedMachineSettings.heaterPh2Timeout, 0, 120),
+    heaterVoltage: boundedNumber(settings?.heaterVoltage, defaultAdvancedMachineSettings.heaterVoltage, 100, 260),
+    refillKitSetting: Math.round(boundedNumber(settings?.refillKitSetting, defaultAdvancedMachineSettings.refillKitSetting, 0, 3))
+  };
+}
+
+function normalizeMachineCalibrationDraft(settings: De1MachineCalibration | null | undefined): Required<De1MachineCalibration> {
+  return {
+    flowMultiplier: boundedNumber(settings?.flowMultiplier, defaultMachineCalibration.flowMultiplier, 0.1, 3)
+  };
+}
 
 function pluginLine(plugin: PluginManifest | null | undefined): string {
   if (!plugin) return "Not installed";
@@ -205,12 +277,20 @@ export function SettingsPage({
   r2RefreshBusy = false,
   onRefreshR2,
   onCheckSkinUpdates,
-  onInstallSkinUpdate
+  onInstallSkinUpdate,
+  machineSettings,
+  advancedMachineSettings,
+  machineCalibration,
+  onSaveMachineSettings,
+  onResetMachineSettings
 }: {
   settings: SkinSettings;
   r2Sensor: SensorListItem | null;
   onUpdateSettings: (settings: SkinSettings) => void;
   displayState?: DisplayState | null;
+  machineSettings?: De1MachineSettings | null;
+  advancedMachineSettings?: De1AdvancedMachineSettings | null;
+  machineCalibration?: De1MachineCalibration | null;
   visualizerPlugin?: PluginManifest | null;
   visualizerSettings?: JsonMap | null;
   visualizerStatus?: VisualizerStatus | null;
@@ -224,10 +304,19 @@ export function SettingsPage({
   onRefreshR2?: () => Promise<void> | void;
   onCheckSkinUpdates?: () => Promise<void> | void;
   onInstallSkinUpdate?: () => Promise<void> | void;
+  onSaveMachineSettings?: (
+    machineSettings: UpdateDe1MachineSettings,
+    advancedMachineSettings: De1AdvancedMachineSettings,
+    machineCalibration: De1MachineCalibration
+  ) => Promise<void> | void;
+  onResetMachineSettings?: () => Promise<void> | void;
 }) {
   const [activeSection, setActiveSection] = useState<SettingsSection>("machine");
   const [draftSettings, setDraftSettings] = useState(settings);
   const [acknowledgedSettings, setAcknowledgedSettings] = useState(settings);
+  const [machineDraft, setMachineDraft] = useState(() => normalizeMachineSettingsDraft(machineSettings));
+  const [advancedMachineDraft, setAdvancedMachineDraft] = useState(() => normalizeAdvancedMachineSettingsDraft(advancedMachineSettings));
+  const [calibrationDraft, setCalibrationDraft] = useState(() => normalizeMachineCalibrationDraft(machineCalibration));
   const savedSettings = normalizeDraftSettings(acknowledgedSettings);
   const nextSettings = normalizeDraftSettings(draftSettings);
   const settingsChanged = JSON.stringify(nextSettings) !== JSON.stringify(savedSettings);
@@ -244,8 +333,32 @@ export function SettingsPage({
     setAcknowledgedSettings(settings);
   }, [settings]);
 
+  useEffect(() => {
+    setMachineDraft(normalizeMachineSettingsDraft(machineSettings));
+  }, [machineSettings]);
+
+  useEffect(() => {
+    setAdvancedMachineDraft(normalizeAdvancedMachineSettingsDraft(advancedMachineSettings));
+  }, [advancedMachineSettings]);
+
+  useEffect(() => {
+    setCalibrationDraft(normalizeMachineCalibrationDraft(machineCalibration));
+  }, [machineCalibration]);
+
   const updateDraftSettings = (patch: Partial<SkinSettings>) => {
     setDraftSettings((current) => ({ ...current, ...patch }));
+  };
+
+  const updateMachineDraft = (patch: Partial<Required<De1MachineSettings>>) => {
+    setMachineDraft((current) => ({ ...current, ...patch }));
+  };
+
+  const updateAdvancedMachineDraft = (patch: Partial<Required<De1AdvancedMachineSettings>>) => {
+    setAdvancedMachineDraft((current) => ({ ...current, ...patch }));
+  };
+
+  const updateCalibrationDraft = (patch: Partial<Required<De1MachineCalibration>>) => {
+    setCalibrationDraft((current) => ({ ...current, ...patch }));
   };
 
   const updatePresetCount = (value: number) => {
@@ -299,6 +412,10 @@ export function SettingsPage({
     setAcknowledgedSettings(nextSettings);
     setDraftSettings(nextSettings);
     onUpdateSettings(nextSettings);
+  };
+
+  const saveMachineSettings = () => {
+    void onSaveMachineSettings?.(machineDraft, advancedMachineDraft, calibrationDraft);
   };
 
   return (
@@ -366,7 +483,236 @@ export function SettingsPage({
               </span>
             </label>
           </div>
+          <div className="list-row settings-machine-row">
+            <strong>Machine outputs</strong>
+            {!machineSettings && <span>Machine settings unavailable until the machine is connected.</span>}
+            <div className="machine-settings-grid">
+              <label className="settings-field">
+                Tank preheat target
+                <input
+                  aria-label="Tank preheat target"
+                  type="number"
+                  min={0}
+                  max={99}
+                  step={1}
+                  value={machineDraft.tankTemp}
+                  onChange={(event) => updateMachineDraft({ tankTemp: Number(event.target.value) })}
+                />
+              </label>
+              <label className="settings-field">
+                Steam flow
+                <input
+                  aria-label="Steam flow"
+                  type="number"
+                  min={0}
+                  max={5}
+                  step={0.1}
+                  value={machineDraft.steamFlow}
+                  onChange={(event) => updateMachineDraft({ steamFlow: Number(event.target.value) })}
+                />
+              </label>
+              <label className="settings-field">
+                Steam purge mode
+                <select
+                  aria-label="Steam purge mode"
+                  value={String(machineDraft.steamPurgeMode)}
+                  onChange={(event) => updateMachineDraft({ steamPurgeMode: Number(event.target.value) })}
+                >
+                  <option value="0">Off</option>
+                  <option value="1">Short purge</option>
+                  <option value="2">Long purge</option>
+                  <option value="3">Automatic</option>
+                </select>
+              </label>
+              <label className="settings-field">
+                Hot water flow
+                <input
+                  aria-label="Hot water flow"
+                  type="number"
+                  min={0}
+                  max={20}
+                  step={0.1}
+                  value={machineDraft.hotWaterFlow}
+                  onChange={(event) => updateMachineDraft({ hotWaterFlow: Number(event.target.value) })}
+                />
+              </label>
+              <label className="settings-field">
+                Flush temperature
+                <input
+                  aria-label="Flush temperature"
+                  type="number"
+                  min={0}
+                  max={110}
+                  step={1}
+                  value={machineDraft.flushTemp}
+                  onChange={(event) => updateMachineDraft({ flushTemp: Number(event.target.value) })}
+                />
+              </label>
+              <label className="settings-field">
+                Flush flow
+                <input
+                  aria-label="Flush flow"
+                  type="number"
+                  min={0}
+                  max={20}
+                  step={0.1}
+                  value={machineDraft.flushFlow}
+                  onChange={(event) => updateMachineDraft({ flushFlow: Number(event.target.value) })}
+                />
+              </label>
+              <label className="settings-field">
+                Flush timeout
+                <input
+                  aria-label="Flush timeout"
+                  type="number"
+                  min={0}
+                  max={120}
+                  step={1}
+                  value={machineDraft.flushTimeout}
+                  onChange={(event) => updateMachineDraft({ flushTimeout: Number(event.target.value) })}
+                />
+              </label>
+            </div>
+          </div>
+          <div className="list-row settings-machine-row">
+            <strong>Advanced machine settings</strong>
+            <div className="machine-settings-grid">
+              <label className="settings-field">
+                Fan threshold
+                <input
+                  aria-label="Fan threshold"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={machineDraft.fan}
+                  onChange={(event) => updateMachineDraft({ fan: Number(event.target.value) })}
+                />
+              </label>
+              <label className="settings-field">
+                Heater idle temperature
+                <input
+                  aria-label="Heater idle temperature"
+                  type="number"
+                  min={0}
+                  max={110}
+                  step={1}
+                  value={advancedMachineDraft.heaterIdleTemp}
+                  onChange={(event) => updateAdvancedMachineDraft({ heaterIdleTemp: Number(event.target.value) })}
+                />
+              </label>
+              <label className="settings-field">
+                Heater phase 1 flow
+                <input
+                  aria-label="Heater phase 1 flow"
+                  type="number"
+                  min={0}
+                  max={20}
+                  step={0.1}
+                  value={advancedMachineDraft.heaterPh1Flow}
+                  onChange={(event) => updateAdvancedMachineDraft({ heaterPh1Flow: Number(event.target.value) })}
+                />
+              </label>
+              <label className="settings-field">
+                Heater phase 2 flow
+                <input
+                  aria-label="Heater phase 2 flow"
+                  type="number"
+                  min={0}
+                  max={20}
+                  step={0.1}
+                  value={advancedMachineDraft.heaterPh2Flow}
+                  onChange={(event) => updateAdvancedMachineDraft({ heaterPh2Flow: Number(event.target.value) })}
+                />
+              </label>
+              <label className="settings-field">
+                Heater phase 2 timeout
+                <input
+                  aria-label="Heater phase 2 timeout"
+                  type="number"
+                  min={0}
+                  max={120}
+                  step={1}
+                  value={advancedMachineDraft.heaterPh2Timeout}
+                  onChange={(event) => updateAdvancedMachineDraft({ heaterPh2Timeout: Number(event.target.value) })}
+                />
+              </label>
+              <label className="settings-field">
+                Mains voltage hint
+                <select
+                  aria-label="Mains voltage hint"
+                  value={String(advancedMachineDraft.heaterVoltage)}
+                  onChange={(event) => updateAdvancedMachineDraft({ heaterVoltage: Number(event.target.value) })}
+                >
+                  <option value="110">110 V</option>
+                  <option value="120">120 V</option>
+                  <option value="220">220 V</option>
+                  <option value="230">230 V</option>
+                  <option value="240">240 V</option>
+                </select>
+              </label>
+              <label className="settings-field">
+                Refill kit
+                <select
+                  aria-label="Refill kit"
+                  value={String(advancedMachineDraft.refillKitSetting)}
+                  onChange={(event) => updateAdvancedMachineDraft({ refillKitSetting: Number(event.target.value) })}
+                >
+                  <option value="0">Off</option>
+                  <option value="1">Manual</option>
+                  <option value="2">Automatic</option>
+                  <option value="3">Always on</option>
+                </select>
+              </label>
+              <label className="settings-field">
+                Flow calibration
+                <input
+                  aria-label="Flow calibration"
+                  type="number"
+                  min={0.1}
+                  max={3}
+                  step={0.01}
+                  value={calibrationDraft.flowMultiplier}
+                  onChange={(event) => updateCalibrationDraft({ flowMultiplier: Number(event.target.value) })}
+                />
+              </label>
+              <label className="inline-toggle machine-usb-toggle">
+                <input
+                  type="checkbox"
+                  checked={machineDraft.usb}
+                  onChange={(event) => updateMachineDraft({ usb: event.target.checked })}
+                />
+                USB charger output
+              </label>
+            </div>
+            <div className="profile-workflow-controls">
+              <button type="button" className="primary-button" disabled={!onSaveMachineSettings} onClick={saveMachineSettings}>
+                Save machine settings
+              </button>
+              <button type="button" className="ghost-button" disabled={!onResetMachineSettings} onClick={() => void onResetMachineSettings?.()}>
+                Reset machine settings
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {activeSection === "app" && (
+        <section className="settings-section" role="tabpanel" aria-label="App settings">
           <div className="list-row">
+            <strong>Visualizer</strong>
+            <span>{visualizerPlugin?.name ?? "Visualizer plugin not installed"}</span>
+            <span>{pluginLine(visualizerPlugin)}</span>
+            <span>{visualizerSettingsLine(visualizerSettings)}</span>
+            <span>{visualizerUploadLine(visualizerStatus)}</span>
+            <span>{visualizerSyncLine(visualizerStatus)}</span>
+          </div>
+        </section>
+      )}
+
+      {activeSection === "skin" && (
+        <section className="settings-section" role="tabpanel" aria-label="Skin settings">
+          <div className="list-row settings-update-row">
             <strong>DiFluid R2 status</strong>
             <span>{r2Configured ? `Configured sensor: ${draftSettings.r2SensorId}` : "R2 status is hidden until setup."}</span>
             <label className="settings-field">
@@ -401,24 +747,6 @@ export function SettingsPage({
               )}
             </div>
           </div>
-        </section>
-      )}
-
-      {activeSection === "app" && (
-        <section className="settings-section" role="tabpanel" aria-label="App settings">
-          <div className="list-row">
-            <strong>Visualizer</strong>
-            <span>{visualizerPlugin?.name ?? "Visualizer plugin not installed"}</span>
-            <span>{pluginLine(visualizerPlugin)}</span>
-            <span>{visualizerSettingsLine(visualizerSettings)}</span>
-            <span>{visualizerUploadLine(visualizerStatus)}</span>
-            <span>{visualizerSyncLine(visualizerStatus)}</span>
-          </div>
-        </section>
-      )}
-
-      {activeSection === "skin" && (
-        <section className="settings-section" role="tabpanel" aria-label="Skin settings">
           <div className="list-row settings-update-row">
             <strong>Skin controls</strong>
             <label className="settings-field settings-slider-field">

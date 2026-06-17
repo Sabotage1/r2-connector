@@ -2,6 +2,9 @@ import type {
   AppInfo,
   Bean,
   BeanBatch,
+  De1AdvancedMachineSettings,
+  De1MachineCalibration,
+  De1MachineSettings,
   DeviceInfo,
   DisplayState,
   Grinder,
@@ -14,6 +17,7 @@ import type {
   ShotPage,
   ShotRecord,
   SteamRecord,
+  UpdateDe1MachineSettings,
   WebUISkin,
   WebUISkinActionResult,
   Workflow
@@ -449,6 +453,49 @@ export class ReaPrimeApi {
   releaseWakeLock() {
     return this.request<DisplayState>("/api/v1/display/wakelock", {
       method: "DELETE"
+    });
+  }
+
+  getMachineSettings() {
+    return this.request<De1MachineSettings>("/api/v1/machine/settings");
+  }
+
+  updateMachineSettings(payload: UpdateDe1MachineSettings) {
+    const body = {
+      ...payload,
+      ...(typeof payload.usb === "boolean" ? { usb: payload.usb ? "enable" : "disable" } : {})
+    };
+    return this.request<void>("/api/v1/machine/settings", {
+      method: "POST",
+      body: JSON.stringify(body)
+    });
+  }
+
+  getAdvancedMachineSettings() {
+    return this.request<De1AdvancedMachineSettings>("/api/v1/machine/settings/advanced");
+  }
+
+  updateAdvancedMachineSettings(payload: De1AdvancedMachineSettings) {
+    return this.request<void>("/api/v1/machine/settings/advanced", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  resetMachineSettings() {
+    return this.request<void>("/api/v1/machine/settings/reset", {
+      method: "DELETE"
+    });
+  }
+
+  getMachineCalibration() {
+    return this.request<De1MachineCalibration>("/api/v1/machine/calibration");
+  }
+
+  updateMachineCalibration(payload: De1MachineCalibration) {
+    return this.request<void>("/api/v1/machine/calibration", {
+      method: "POST",
+      body: JSON.stringify(payload)
     });
   }
 

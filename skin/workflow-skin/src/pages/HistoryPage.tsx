@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { ShotRecord } from "../api/types";
 import type { Bag } from "../lib/bags";
+import { isGoldenShot, shotTasteRating, tasteScoreLabel, tasteTone } from "../lib/shotTaste";
 import { grindSizeFromShot } from "../lib/shotStats";
 
 interface HistoryFilters {
@@ -54,6 +55,7 @@ function historySearchText(shot: ShotRecord, bag: Bag | undefined): string {
     profileTitle(shot),
     shot.annotations?.drinkEy,
     shot.annotations?.drinkTds,
+    shot.annotations?.enjoyment,
     shot.annotations?.espressoNotes,
     shot.shotNotes,
     grindSizeFromShot(shot),
@@ -71,13 +73,7 @@ function historySearchText(shot: ShotRecord, bag: Bag | undefined): string {
     .join(" ");
 }
 
-function isGoldenShot(shot: ShotRecord): boolean {
-  const workflowSkin = shot.annotations?.extras?.workflowSkin;
-  const markedGolden = Boolean(workflowSkin && typeof workflowSkin === "object" && !Array.isArray(workflowSkin) && (workflowSkin as { goldenShot?: unknown }).goldenShot === true);
-  return markedGolden || shot.annotations?.enjoyment === 10;
-}
-
-export function HistoryPage({ shots, bags }: { shots: ShotRecord[]; bags: Bag[] }) {
+export function HistoryPage({ shots, bags, onOpenShot }: { shots: ShotRecord[]; bags: Bag[]; onOpenShot?: (shot: ShotRecord) => void }) {
   const [filters, setFilters] = useState<HistoryFilters>(emptyFilters);
   const [goldOnly, setGoldOnly] = useState(false);
   const bagById = useMemo(() => new Map(bags.map((bag) => [bag.id, bag])), [bags]);
@@ -162,15 +158,20 @@ export function HistoryPage({ shots, bags }: { shots: ShotRecord[]; bags: Bag[] 
       {filteredShots.length === 0 && <p className="muted">No shots match these filters.</p>}
       {filteredShots.map((shot) => {
         const bag = shotBag(shot, bagById);
+        const rating = shotTasteRating(shot);
+        const tone = rating === null ? "red" : tasteTone(rating);
+        const golden = isGoldenShot(shot);
+        const rowClassName = ["list-row", "history-shot-row", `taste-${tone}`, golden ? "golden" : ""].filter(Boolean).join(" ");
         return (
-          <div className="list-row" key={shot.id}>
+          <button type="button" className={rowClassName} key={shot.id} onClick={() => onOpenShot?.(shot)}>
             <strong>{new Date(shot.timestamp).toLocaleString()}</strong>
             <span>{profileTitle(shot)}</span>
             <span>{bag ? `${bag.roaster} ${bag.bean}` : "No bag"}</span>
             <span>
               EY {shot.annotations?.drinkEy ?? "—"} · Grind {grindSizeFromShot(shot) ?? "—"}
             </span>
-          </div>
+            <span className={`history-rating ${tone}`}>{tasteScoreLabel(rating)}</span>
+          </button>
         );
       })}
     </div>
