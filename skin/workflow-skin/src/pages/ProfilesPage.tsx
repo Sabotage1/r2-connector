@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { JsonMap, Profile, ProfileRecord } from "../api/types";
-import { isProfileShown, profileWorkflowFor, type ProfileWorkflowSettings, type SkinSettings, type SteamTimers } from "../state/skinSettings";
+import { DEFAULT_STEAM_TIMERS, isProfileShown, profileWorkflowFor, type ProfileWorkflowSettings, type SkinSettings, type SteamTimers } from "../state/skinSettings";
 
 interface ProfileDraft {
   title: string;
@@ -298,7 +298,7 @@ export function ProfilesPage({
                   <input
                     type="number"
                     min="1"
-                    value={workflow.steamTimers.small}
+                    value={workflow.steamTimers.small ?? DEFAULT_STEAM_TIMERS.small}
                     onChange={(event) => updateTimer("small", Number(event.target.value))}
                   />
                 </label>
@@ -307,7 +307,7 @@ export function ProfilesPage({
                   <input
                     type="number"
                     min="1"
-                    value={workflow.steamTimers.medium}
+                    value={workflow.steamTimers.medium ?? DEFAULT_STEAM_TIMERS.medium}
                     onChange={(event) => updateTimer("medium", Number(event.target.value))}
                   />
                 </label>
@@ -316,7 +316,7 @@ export function ProfilesPage({
                   <input
                     type="number"
                     min="1"
-                    value={workflow.steamTimers.large}
+                    value={workflow.steamTimers.large ?? DEFAULT_STEAM_TIMERS.large}
                     onChange={(event) => updateTimer("large", Number(event.target.value))}
                   />
                 </label>

@@ -518,7 +518,7 @@ describe("SteamPage", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Small jug/i }));
+    fireEvent.click(within(screen.getByLabelText("Steam timer presets")).getByRole("button", { name: /Small jug/i }));
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
 
     expect(onStartSteam).toHaveBeenCalledTimes(1);
@@ -548,7 +548,7 @@ describe("SteamPage", () => {
     };
     const { rerender } = render(<SteamPage {...props} steamActive={false} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Small jug/i }));
+    fireEvent.click(within(screen.getByLabelText("Steam timer presets")).getByRole("button", { name: /Small jug/i }));
     rerender(<SteamPage {...props} steamActive />);
 
     expect(onStartSteam).not.toHaveBeenCalled();
@@ -581,6 +581,32 @@ describe("SteamPage", () => {
     }
 
     expect(screen.getByText("0:18")).toBeInTheDocument();
+  });
+
+  it("edits, adds, removes, and caps steam timers at four", async () => {
+    const onUpdateTimers = vi.fn();
+    render(
+      <SteamPage
+        profileTitle="Flat white"
+        timers={{ small: 20, medium: 30, large: 40 }}
+        onReview={vi.fn()}
+        onUpdateTimers={onUpdateTimers}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("Timer seconds Medium jug"), { target: { value: "36" } });
+    expect(onUpdateTimers).toHaveBeenLastCalledWith({ small: 20, medium: 36, large: 40 });
+
+    await userEvent.click(screen.getByRole("button", { name: "Add timer" }));
+    expect(onUpdateTimers).toHaveBeenLastCalledWith({ small: 20, medium: 36, large: 40, "timer-4": 30 });
+    expect(screen.getByRole("button", { name: "Add timer" })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Timer name Timer 4"), { target: { value: "Cortado" } });
+    expect(onUpdateTimers).toHaveBeenLastCalledWith({ small: 20, medium: 36, large: 40, cortado: 30 });
+
+    await userEvent.click(screen.getByRole("button", { name: "Remove Small jug timer" }));
+    expect(onUpdateTimers).toHaveBeenLastCalledWith({ medium: 36, large: 40, cortado: 30 });
+    expect(screen.getByRole("button", { name: "Add timer" })).not.toBeDisabled();
   });
 });
 
@@ -845,8 +871,8 @@ describe("SettingsPage", () => {
     const onUpdateSettings = vi.fn();
     render(<SettingsPage settings={defaultSkinSettings} r2Sensor={null} onUpdateSettings={onUpdateSettings} />);
 
-    expect(screen.getByLabelText("Measure delay")).toHaveValue(30);
-    expect(screen.getByText("Set the delay for automatic R2 measurement.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Measure delay")).toHaveValue(20);
+    expect(screen.getByText("Delay is in seconds after the shot is done brewing and the skin moves to the Review page.")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Auto sleep after last use"), { target: { value: "45" } });
     fireEvent.change(screen.getByLabelText("Measure delay"), { target: { value: "55" } });
 

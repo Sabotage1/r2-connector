@@ -72,6 +72,11 @@ function deviceLabel(device: DeviceInfo): string {
   return `${device.type ?? ""} ${device.name ?? ""} ${device.id}`.toLowerCase();
 }
 
+function isR2Device(device: DeviceInfo): boolean {
+  const label = deviceLabel(device);
+  return label.includes("difluid") || label.includes("r2");
+}
+
 function isScaleDevice(device: DeviceInfo): boolean {
   const label = deviceLabel(device);
   return (
@@ -116,6 +121,15 @@ function scaleConnectedFromDevices(devices: DeviceInfo[] | undefined): boolean {
 
 function scaleExplicitlyDisconnectedFromDevices(devices: DeviceInfo[] | undefined): boolean {
   return Boolean(devices?.some((device) => isScaleDevice(device) && isDisconnectedDeviceState(device.state)));
+}
+
+function r2DevicesForStatus(devices: DeviceInfo[] | undefined, r2SensorId: string | undefined): DeviceInfo[] {
+  return (
+    devices?.filter((device) => {
+      if (r2SensorId && device.id === r2SensorId) return true;
+      return isR2Device(device);
+    }) ?? []
+  );
 }
 
 function waterTankFullLevel(waterLevels: WaterLevels | null | undefined): number {
@@ -181,7 +195,10 @@ export function buildConnectivityStatuses({
   ];
 
   if (r2SensorId) {
-    const connected = Boolean(r2Connected) || r2Sensor?.id === r2SensorId;
+    const r2Devices = r2DevicesForStatus(devices, r2SensorId);
+    const hasDisconnectedR2Device = r2Devices.some((device) => isDisconnectedDeviceState(device.state));
+    const hasConnectedR2Device = r2Devices.some((device) => isConnectedDeviceState(device.state));
+    const connected = Boolean(r2Connected) || hasConnectedR2Device || (!hasDisconnectedR2Device && r2Devices.length === 0 && r2Sensor?.id === r2SensorId);
     statuses.push({ id: "r2", label: "R2", detail: connected ? "Connected" : "Not connected", connected });
   }
 

@@ -3,11 +3,7 @@ export interface PresetSlot {
   profileId?: string;
 }
 
-export interface SteamTimers {
-  small: number;
-  medium: number;
-  large: number;
-}
+export type SteamTimers = Record<string, number>;
 
 export interface ProfileWorkflowSettings {
   milkBased: boolean;
@@ -86,8 +82,9 @@ export const MIN_PRESET_SLOT_COUNT = 1;
 export const MAX_PRESET_SLOT_COUNT = 8;
 export const DEFAULT_AUTO_SLEEP_MINUTES = 30;
 export const MAX_AUTO_SLEEP_MINUTES = 240;
-export const DEFAULT_R2_MEASURE_DELAY_SECONDS = 30;
+export const DEFAULT_R2_MEASURE_DELAY_SECONDS = 20;
 export const MAX_R2_MEASURE_DELAY_SECONDS = 3600;
+export const MAX_STEAM_TIMERS = 4;
 export const MIN_SKIN_FONT_SCALE = 85;
 export const MAX_SKIN_FONT_SCALE = 125;
 export const EDITABLE_SKIN_THEME_IDS = ["slate", "ruby"] as const satisfies readonly EditableSkinThemeId[];
@@ -286,6 +283,15 @@ function normalizeSteamTimer(value: unknown, fallback: number): number {
   return Math.round(value);
 }
 
+function normalizeSteamTimerKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+}
+
 function normalizeAutoSleepMinutes(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_AUTO_SLEEP_MINUTES;
   return Math.min(MAX_AUTO_SLEEP_MINUTES, Math.max(0, value));
@@ -345,11 +351,14 @@ function normalizeCustomSkinThemes(value: unknown): Record<EditableSkinThemeId, 
 
 function normalizeSteamTimers(value: unknown): SteamTimers {
   if (!isPlainRecord(value)) return cloneSteamTimers(DEFAULT_STEAM_TIMERS);
-  return {
-    small: normalizeSteamTimer(value.small, DEFAULT_STEAM_TIMERS.small),
-    medium: normalizeSteamTimer(value.medium, DEFAULT_STEAM_TIMERS.medium),
-    large: normalizeSteamTimer(value.large, DEFAULT_STEAM_TIMERS.large)
-  };
+  const timers: SteamTimers = {};
+  for (const [key, timer] of Object.entries(value)) {
+    const cleanKey = normalizeSteamTimerKey(key);
+    if (!cleanKey || Object.prototype.hasOwnProperty.call(timers, cleanKey)) continue;
+    timers[cleanKey] = normalizeSteamTimer(timer, DEFAULT_STEAM_TIMERS[cleanKey] ?? DEFAULT_STEAM_TIMERS.medium);
+    if (Object.keys(timers).length >= MAX_STEAM_TIMERS) break;
+  }
+  return Object.keys(timers).length > 0 ? timers : cloneSteamTimers(DEFAULT_STEAM_TIMERS);
 }
 
 function normalizeProfileWorkflows(value: unknown): Record<string, ProfileWorkflowSettings> {

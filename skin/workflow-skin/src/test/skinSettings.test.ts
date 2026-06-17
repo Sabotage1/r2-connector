@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_MAIN_MENU_ITEMS,
   DEFAULT_STEAM_TIMERS,
+  MAX_STEAM_TIMERS,
   defaultSkinSettings,
   isMilkProfile,
   isProfileShown,
@@ -28,7 +29,7 @@ describe("skin settings", () => {
     expect(defaultSkinSettings.skinUpdateAsset).toBe("workflow-skin.zip");
     expect(defaultSkinSettings.skinUpdatePrerelease).toBe(false);
     expect(defaultSkinSettings.autoSleepMinutes).toBe(30);
-    expect(defaultSkinSettings.r2MeasureDelaySeconds).toBe(30);
+    expect(defaultSkinSettings.r2MeasureDelaySeconds).toBe(20);
     expect(defaultSkinSettings.presetSlotCount).toBe(4);
     expect(defaultSkinSettings.menuCollapsed).toBe(false);
     expect(defaultSkinSettings.mainMenuItems).toEqual(DEFAULT_MAIN_MENU_ITEMS);
@@ -69,7 +70,7 @@ describe("skin settings", () => {
         topStatusIndicatorIds: ["wifi", "pressure", "bad", "wifi"],
         shownProfileIds: ["p1", 42, "p2"],
         profileWorkflows: {
-          p2: { milkBased: true, steamTimers: { small: 18, medium: 28, large: 42 } },
+          p2: { milkBased: true, steamTimers: { small: 18, medium: 28, large: 42, cortado: 24, overflow: 99 } },
           bad: { milkBased: "yes", steamTimers: { small: "soon" } }
         },
         lastBeanBatchId: 12,
@@ -107,8 +108,9 @@ describe("skin settings", () => {
     expect(visibleMainMenuItems(settings)).toContain("settings");
     expect(settings.shownProfileIds).toEqual(["p1", "p2"]);
     expect(settings.profileWorkflows).toEqual({
-      p2: { milkBased: true, steamTimers: { small: 18, medium: 28, large: 42 } }
+      p2: { milkBased: true, steamTimers: { small: 18, medium: 28, large: 42, cortado: 24 } }
     });
+    expect(Object.keys(settings.profileWorkflows.p2.steamTimers)).toHaveLength(MAX_STEAM_TIMERS);
     expect(settings.lastBeanBatchId).toBeUndefined();
     expect(settings.lastGrinderId).toBe("g1");
     expect(settings.defaultGrinderId).toBe("g2");

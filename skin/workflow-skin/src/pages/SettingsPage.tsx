@@ -381,7 +381,7 @@ export function SettingsPage({
                 onChange={(event) => updateDraftSettings({ r2MeasureDelaySeconds: Number(event.target.value) })}
               />
             </label>
-            <span>Set the delay for automatic R2 measurement.</span>
+            <span>Delay is in seconds after the shot is done brewing and the skin moves to the Review page.</span>
             <div className="profile-workflow-controls">
               <button type="button" className="ghost-button" disabled={r2RefreshBusy || !onRefreshR2} onClick={() => void onRefreshR2?.()}>
                 {r2RefreshBusy ? "Refreshing R2" : "Refresh R2"}

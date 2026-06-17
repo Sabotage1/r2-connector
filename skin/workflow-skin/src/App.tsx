@@ -56,6 +56,7 @@ type SkinUpdateSource = "release" | "branch";
 
 const POST_ACTIVITY_ROUTE_DELAY_MS = 1000;
 const ACTIVE_MACHINE_STATE_POLL_MS = 500;
+const SCALE_RECONNECT_COOLDOWN_MS = 30_000;
 const WORKFLOW_SKIN_ID = "workflow-skin";
 const CURRENT_SKIN_VERSION = typeof skinManifest.version === "string" ? skinManifest.version : "";
 
@@ -318,6 +319,17 @@ function isConnectedDevice(device: DeviceInfo): boolean {
 
 function hasConnectedScale(devices: DeviceInfo[]): boolean {
   return devices.some((device) => isScaleDeviceCandidate(device) && isConnectedDevice(device) && !isR2Device(device));
+}
+
+function disconnectedScaleDevices(devices: DeviceInfo[]): DeviceInfo[] {
+  return devices.filter((device) => isScaleDeviceCandidate(device) && !isConnectedDevice(device) && !isR2Device(device));
+}
+
+function deviceIdSignature(devices: DeviceInfo[]): string {
+  return devices
+    .map((device) => device.id)
+    .sort()
+    .join("|");
 }
 
 function isConfiguredR2Device(device: DeviceInfo, configuredR2DeviceId: string | undefined): boolean {
@@ -614,6 +626,11 @@ export function App() {
   const completedActivityRef = useRef<{ activity: CompletedWorkflowActivity; profileId?: string } | null>(null);
   const completedActivityTimerRef = useRef<number | null>(null);
   const wasSleepingRef = useRef<boolean | null>(null);
+  const scaleReconnectRef = useRef<{ signature: string | null; lastAttemptAt: number; pending: boolean }>({
+    signature: null,
+    lastAttemptAt: 0,
+    pending: false
+  });
   const api = useMemo(() => new ReaPrimeApi(), []);
   const data = useReaData(api);
   const liveTelemetry = useLiveTelemetry(undefined, { recordIdle: page === "live" });
@@ -1271,6 +1288,30 @@ export function App() {
     };
   };
 
+  useEffect(() => {
+    if (!data.loaded) return;
+    const disconnectedScales = disconnectedScaleDevices(nativeDevices);
+    if (disconnectedScales.length === 0 || hasConnectedScale(nativeDevices)) {
+      scaleReconnectRef.current.signature = null;
+      return;
+    }
+
+    const signature = deviceIdSignature(disconnectedScales);
+    const now = Date.now();
+    const reconnectState = scaleReconnectRef.current;
+    if (reconnectState.pending) return;
+    if (reconnectState.signature === signature && now - reconnectState.lastAttemptAt < SCALE_RECONNECT_COOLDOWN_MS) return;
+
+    reconnectState.signature = signature;
+    reconnectState.lastAttemptAt = now;
+    reconnectState.pending = true;
+    void requestScaleConnection()
+      .catch(() => undefined)
+      .finally(() => {
+        scaleReconnectRef.current.pending = false;
+      });
+  }, [data.loaded, nativeDevices]);
+
   const startBrew = async () => {
     setBrewPending(true);
     setLastUseAt(Date.now());
@@ -1799,6 +1840,10 @@ export function App() {
             onReview={() => setPage("review")}
             onStartSteam={startSteam}
             onStopSteam={stopSteam}
+            onUpdateTimers={(steamTimers) => {
+              if (!workflowPageProfileId) return;
+              void updateProfileWorkflow(workflowPageProfileId, { ...activeProfileWorkflow, steamTimers });
+            }}
             steamActive={steamingMilk}
             steamHistory={data.steams ?? []}
           />

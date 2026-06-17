@@ -1666,6 +1666,45 @@ textarea {
   color: #9daab4;
 }
 
+.steam-timer-editor {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid #303a43;
+  padding-top: 14px;
+}
+
+.steam-timer-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(92px, 0.75fr) 44px;
+  gap: 10px;
+  align-items: end;
+}
+
+.steam-timer-row label {
+  display: grid;
+  gap: 6px;
+  color: #9daab4;
+  font-weight: 800;
+}
+
+.steam-timer-row label span {
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.timer-remove-button {
+  width: 44px;
+  height: 44px;
+  border: 1px solid #34414b !important;
+  border-radius: 8px;
+}
+
+.timer-remove-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .status-message {
   border: 1px solid #34414b;
   border-radius: 8px;

@@ -255,6 +255,9 @@ function mockReaFetch(
     },
     setShots(next: ShotRecord[]) {
       shots = next;
+    },
+    setDevices(next: DeviceInfo[]) {
+      devices = next;
     }
   };
 }
@@ -1037,6 +1040,68 @@ describe("App shell", () => {
     expect(screen.queryByText("Duration: 20s")).not.toBeInTheDocument();
   });
 
+  it("measures R2 twenty seconds after the shot reaches the review page", async () => {
+    vi.useFakeTimers();
+    const completedShot: ShotRecord = {
+      id: "completed-shot-r2-auto",
+      timestamp: "2026-06-17T08:00:00.000Z",
+      workflow: {
+        profile: profiles[0].profile,
+        context: { extras: { workflowSkin: { selectedProfileId: "p1" } } }
+      },
+      measurements: []
+    };
+    const fetchState = mockReaFetch(
+      { ...initialSettings, r2SensorId: "F4:12:FA:FA:AC:E3" },
+      {
+        sensors: [detectedR2Sensor],
+        devices: [{ id: "F4:12:FA:FA:AC:E3", name: "DiFluid R2", type: "sensor", state: "connected" }],
+        machineState: { connected: true, state: { state: "espresso", substate: "pouring" } },
+        shots: []
+      }
+    );
+    render(<App />);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
+
+    fetchState.setShots([completedShot]);
+    fetchState.setMachineState({ connected: true, state: { state: "idle" } });
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(1_000);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("heading", { name: "Shot Review" })).toBeInTheDocument();
+    expect(fetchState.sensorExecuteCount).toBe(0);
+
+    await act(async () => {
+      vi.advanceTimersByTime(19_999);
+      await Promise.resolve();
+    });
+    expect(fetchState.sensorExecuteCount).toBe(0);
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchState.sensorExecuteCount).toBe(1);
+    expect(screen.getByText("R2 TDS 9.8 imported.")).toBeInTheDocument();
+  });
+
   it("routes milk profiles to steam one second after espresso returns idle when review is disabled", async () => {
     vi.useFakeTimers();
     const shot: ShotRecord = {
@@ -1139,7 +1204,7 @@ describe("App shell", () => {
     render(<App />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Steam" }));
-    fireEvent.click(screen.getByRole("button", { name: /Small jug/i }));
+    fireEvent.click(within(screen.getByLabelText("Steam timer presets")).getByRole("button", { name: /Small jug/i }));
 
     vi.useFakeTimers();
     await act(async () => {
@@ -1157,6 +1222,27 @@ describe("App shell", () => {
     });
 
     expect(fetchState.fetchMock).toHaveBeenCalledWith("http://localhost:8080/api/v1/machine/state/idle", expect.objectContaining({ method: "PUT" }));
+  });
+
+  it("persists steam timer edits from the steam page to the active profile workflow", async () => {
+    const fetchState = mockReaFetch(
+      {
+        ...initialSettings,
+        profileWorkflows: { p1: { milkBased: true, steamTimers: { small: 20, medium: 30, large: 40 } } }
+      },
+      {
+        workflow: { profile: profiles[0].profile, context: { extras: { workflowSkin: { selectedProfileId: "p1" } } } },
+        machineState: { connected: true, state: { state: "idle" } }
+      }
+    );
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Steam" }));
+    fireEvent.change(screen.getByLabelText("Timer seconds Medium jug"), { target: { value: "38" } });
+
+    await waitFor(() => {
+      expect(fetchState.savedSettings.profileWorkflows.p1.steamTimers).toEqual({ small: 20, medium: 38, large: 40 });
+    });
   });
 
   it("starts the steam timer for GHC steam-like native state names", async () => {
@@ -1398,6 +1484,28 @@ describe("App shell", () => {
     );
   });
 
+  it("treats a stale configured R2 sensor as disconnected when the native device is disconnected", async () => {
+    const fetchState = mockReaFetch(
+      { ...initialSettings, r2SensorId: "F4:12:FA:FA:AC:E3" },
+      {
+        sensors: [detectedR2Sensor],
+        devices: [{ id: "F4:12:FA:FA:AC:E3", name: "DiFluid R2", type: "sensor", state: "disconnected" }],
+        scanDevicesResult: [{ id: "F4:12:FA:FA:AC:E3", name: "DiFluid R2", type: "sensor", state: "discovered" }]
+      }
+    );
+    render(<App />);
+
+    expect(await screen.findByRole("button", { name: "R2" })).toHaveAttribute("title", "R2: Not connected");
+    await userEvent.click(screen.getByRole("button", { name: "R2" }));
+
+    await waitFor(() => {
+      expect(fetchState.fetchMock).toHaveBeenCalledWith(
+        "http://localhost:8080/api/v1/devices/connect",
+        expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "F4:12:FA:FA:AC:E3" }) })
+      );
+    });
+  });
+
   it("keeps refreshing R2 after the indicator connect until the native device shows connected", async () => {
     const r2Device = (state: string): DeviceInfo => ({ id: "F4:12:FA:FA:AC:E3", name: "DiFluid R2", type: "sensor", state });
     const fetchState = mockReaFetch(
@@ -1524,6 +1632,35 @@ describe("App shell", () => {
         expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: scaleId }) })
       );
     });
+  });
+
+  it("automatically reconnects a BooKoo scale after it later appears disconnected", async () => {
+    vi.useFakeTimers();
+    const fetchState = mockReaFetch(initialSettings, {
+      devices: [{ id: "bookoo-themis", name: "BooKoo Themis", type: "sensor", state: "connected" }]
+    });
+    render(<App />);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("button", { name: "Scale" })).toHaveAttribute("title", "Scale: Connected");
+    expect(fetchState.connectCount).toBe(0);
+
+    fetchState.setDevices([{ id: "bookoo-themis", name: "BooKoo Themis", type: "sensor", state: "disconnected" }]);
+    await act(async () => {
+      vi.advanceTimersByTime(30_300);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/devices/connect",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ deviceId: "bookoo-themis" }) })
+    );
   });
 
   it("installs the configured skin update on startup when auto-update is enabled", async () => {
