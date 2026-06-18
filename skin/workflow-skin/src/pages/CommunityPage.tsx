@@ -1,11 +1,13 @@
 import { Download, RefreshCw, Upload } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Grinder, ProfileRecord, ShotRecord } from "../api/types";
 import { matchesCommunitySearch } from "../community/search";
 import type { CommunityRecommendation, DownloadedCommunityProfile, UploadedCommunityProfile } from "../community/types";
 import type { Bag } from "../lib/bags";
+import { shotTasteRating, tasteScoreLabel } from "../lib/shotTaste";
 
 type CommunityTab = "recommendations" | "recommend" | "downloaded" | "uploaded";
+type BurrTypeFilter = "flat" | "conical";
 
 export interface UploadDraft {
   bagId: string;
@@ -39,6 +41,8 @@ interface CommunityPageProps {
   onDownload: (recommendation: CommunityRecommendation) => Promise<void> | void;
   onUpload: (draft: UploadDraft) => Promise<void> | void;
   onEditUpload: (recommendation: CommunityRecommendation) => Promise<void> | void;
+  initialDraft?: Partial<UploadDraft> | null;
+  onInitialDraftApplied?: () => void;
 }
 
 const emptyDraft: UploadDraft = {
@@ -77,7 +81,38 @@ function profileTitle(profile: ProfileRecord): string {
 function shotTitle(shot: ShotRecord): string {
   const profile = shot.workflow.profile?.title ?? shot.workflow.name;
   const date = shot.timestamp ? new Date(shot.timestamp).toLocaleString() : shot.id;
-  return [date, profile].filter(Boolean).join(" - ");
+  const score = tasteScoreLabel(shotTasteRating(shot));
+  return [date, profile, score].filter(Boolean).join(" - ");
+}
+
+function isBurrTypeFilter(value: unknown): value is BurrTypeFilter {
+  return value === "flat" || value === "conical";
+}
+
+function burrTypeLabel(value: unknown): string | undefined {
+  if (value === "flat") return "Flat burrs";
+  if (value === "conical") return "Conical burrs";
+  return undefined;
+}
+
+function grinderSearchText(recommendation: CommunityRecommendation): string {
+  return [
+    recommendation.grinder.id,
+    recommendation.grinder.model,
+    recommendation.grinder.burrType,
+    burrTypeLabel(recommendation.grinder.burrType),
+    recommendation.grinder.burrs,
+    recommendation.grinder.settingType,
+    recommendation.grinder.notes
+  ]
+    .map((value) => String(value ?? ""))
+    .join(" ")
+    .toLowerCase();
+}
+
+function matchesGrinderFilter(recommendation: CommunityRecommendation, query: string): boolean {
+  const normalizedQuery = query.trim().toLowerCase();
+  return !normalizedQuery || grinderSearchText(recommendation).includes(normalizedQuery);
 }
 
 function hasText(value: string): boolean {
@@ -126,19 +161,41 @@ export function CommunityPage({
   onRefresh,
   onDownload,
   onUpload,
-  onEditUpload
+  onEditUpload,
+  initialDraft,
+  onInitialDraftApplied
 }: CommunityPageProps) {
   const [activeTab, setActiveTab] = useState<CommunityTab>("recommendations");
   const [query, setQuery] = useState("");
+  const [grinderQuery, setGrinderQuery] = useState("");
   const [draft, setDraft] = useState<UploadDraft>(emptyDraft);
+  const [burrTypeFilters, setBurrTypeFilters] = useState<Record<BurrTypeFilter, boolean>>({ flat: false, conical: false });
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [pendingDownloadId, setPendingDownloadId] = useState<string | null>(null);
   const [pendingEditId, setPendingEditId] = useState<string | null>(null);
   const displayName = submittedByLocked ? submittedBy ?? "" : manualDisplayName;
-  const filteredRecommendations = useMemo(
-    () => recommendations.filter((recommendation) => matchesCommunitySearch(recommendation, query)),
-    [recommendations, query]
+  const activeBurrTypes = useMemo(
+    () => (Object.entries(burrTypeFilters) as Array<[BurrTypeFilter, boolean]>).filter(([, active]) => active).map(([type]) => type),
+    [burrTypeFilters]
   );
+  const filteredRecommendations = useMemo(
+    () =>
+      recommendations.filter(
+        (recommendation) =>
+          matchesCommunitySearch(recommendation, query) &&
+          matchesGrinderFilter(recommendation, grinderQuery) &&
+          (activeBurrTypes.length === 0 || (isBurrTypeFilter(recommendation.grinder.burrType) && activeBurrTypes.includes(recommendation.grinder.burrType)))
+      ),
+    [activeBurrTypes, grinderQuery, recommendations, query]
+  );
+
+  useEffect(() => {
+    if (!initialDraft) return;
+    setDraft({ ...emptyDraft, ...initialDraft });
+    setActiveTab("recommend");
+    setStatus(null);
+    onInitialDraftApplied?.();
+  }, [initialDraft, onInitialDraftApplied]);
 
   const setDraftField = (field: keyof UploadDraft, value: string) => {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -221,10 +278,34 @@ export function CommunityPage({
 
       {activeTab === "recommendations" && (
         <section id="community-panel-recommendations" className="panel wide community-section" role="tabpanel" aria-labelledby="community-tab-recommendations">
-          <label className="settings-field">
-            <span>Search recommendations</span>
-            <input aria-label="Search recommendations" value={query} onChange={(event) => setQuery(event.target.value)} />
-          </label>
+          <div className="community-search-grid">
+            <label className="settings-field">
+              <span>Search recommendations</span>
+              <input aria-label="Search recommendations" value={query} onChange={(event) => setQuery(event.target.value)} />
+            </label>
+            <label className="settings-field">
+              <span>Grinder</span>
+              <input aria-label="Grinder recommendation filter" value={grinderQuery} onChange={(event) => setGrinderQuery(event.target.value)} />
+            </label>
+          </div>
+          <div className="community-filter-row" role="group" aria-label="Burrs Type filters">
+            <label className="inline-toggle">
+              <input
+                type="checkbox"
+                checked={burrTypeFilters.flat}
+                onChange={(event) => setBurrTypeFilters((current) => ({ ...current, flat: event.target.checked }))}
+              />
+              Flat burrs
+            </label>
+            <label className="inline-toggle">
+              <input
+                type="checkbox"
+                checked={burrTypeFilters.conical}
+                onChange={(event) => setBurrTypeFilters((current) => ({ ...current, conical: event.target.checked }))}
+              />
+              Conical burrs
+            </label>
+          </div>
           {error && (
             <p className="status-message error" role="alert">
               {error}
@@ -249,7 +330,14 @@ export function CommunityPage({
                     .join(" - ")}
                 </span>
                 <span>
-                  {[recommendation.grinder.model, `Grind ${recommendation.brew.grindSetting}`, `${recommendation.brew.beansWeight}g in`, `${recommendation.brew.drinkWeight}g out`, `By ${recommendation.submittedBy}`]
+                  {[
+                    recommendation.grinder.model,
+                    burrTypeLabel(recommendation.grinder.burrType),
+                    `Grind ${recommendation.brew.grindSetting}`,
+                    `${recommendation.brew.beansWeight}g in`,
+                    `${recommendation.brew.drinkWeight}g out`,
+                    `By ${recommendation.submittedBy}`
+                  ]
                     .filter(Boolean)
                     .join(" - ")}
                 </span>
@@ -312,7 +400,7 @@ export function CommunityPage({
                 <option value="">Select grinder</option>
                 {grinders.map((grinder) => (
                   <option key={grinder.id} value={grinder.id}>
-                    {grinder.model}
+                    {[grinder.model, burrTypeLabel(grinder.burrType)].filter(Boolean).join(" - ")}
                   </option>
                 ))}
               </select>

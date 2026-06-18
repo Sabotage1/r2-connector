@@ -1,4 +1,5 @@
 import type {
+  BurrType,
   AppInfo,
   Bean,
   BeanBatch,
@@ -54,6 +55,7 @@ export interface UpdateBatchPayload extends Partial<CreateBatchPayload> {
 
 export interface CreateGrinderPayload {
   model: string;
+  burrType: BurrType;
   burrs?: string;
   settingType?: "numeric" | "preset";
   notes?: string;
@@ -64,7 +66,7 @@ export interface UpdateGrinderPayload extends Partial<CreateGrinderPayload> {
   archived?: boolean;
   burrs?: string;
   burrSize?: number;
-  burrType?: string;
+  burrType?: BurrType;
   settingValues?: string[] | null;
   settingSmallStep?: number | null;
   settingBigStep?: number | null;

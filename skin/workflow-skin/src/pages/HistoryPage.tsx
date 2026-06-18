@@ -1,3 +1,4 @@
+import { Upload } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { ShotRecord } from "../api/types";
 import type { Bag } from "../lib/bags";
@@ -73,7 +74,17 @@ function historySearchText(shot: ShotRecord, bag: Bag | undefined): string {
     .join(" ");
 }
 
-export function HistoryPage({ shots, bags, onOpenShot }: { shots: ShotRecord[]; bags: Bag[]; onOpenShot?: (shot: ShotRecord) => void }) {
+export function HistoryPage({
+  shots,
+  bags,
+  onOpenShot,
+  onRecommendShot
+}: {
+  shots: ShotRecord[];
+  bags: Bag[];
+  onOpenShot?: (shot: ShotRecord) => void;
+  onRecommendShot?: (shot: ShotRecord) => void;
+}) {
   const [filters, setFilters] = useState<HistoryFilters>(emptyFilters);
   const [goldOnly, setGoldOnly] = useState(false);
   const bagById = useMemo(() => new Map(bags.map((bag) => [bag.id, bag])), [bags]);
@@ -162,16 +173,25 @@ export function HistoryPage({ shots, bags, onOpenShot }: { shots: ShotRecord[]; 
         const tone = rating === null ? "red" : tasteTone(rating);
         const golden = isGoldenShot(shot);
         const rowClassName = ["list-row", "history-shot-row", `taste-${tone}`, golden ? "golden" : ""].filter(Boolean).join(" ");
+        const title = profileTitle(shot);
         return (
-          <button type="button" className={rowClassName} key={shot.id} onClick={() => onOpenShot?.(shot)}>
-            <strong>{new Date(shot.timestamp).toLocaleString()}</strong>
-            <span>{profileTitle(shot)}</span>
-            <span>{bag ? `${bag.roaster} ${bag.bean}` : "No bag"}</span>
-            <span>
-              EY {shot.annotations?.drinkEy ?? "—"} · Grind {grindSizeFromShot(shot) ?? "—"}
-            </span>
-            <span className={`history-rating ${tone}`}>{tasteScoreLabel(rating)}</span>
-          </button>
+          <div className="history-shot-entry" key={shot.id}>
+            <button type="button" className={rowClassName} aria-label={`Open shot review for ${title}`} onClick={() => onOpenShot?.(shot)}>
+              <strong>{new Date(shot.timestamp).toLocaleString()}</strong>
+              <span>{title}</span>
+              <span>{bag ? `${bag.roaster} ${bag.bean}` : "No bag"}</span>
+              <span>
+                EY {shot.annotations?.drinkEy ?? "—"} · Grind {grindSizeFromShot(shot) ?? "—"}
+              </span>
+              <span className={`history-rating ${tone}`}>{tasteScoreLabel(rating)}</span>
+            </button>
+            {onRecommendShot && (
+              <button type="button" className="ghost-button compact-button history-recommend-button" aria-label={`Recommend profile from ${title}`} onClick={() => onRecommendShot(shot)}>
+                <Upload aria-hidden="true" size={16} />
+                Recommend
+              </button>
+            )}
+          </div>
         );
       })}
     </div>

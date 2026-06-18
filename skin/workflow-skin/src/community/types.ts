@@ -1,5 +1,7 @@
 import type { JsonMap, Profile } from "../api/types";
 
+export type CommunityBurrType = "flat" | "conical";
+
 export interface DecentAccountStatus {
   connected?: boolean;
   username?: string;
@@ -33,6 +35,7 @@ export interface CommunityProfileSnapshot {
 export interface CommunityGrinderSnapshot {
   id: string;
   model: string;
+  burrType?: CommunityBurrType;
   burrs?: string;
   settingType?: "numeric" | "preset";
   notes?: string;

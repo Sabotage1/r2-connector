@@ -1,21 +1,33 @@
 import { Star } from "lucide-react";
 import { useState } from "react";
-import type { Grinder } from "../api/types";
+import type { BurrType, Grinder } from "../api/types";
 
 interface GrinderDraft {
   id?: string;
   model: string;
+  burrType: "" | BurrType;
   burrs: string;
   settingType: "numeric" | "preset";
   notes: string;
 }
 
-const emptyGrinder: GrinderDraft = { model: "", burrs: "", settingType: "numeric", notes: "" };
+const emptyGrinder: GrinderDraft = { model: "", burrType: "", burrs: "", settingType: "numeric", notes: "" };
+
+function isBurrType(value: unknown): value is BurrType {
+  return value === "flat" || value === "conical";
+}
+
+function burrTypeLabel(value: unknown): string | undefined {
+  if (value === "flat") return "Flat burrs";
+  if (value === "conical") return "Conical burrs";
+  return undefined;
+}
 
 function grinderDraftFrom(grinder: Grinder): GrinderDraft {
   return {
     id: grinder.id,
     model: grinder.model,
+    burrType: isBurrType(grinder.burrType) ? grinder.burrType : "",
     burrs: grinder.burrs ?? "",
     settingType: grinder.settingType ?? "numeric",
     notes: grinder.notes ?? ""
@@ -23,8 +35,10 @@ function grinderDraftFrom(grinder: Grinder): GrinderDraft {
 }
 
 function grinderPayload(draft: GrinderDraft) {
+  if (!isBurrType(draft.burrType)) throw new Error("Burrs Type is required.");
   return {
     model: draft.model.trim(),
+    burrType: draft.burrType,
     burrs: draft.burrs.trim() || undefined,
     settingType: draft.settingType,
     notes: draft.notes.trim() || undefined
@@ -52,6 +66,10 @@ export function GrindersPage({
   const saveGrinder = async () => {
     if (!draft.model.trim()) {
       setStatus({ type: "error", message: "Grinder model is required." });
+      return;
+    }
+    if (!isBurrType(draft.burrType)) {
+      setStatus({ type: "error", message: "Burrs Type is required." });
       return;
     }
 
@@ -86,7 +104,7 @@ export function GrindersPage({
         {grinders.map((grinder) => (
           <div className="list-row" key={grinder.id}>
             <strong>{grinder.model}</strong>
-            <span>{[grinder.burrs, grinder.settingType, grinder.notes].filter(Boolean).join(" · ")}</span>
+            <span>{[burrTypeLabel(grinder.burrType), grinder.burrs, grinder.settingType, grinder.notes].filter(Boolean).join(" · ")}</span>
             <div className="row-actions">
               <button
                 type="button"
@@ -121,6 +139,14 @@ export function GrindersPage({
           <label>
             <span>Grinder model</span>
             <input aria-label="Grinder model" value={draft.model} onChange={(event) => setDraft({ ...draft, model: event.target.value })} />
+          </label>
+          <label>
+            <span>Burrs Type</span>
+            <select aria-label="Burrs Type" value={draft.burrType} onChange={(event) => setDraft({ ...draft, burrType: event.target.value as GrinderDraft["burrType"] })}>
+              <option value="">Choose Type</option>
+              <option value="flat">Flat</option>
+              <option value="conical">Conical</option>
+            </select>
           </label>
           <label>
             <span>Burrs</span>

@@ -500,16 +500,37 @@ describe("HistoryPage", () => {
       />
     );
 
-    const goldShot = screen.getByRole("button", { name: /Blooming espresso/i });
+    const goldShot = screen.getByRole("button", { name: "Open shot review for Blooming espresso" });
     expect(goldShot).toHaveClass("history-shot-row", "taste-gold", "golden");
     expect(within(goldShot).getByText("10/10 🔥")).toHaveClass("history-rating", "gold");
 
-    const yellowShot = screen.getByRole("button", { name: /Turbo flow/i });
+    const yellowShot = screen.getByRole("button", { name: "Open shot review for Turbo flow" });
     expect(yellowShot).toHaveClass("history-shot-row", "taste-yellow");
     expect(within(yellowShot).getByText("4/10")).toHaveClass("history-rating", "yellow");
 
     await userEvent.click(goldShot);
     expect(onOpenShot).toHaveBeenCalledWith(expect.objectContaining({ id: "shot-1" }));
+  });
+
+  it("starts a community recommendation from a history shot", async () => {
+    const onRecommendShot = vi.fn();
+    render(
+      <HistoryPage
+        shots={[
+          {
+            ...historyShots[0],
+            workflow: { ...historyShots[0].workflow, profile: { title: "Blooming espresso" } },
+            annotations: { ...historyShots[0].annotations, enjoyment: 8 }
+          }
+        ]}
+        bags={historyBags}
+        onRecommendShot={onRecommendShot}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Recommend profile from Blooming espresso" }));
+
+    expect(onRecommendShot).toHaveBeenCalledWith(expect.objectContaining({ id: "shot-1" }));
   });
 
   it("filters history to golden shots", async () => {
@@ -1302,15 +1323,29 @@ describe("BrewPage workflow controls", () => {
 });
 
 describe("GrindersPage", () => {
-  it("saves grinder burr data", async () => {
+  it("requires burrs type before saving grinder setup", async () => {
     const onCreateGrinder = vi.fn().mockResolvedValue(undefined);
     render(<GrindersPage grinders={[]} onCreateGrinder={onCreateGrinder} onUpdateGrinder={vi.fn()} onArchiveGrinder={vi.fn()} />);
 
     await userEvent.type(screen.getByLabelText("Grinder model"), "ZP6");
+    expect(screen.getByLabelText("Burrs Type")).toHaveValue("");
+    expect(screen.getByRole("option", { name: "Choose Type" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Save grinder" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Burrs Type is required.");
+    expect(onCreateGrinder).not.toHaveBeenCalled();
+  });
+
+  it("saves grinder burr data and burrs type", async () => {
+    const onCreateGrinder = vi.fn().mockResolvedValue(undefined);
+    render(<GrindersPage grinders={[]} onCreateGrinder={onCreateGrinder} onUpdateGrinder={vi.fn()} onArchiveGrinder={vi.fn()} />);
+
+    await userEvent.type(screen.getByLabelText("Grinder model"), "ZP6");
+    await userEvent.selectOptions(screen.getByLabelText("Burrs Type"), "flat");
     await userEvent.type(screen.getByLabelText("Burrs"), "MP burrs");
     await userEvent.click(screen.getByRole("button", { name: "Save grinder" }));
 
-    expect(onCreateGrinder).toHaveBeenCalledWith(expect.objectContaining({ model: "ZP6", burrs: "MP burrs" }));
+    expect(onCreateGrinder).toHaveBeenCalledWith(expect.objectContaining({ model: "ZP6", burrType: "flat", burrs: "MP burrs" }));
   });
 
   it("stars the default grinder", async () => {
@@ -1363,12 +1398,12 @@ describe("CommunityPage", () => {
     submittedBy: "Roy",
     bag: { id: "bag-1", beanId: "bean-1", roaster: "Pilot", name: "Halo", bean: "Ethiopia Halo", country: "Ethiopia", process: "Washed", roastDate: "2026-06-01" },
     profile: { originalId: "p1", originalTitle: "Blooming", fileName: "rec-12345678.json", installedTitle: "Blooming - Halo - Roy" },
-    grinder: { id: "g1", model: "ZP6", settingType: "numeric" as const },
+    grinder: { id: "g1", model: "ZP6", burrType: "flat" as const, settingType: "numeric" as const },
     brew: { grindSetting: "4.2", beansWeight: 18, drinkWeight: 42, secondsMin: 28, secondsMax: 34, notes: "Gentle declining pressure" }
   };
   const bags = [{ id: "bag-1", beanId: "bean-1", roaster: "Pilot", name: "Halo", bean: "Ethiopia Halo", country: "Ethiopia", process: "Washed", roastDate: "2026-06-01" }];
-  const grinders = [{ id: "g1", model: "ZP6", settingType: "numeric" as const }];
-  const shots = [{ id: "shot-1", timestamp: "2026-06-18T10:00:00.000Z", workflow: { profile: { title: "Blooming" } } }];
+  const grinders = [{ id: "g1", model: "ZP6", burrType: "flat" as const, settingType: "numeric" as const }];
+  const shots = [{ id: "shot-1", timestamp: "2026-06-18T10:00:00.000Z", workflow: { profile: { title: "Blooming" } }, annotations: { enjoyment: 8 } }];
 
   async function renderCommunityPage(overrides = {}) {
     const { CommunityPage } = await import("../pages/CommunityPage");
@@ -1414,6 +1449,13 @@ describe("CommunityPage", () => {
     await userEvent.type(screen.getByLabelText("Notes"), "Gentle declining pressure");
   }
 
+  it("shows shot scores when choosing shot evidence", async () => {
+    await renderCommunityPage();
+    await openRecommendProfile();
+
+    expect(screen.getByRole("option", { name: /8\/10/ })).toHaveTextContent("Blooming");
+  });
+
   it("shows searchable recommendations and download actions", async () => {
     const { CommunityPage } = await import("../pages/CommunityPage");
     render(
@@ -1440,7 +1482,40 @@ describe("CommunityPage", () => {
     expect(screen.getByRole("heading", { name: "Community" })).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("Search recommendations"), "zp6");
     expect(screen.getByText("Blooming")).toBeInTheDocument();
+    expect(within(screen.getByText("Blooming").closest(".community-row") as HTMLElement).getByText(/Flat burrs/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Download Blooming" })).toBeInTheDocument();
+  });
+
+  it("searches and filters recommendations by flat or conical burrs type", async () => {
+    const conicalRecommendation = {
+      ...recommendation,
+      id: "rec-conical",
+      profile: { ...recommendation.profile, originalTitle: "Turbo", installedTitle: "Turbo - Halo - Mia" },
+      grinder: { ...recommendation.grinder, id: "g2", model: "Niche Zero", burrType: "conical" as const }
+    };
+    await renderCommunityPage({ recommendations: [recommendation, conicalRecommendation] });
+
+    expect(screen.getByText("Blooming")).toBeInTheDocument();
+    expect(screen.getByText("Turbo")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("checkbox", { name: "Flat burrs" }));
+    expect(screen.getByText("Blooming")).toBeInTheDocument();
+    expect(screen.queryByText("Turbo")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Flat burrs" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Conical burrs" }));
+    expect(screen.queryByText("Blooming")).not.toBeInTheDocument();
+    expect(screen.getByText("Turbo")).toBeInTheDocument();
+
+    await userEvent.clear(screen.getByLabelText("Search recommendations"));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Conical burrs" }));
+    await userEvent.type(screen.getByLabelText("Search recommendations"), "flat");
+    expect(screen.getByText("Blooming")).toBeInTheDocument();
+    expect(screen.queryByText("Turbo")).not.toBeInTheDocument();
+
+    await userEvent.clear(screen.getByLabelText("Search recommendations"));
+    await userEvent.type(screen.getByLabelText("Grinder recommendation filter"), "niche");
+    expect(screen.queryByText("Blooming")).not.toBeInTheDocument();
+    expect(screen.getByText("Turbo")).toBeInTheDocument();
   });
 
   it("shows download success status after the download promise resolves", async () => {

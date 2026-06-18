@@ -337,7 +337,7 @@ describe("ReaPrimeApi", () => {
     await expect((api as any).listSteams()).resolves.toEqual({ id: "ok" });
     await expect((api as any).updateBean("bean/1", { name: "Halo v2" })).resolves.toEqual({ id: "ok" });
     await expect((api as any).updateBatch("batch/1", { roastLevel: "Light" })).resolves.toEqual({ id: "ok" });
-    await expect((api as any).createGrinder({ model: "ZP6", settingType: "numeric" })).resolves.toEqual({ id: "ok" });
+    await expect((api as any).createGrinder({ model: "ZP6", burrType: "flat", settingType: "numeric" })).resolves.toEqual({ id: "ok" });
     await expect((api as any).updateGrinder("grinder/1", { notes: "Seasoned" })).resolves.toEqual({ id: "ok" });
 
     expect(fetch).toHaveBeenCalledWith("http://machine:8080/api/v1/steams", expect.objectContaining({ method: "GET" }));
@@ -351,7 +351,7 @@ describe("ReaPrimeApi", () => {
     );
     expect(fetch).toHaveBeenCalledWith(
       "http://machine:8080/api/v1/grinders",
-      expect.objectContaining({ method: "POST", body: JSON.stringify({ model: "ZP6", settingType: "numeric" }) })
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ model: "ZP6", burrType: "flat", settingType: "numeric" }) })
     );
     expect(fetch).toHaveBeenCalledWith(
       "http://machine:8080/api/v1/grinders/grinder%2F1",

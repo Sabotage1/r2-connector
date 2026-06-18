@@ -30,7 +30,7 @@ const recommendation: CommunityRecommendation = {
     fileName: "rec-12345678.json",
     installedTitle: "Blooming - Halo - Roy"
   },
-  grinder: { id: "grinder-1", model: "ZP6", settingType: "numeric" },
+  grinder: { id: "grinder-1", model: "ZP6", burrType: "flat", settingType: "numeric" },
   brew: {
     grindSetting: "4.2",
     beansWeight: 18,
@@ -103,6 +103,7 @@ describe("community search helpers", () => {
   it("matches across bag, recommendation, grinder, and brew fields", () => {
     expect(matchesCommunitySearch(recommendation, "yirgacheffe")).toBe(true);
     expect(matchesCommunitySearch(recommendation, "zp6")).toBe(true);
+    expect(matchesCommunitySearch(recommendation, "flat")).toBe(true);
     expect(matchesCommunitySearch(recommendation, "gentle declining")).toBe(true);
     expect(matchesCommunitySearch(recommendation, "declining pressure")).toBe(true);
     expect(matchesCommunitySearch(recommendation, "rec-12345678")).toBe(true);

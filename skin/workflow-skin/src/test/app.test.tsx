@@ -38,7 +38,7 @@ const communityRecommendation: CommunityRecommendation = {
     fileName: "rec-12345678.json",
     installedTitle: "Blooming - Halo - Roy"
   },
-  grinder: { id: "g1", model: "ZP6", settingType: "numeric" },
+  grinder: { id: "g1", model: "ZP6", burrType: "flat", settingType: "numeric" },
   brew: {
     grindSetting: "4.2",
     beansWeight: 18,
@@ -701,7 +701,7 @@ describe("App shell", () => {
       batchesByBeanId: {
         "bean-1": [{ id: "batch-1", beanId: "bean-1", roastDate: "2026-06-01", roastLevel: "Light", notes: "batch notes", extras: { workflowSkin: { name: "Halo" } } }]
       },
-      grinders: [{ id: "g1", model: "ZP6", settingType: "numeric", burrs: "MP", notes: "travel grinder" }]
+      grinders: [{ id: "g1", model: "ZP6", settingType: "numeric", burrType: "flat", burrs: "MP", notes: "travel grinder" }]
     });
     render(<App />);
 
@@ -743,6 +743,7 @@ describe("App shell", () => {
             id: "g1",
             model: "ZP6",
             burrs: "MP",
+            burrType: "flat",
             settingType: "numeric"
           }),
           brew: {
@@ -792,7 +793,7 @@ describe("App shell", () => {
           submittedBy: "Roy",
           bag: expect.objectContaining({ id: "batch-1", name: "Halo" }),
           profile: expect.objectContaining({ originalId: "p1", originalTitle: "Blooming" }),
-          grinder: expect.objectContaining({ id: "g1", model: "ZP6" }),
+          grinder: expect.objectContaining({ id: "g1", model: "ZP6", burrType: "flat" }),
           brew: expect.objectContaining({ grindSetting: "4.2", beansWeight: 18 })
         }),
         profileJson: expect.objectContaining({ title: "Blooming", notes: "Updated local profile notes" })
@@ -1764,11 +1765,81 @@ describe("App shell", () => {
     render(<App />);
 
     await userEvent.click(await screen.findByRole("button", { name: "History" }));
-    await userEvent.click(await screen.findByRole("button", { name: /History espresso/i }));
+    await userEvent.click(await screen.findByRole("button", { name: "Open shot review for History espresso" }));
 
     expect(await screen.findByRole("heading", { name: "Shot Review" })).toBeInTheDocument();
     expect(screen.getByText("Duration: 12s")).toBeInTheDocument();
     expect(screen.getByText("Yield: 24 g")).toBeInTheDocument();
+  });
+
+  it("prefills a community recommendation from history shot data", async () => {
+    profiles = [{ id: "p1", profile: { title: "Blooming", notes: "Profile notes", steps: [{ name: "Bloom", pressure: 2 }] } }];
+    const shot: ShotRecord = {
+      id: "history-rec-shot",
+      timestamp: "2026-06-18T08:00:00.000Z",
+      workflow: {
+        profile: { title: "History espresso" },
+        context: {
+          extras: { workflowSkin: { selectedProfileId: "p1", grindSize: "4.4" } },
+          beanBatchId: "batch-1",
+          grinderId: "g1",
+          targetDoseWeight: 18,
+          targetYield: 42
+        }
+      },
+      annotations: { actualDoseWeight: 18.2, actualYield: 41.8, espressoNotes: "Sweet citrus", enjoyment: 8 },
+      measurements: [
+        { machine: { timestamp: "2026-06-18T08:00:00.000Z", pressure: 1 }, scale: { weight: 0 } },
+        { machine: { timestamp: "2026-06-18T08:00:31.000Z", pressure: 8 }, scale: { weight: 41.8 } }
+      ]
+    };
+    const fetchState = mockReaFetch(initialSettings, {
+      decentAccount: { connected: true, username: "royack" },
+      shots: [shot],
+      beans: [{ id: "bean-1", roaster: "Pilot", name: "Ethiopia Halo", country: "Ethiopia", region: "Yirgacheffe", processing: "Washed", notes: "floral" }],
+      batchesByBeanId: {
+        "bean-1": [{ id: "batch-1", beanId: "bean-1", roastDate: "2026-06-01", roastLevel: "Light", notes: "batch notes", extras: { workflowSkin: { name: "Halo" } } }]
+      },
+      grinders: [{ id: "g1", model: "ZP6", settingType: "numeric", burrType: "flat", burrs: "MP", notes: "travel grinder" }]
+    });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "History" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Recommend profile from History espresso" }));
+
+    expect(await screen.findByRole("heading", { name: "Community" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Recommend Profile" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByLabelText("Saved bag")).toHaveValue("batch-1");
+    expect(screen.getByLabelText("Profile")).toHaveValue("p1");
+    expect(screen.getByLabelText("Grinder")).toHaveValue("g1");
+    expect(screen.getByLabelText("Grind setting")).toHaveValue("4.4");
+    expect(screen.getByLabelText("Beans weight")).toHaveValue("18.2");
+    expect(screen.getByLabelText("Drink weight")).toHaveValue("41.8");
+    expect(screen.getByLabelText("Seconds min")).toHaveValue("31");
+    expect(screen.getByLabelText("Seconds max")).toHaveValue("31");
+    expect(screen.getByLabelText("Shot evidence")).toHaveValue("history-rec-shot");
+    expect(screen.getByRole("option", { name: /8\/10/ })).toBeInTheDocument();
+    expect(screen.getByLabelText("Notes")).toHaveValue("Sweet citrus");
+
+    await userEvent.click(screen.getByRole("button", { name: "Upload recommendation" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Recommendation uploaded.");
+    expect(fetchState.communityCreatePayloads[0]).toEqual(
+      expect.objectContaining({
+        recommendation: expect.objectContaining({
+          grinder: expect.objectContaining({ id: "g1", burrType: "flat" }),
+          brew: expect.objectContaining({
+            grindSetting: "4.4",
+            beansWeight: 18.2,
+            drinkWeight: 41.8,
+            secondsMin: 31,
+            secondsMax: 31,
+            notes: "Sweet citrus"
+          })
+        }),
+        evidence: expect.objectContaining({ id: "history-rec-shot", enjoyment: 8, grindSetting: "4.4", grinderId: "g1" })
+      })
+    );
   });
 
   it("saves Beanie machine settings through native machine endpoints", async () => {

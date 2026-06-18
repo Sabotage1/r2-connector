@@ -977,10 +977,26 @@ textarea {
   font-weight: 800;
 }
 
+.history-shot-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.history-shot-entry + .history-shot-entry {
+  margin-top: 10px;
+}
+
 .history-shot-row {
   grid-template-columns: minmax(150px, 0.9fr) minmax(160px, 1.1fr) minmax(160px, 1fr) minmax(140px, 0.9fr) auto;
   align-items: center;
   cursor: pointer;
+}
+
+.history-recommend-button {
+  align-self: stretch;
+  white-space: nowrap;
 }
 
 .history-shot-row.taste-red {
@@ -1946,8 +1962,14 @@ textarea {
   .profile-step-limits,
   .review-comparison-grid,
   .review-shot-row,
-  .history-shot-row {
+  .history-shot-row,
+  .history-shot-entry,
+  .community-search-grid {
     grid-template-columns: 1fr;
+  }
+
+  .history-recommend-button {
+    justify-self: stretch;
   }
 
   .history-rating {
@@ -2000,6 +2022,19 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.community-search-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.42fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.community-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .community-row p {

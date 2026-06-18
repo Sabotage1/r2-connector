@@ -1,4 +1,5 @@
 import type { ShotRecord, ShotSnapshot } from "../api/types";
+import { grindSizeFromShot } from "../lib/shotStats";
 import type { CommunityShotEvidence } from "./types";
 
 function setDefined(target: Record<string, unknown>, key: string, value: unknown): void {
@@ -43,6 +44,13 @@ function sanitizeMeasurement(measurement: ShotSnapshot): Record<string, unknown>
   return sanitized;
 }
 
+function contextWorkflowSkinGrindSize(shot: ShotRecord): string | undefined {
+  const workflowSkin = shot.workflow.context?.extras?.workflowSkin;
+  if (!workflowSkin || typeof workflowSkin !== "object" || Array.isArray(workflowSkin)) return undefined;
+  const grindSize = (workflowSkin as { grindSize?: unknown }).grindSize;
+  return typeof grindSize === "string" && grindSize.trim() ? grindSize.trim() : undefined;
+}
+
 export function sanitizeShotEvidence(shot: ShotRecord): CommunityShotEvidence {
   return {
     id: shot.id,
@@ -54,7 +62,7 @@ export function sanitizeShotEvidence(shot: ShotRecord): CommunityShotEvidence {
     ey: shot.annotations?.drinkEy,
     enjoyment: shot.annotations?.enjoyment,
     notes: shot.annotations?.espressoNotes ?? shot.shotNotes,
-    grindSetting: shot.workflow.context?.grinderSetting,
+    grindSetting: grindSizeFromShot(shot) ?? contextWorkflowSkinGrindSize(shot),
     grinderId: shot.workflow.context?.grinderId,
     measurements: shot.measurements?.map(sanitizeMeasurement)
   };

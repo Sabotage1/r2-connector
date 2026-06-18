@@ -1,4 +1,5 @@
 export type JsonMap = Record<string, unknown>;
+export type BurrType = "flat" | "conical";
 
 export interface Profile {
   title?: string;
@@ -85,7 +86,7 @@ export interface Grinder {
   model: string;
   burrs?: string;
   burrSize?: number;
-  burrType?: string;
+  burrType?: BurrType | string;
   settingType?: "numeric" | "preset";
   settingValues?: string[] | null;
   settingSmallStep?: number | null;

@@ -21,6 +21,7 @@ import { CommunityApi } from "./api/community";
 import { apiBaseUrl, ReaPrimeApi, ReaPrimeApiError, type CreateGrinderPayload } from "./api/reaprime";
 import { findDifluidR2Sensor } from "./api/sensors";
 import type {
+  BurrType,
   DecentAccountStatus,
   De1AdvancedMachineSettings,
   De1MachineCalibration,
@@ -47,6 +48,7 @@ import { buildConnectivityStatuses } from "./lib/connectivity";
 import type { ConnectivityStatus } from "./lib/connectivity";
 import { trimLiveGraphWarmup } from "./lib/liveMeasurements";
 import { machineModeLabel, machineTemperature } from "./lib/machineState";
+import { grindSizeFromShot, shotStats } from "./lib/shotStats";
 import { selectedProfileIdFromWorkflow, type CompletedWorkflowActivity } from "./lib/workflowRouting";
 import { BagsPage } from "./pages/BagsPage";
 import { BrewPage } from "./pages/BrewPage";
@@ -521,6 +523,48 @@ function mergeReviewShot(cachedShot: ShotRecord | null, refreshedShot: ShotRecor
   };
 }
 
+function isBurrType(value: unknown): value is BurrType {
+  return value === "flat" || value === "conical";
+}
+
+function positiveNumber(value: number | null | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function draftNumber(value: number | null | undefined): string {
+  const positive = positiveNumber(value);
+  return positive === undefined ? "" : String(Math.round(positive * 100) / 100);
+}
+
+function contextWorkflowSkinGrindSize(shot: ShotRecord): string | undefined {
+  const workflowSkin = shot.workflow.context?.extras?.workflowSkin;
+  if (!workflowSkin || typeof workflowSkin !== "object" || Array.isArray(workflowSkin)) return undefined;
+  const grindSize = (workflowSkin as { grindSize?: unknown }).grindSize;
+  return typeof grindSize === "string" && grindSize.trim() ? grindSize.trim() : undefined;
+}
+
+function communityUploadDraftFromShot(shot: ShotRecord, profiles: ProfileRecord[]): UploadDraft {
+  const context = shot.workflow.context;
+  const stats = shotStats(shot);
+  const seconds = positiveNumber(stats.durationSeconds);
+  const dose = positiveNumber(shot.annotations?.actualDoseWeight) ?? positiveNumber(context?.targetDoseWeight);
+  const drinkWeight = positiveNumber(shot.annotations?.actualYield) ?? positiveNumber(stats.finalYield) ?? positiveNumber(context?.targetYield) ?? positiveNumber(shot.workflow.profile?.target_weight);
+  const notes = (shot.annotations?.espressoNotes ?? shot.shotNotes ?? "").trim();
+  return {
+    bagId: context?.beanBatchId ?? "",
+    profileId: selectedProfileIdFromWorkflow(shot.workflow, profiles) ?? "",
+    grinderId: context?.grinderId ?? "",
+    grindSetting: grindSizeFromShot(shot) ?? contextWorkflowSkinGrindSize(shot) ?? "",
+    beansWeight: draftNumber(dose),
+    drinkWeight: draftNumber(drinkWeight),
+    secondsMin: draftNumber(seconds),
+    secondsMax: draftNumber(seconds),
+    notes,
+    visualizerUrl: "",
+    shotId: shot.id
+  };
+}
+
 function formatTopNumber(value: number | null | undefined, unit: string): string {
   return typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(1)}${unit}` : "—";
 }
@@ -654,6 +698,7 @@ export function App() {
   const [downloadedCommunityProfiles, setDownloadedCommunityProfiles] = useState<DownloadedCommunityProfile[]>([]);
   const [uploadedCommunityProfiles, setUploadedCommunityProfiles] = useState<UploadedCommunityProfile[]>([]);
   const [decentAccount, setDecentAccount] = useState<DecentAccountStatus | null>(null);
+  const [communityInitialDraft, setCommunityInitialDraft] = useState<Partial<UploadDraft> | null>(null);
   const startupProfileApplyRef = useRef<{ profileId: string | null; attempts: number; pending: boolean; complete: boolean }>({
     profileId: null,
     attempts: 0,
@@ -816,6 +861,7 @@ export function App() {
       const accountName = publicNameFromDecentAccount(decentAccount);
       const submittedBy = accountName ?? communityDisplayName.trim();
       if (!bag || !profile || !grinder || !submittedBy) throw new Error("Community upload is missing required local records.");
+      if (!isBurrType(grinder.burrType)) throw new Error("Selected grinder is missing Burrs Type.");
       if (!accountName) await saveCommunityDisplayName(api, submittedBy);
       const ownerKey = await getOrCreateCommunityOwnerKey(api);
       const selectedShot = draft.shotId ? data.shots.find((shot) => shot.id === draft.shotId) : undefined;
@@ -845,6 +891,7 @@ export function App() {
           grinder: {
             id: grinder.id,
             model: grinder.model,
+            burrType: grinder.burrType,
             burrs: grinder.burrs,
             settingType: grinder.settingType,
             notes: grinder.notes
@@ -910,6 +957,16 @@ export function App() {
     },
     [api, communityApi, data.profiles, uploadedCommunityProfiles]
   );
+
+  const recommendHistoryShot = (shot: ShotRecord) => {
+    setStatus(null);
+    setCommunityInitialDraft(communityUploadDraftFromShot(shot, data.profiles));
+    setPage("community");
+  };
+
+  const clearCommunityInitialDraft = useCallback(() => {
+    setCommunityInitialDraft(null);
+  }, []);
 
   const applyProfile = async (profile: ProfileRecord, options: { optimistic?: boolean } = {}) => {
     const extras = data.workflow.context?.extras ?? {};
@@ -2136,7 +2193,7 @@ export function App() {
             onSaveProfile={saveProfile}
           />
         )}
-        {page === "history" && <HistoryPage shots={data.shots} bags={data.bags} onOpenShot={(shot) => void openHistoryShotReview(shot)} />}
+        {page === "history" && <HistoryPage shots={data.shots} bags={data.bags} onOpenShot={(shot) => void openHistoryShotReview(shot)} onRecommendShot={recommendHistoryShot} />}
         {page === "community" && (
           <CommunityPage
             recommendations={communityRecommendations}
@@ -2156,6 +2213,8 @@ export function App() {
             onDownload={downloadCommunityProfile}
             onUpload={uploadCommunityProfile}
             onEditUpload={editCommunityUpload}
+            initialDraft={communityInitialDraft}
+            onInitialDraftApplied={clearCommunityInitialDraft}
           />
         )}
         {page === "settings" && (
