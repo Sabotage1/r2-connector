@@ -1,4 +1,4 @@
-import type { JsonMap, Profile, ShotSnapshot } from "../api/types";
+import type { JsonMap, Profile } from "../api/types";
 
 export interface DecentAccountStatus {
   connected?: boolean;
@@ -13,14 +13,14 @@ export interface CommunityBagSnapshot {
   id: string;
   beanId: string;
   roaster: string;
-  name: string;
+  name?: string;
   bean: string;
   country: string;
-  region: string;
+  region?: string;
   process: string;
   roastDate: string;
-  roastLevel: string;
-  notes: string;
+  roastLevel?: string;
+  notes?: string;
 }
 
 export interface CommunityProfileSnapshot {
@@ -32,12 +32,9 @@ export interface CommunityProfileSnapshot {
 
 export interface CommunityGrinderSnapshot {
   id: string;
-  manufacturer?: string;
   model: string;
   burrs?: string;
-  burrSize?: number;
-  burrType?: string;
-  settingType: "numeric" | "preset";
+  settingType?: "numeric" | "preset";
   notes?: string;
 }
 
@@ -45,15 +42,15 @@ export interface CommunityBrewRecommendation {
   grindSetting: string;
   beansWeight: number;
   drinkWeight: number;
-  secondsMin: number;
-  secondsMax: number;
   secondsGoal?: number;
+  secondsMin?: number;
+  secondsMax?: number;
   notes: string;
 }
 
 export interface CommunityShotEvidence {
   id: string;
-  timestamp: string;
+  timestamp?: string;
   profileTitle?: string;
   doseWeight?: number;
   drinkWeight?: number;
@@ -63,7 +60,7 @@ export interface CommunityShotEvidence {
   notes?: string;
   grindSetting?: string;
   grinderId?: string;
-  measurements?: ShotSnapshot[];
+  measurements?: unknown[];
 }
 
 export interface CommunityRecommendation {
