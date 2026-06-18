@@ -12,13 +12,16 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Users
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import skinManifest from "../skin-manifest.json";
+import { CommunityApi } from "./api/community";
 import { apiBaseUrl, ReaPrimeApi, ReaPrimeApiError, type CreateGrinderPayload } from "./api/reaprime";
 import { findDifluidR2Sensor } from "./api/sensors";
 import type {
+  DecentAccountStatus,
   De1AdvancedMachineSettings,
   De1MachineCalibration,
   DeviceInfo,
@@ -35,6 +38,10 @@ import type {
   Workflow
 } from "./api/types";
 import { uploadShotToVisualizer } from "./api/visualizer";
+import { sanitizeShotEvidence } from "./community/evidence";
+import { publicNameFromDecentAccount } from "./community/identity";
+import { profilePayloadForCommunityInstall } from "./community/profileInstall";
+import type { CommunityRecommendation, DownloadedCommunityProfile, UploadedCommunityProfile } from "./community/types";
 import type { Bag } from "./lib/bags";
 import { buildConnectivityStatuses } from "./lib/connectivity";
 import type { ConnectivityStatus } from "./lib/connectivity";
@@ -43,6 +50,7 @@ import { machineModeLabel, machineTemperature } from "./lib/machineState";
 import { selectedProfileIdFromWorkflow, type CompletedWorkflowActivity } from "./lib/workflowRouting";
 import { BagsPage } from "./pages/BagsPage";
 import { BrewPage } from "./pages/BrewPage";
+import { CommunityPage, type UploadDraft } from "./pages/CommunityPage";
 import { GrindersPage } from "./pages/GrindersPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { LivePage } from "./pages/LivePage";
@@ -63,6 +71,15 @@ import {
   type SkinSettings,
   type TopStatusIndicatorId
 } from "./state/skinSettings";
+import {
+  getOrCreateCommunityOwnerKey,
+  loadCommunityDisplayName,
+  loadDownloadedCommunityProfiles,
+  loadUploadedCommunityProfiles,
+  saveCommunityDisplayName,
+  saveDownloadedCommunityProfiles,
+  saveUploadedCommunityProfiles
+} from "./state/communityStorage";
 import { useLiveTelemetry } from "./state/useLiveTelemetry";
 import { useReaData } from "./state/useReaData";
 
@@ -90,6 +107,7 @@ const navById: Record<MainMenuItemId, { label: string; icon: React.ComponentType
   bags: { label: MAIN_MENU_ITEM_LABELS.bags, icon: PackageOpen },
   profiles: { label: MAIN_MENU_ITEM_LABELS.profiles, icon: SlidersHorizontal },
   grinders: { label: MAIN_MENU_ITEM_LABELS.grinders, icon: Gauge },
+  community: { label: MAIN_MENU_ITEM_LABELS.community, icon: Users },
   history: { label: MAIN_MENU_ITEM_LABELS.history, icon: History },
   settings: { label: MAIN_MENU_ITEM_LABELS.settings, icon: Settings }
 };
@@ -629,6 +647,13 @@ export function App() {
   const [lastCompletedProfileId, setLastCompletedProfileId] = useState<string | undefined>();
   const [fastMachineState, setFastMachineState] = useState<MachineState | null>(null);
   const [completedReviewShot, setCompletedReviewShot] = useState<ShotRecord | null>(null);
+  const [communityRecommendations, setCommunityRecommendations] = useState<CommunityRecommendation[]>([]);
+  const [communityError, setCommunityError] = useState<string | null>(null);
+  const [communityLoading, setCommunityLoading] = useState(false);
+  const [communityDisplayName, setCommunityDisplayName] = useState("");
+  const [downloadedCommunityProfiles, setDownloadedCommunityProfiles] = useState<DownloadedCommunityProfile[]>([]);
+  const [uploadedCommunityProfiles, setUploadedCommunityProfiles] = useState<UploadedCommunityProfile[]>([]);
+  const [decentAccount, setDecentAccount] = useState<DecentAccountStatus | null>(null);
   const startupProfileApplyRef = useRef<{ profileId: string | null; attempts: number; pending: boolean; complete: boolean }>({
     profileId: null,
     attempts: 0,
@@ -653,6 +678,7 @@ export function App() {
   });
   const api = useMemo(() => new ReaPrimeApi(), []);
   const data = useReaData(api);
+  const communityApi = useMemo(() => new CommunityApi(data.settings.communityApiBaseUrl), [data.settings.communityApiBaseUrl]);
   const liveTelemetry = useLiveTelemetry(undefined, { recordIdle: page === "live" });
   const latestShot = data.shots[0] ?? null;
   const nativeDevices = data.devices ?? [];
@@ -729,6 +755,124 @@ export function App() {
   const topMachineStatus = machineModeLabel(data.machineState, topLiveMachine);
   const topMachineTemperature = machineTemperature(data.machineState, topLiveMachine);
   const topMachineSummary = `${topMachineStatus}${topMachineTemperature === null ? "" : ` · ${topMachineTemperature.toFixed(1)}°C`}`;
+
+  const refreshCommunity = useCallback(async () => {
+    setCommunityLoading(true);
+    try {
+      const [index, account, displayName, downloaded, uploaded] = await Promise.all([
+        communityApi.listRecommendations(),
+        api.getDecentAccount().catch(() => null),
+        loadCommunityDisplayName(api),
+        loadDownloadedCommunityProfiles(api),
+        loadUploadedCommunityProfiles(api)
+      ]);
+      setCommunityRecommendations(index.items);
+      setDecentAccount(account);
+      setCommunityDisplayName(displayName ?? "");
+      setDownloadedCommunityProfiles(downloaded);
+      setUploadedCommunityProfiles(uploaded);
+      setCommunityError(null);
+    } catch (error) {
+      setCommunityError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCommunityLoading(false);
+    }
+  }, [api, communityApi]);
+
+  useEffect(() => {
+    if (page === "community") void refreshCommunity();
+  }, [page, refreshCommunity]);
+
+  const downloadCommunityProfile = useCallback(
+    async (recommendation: CommunityRecommendation) => {
+      const payload = await communityApi.download(recommendation.id);
+      const existing = downloadedCommunityProfiles.find((item) => item.recommendationId === recommendation.id);
+      const installPayload = profilePayloadForCommunityInstall(payload.recommendation, payload.profileJson);
+      const savedProfile = existing ? await api.updateProfile(existing.localProfileId, installPayload) : await api.createProfile(installPayload);
+      const record: DownloadedCommunityProfile = {
+        recommendationId: recommendation.id,
+        localProfileId: savedProfile.id,
+        localProfileTitle: savedProfile.profile.title ?? recommendation.profile.installedTitle,
+        downloadedAt: existing?.downloadedAt ?? new Date().toISOString(),
+        updatedAt: recommendation.updatedAt,
+        recommendation: payload.recommendation,
+        evidence: payload.evidence
+      };
+      const next = [record, ...downloadedCommunityProfiles.filter((item) => item.recommendationId !== recommendation.id)];
+      await saveDownloadedCommunityProfiles(api, next);
+      setDownloadedCommunityProfiles(next);
+      await data.refresh();
+    },
+    [api, communityApi, data, downloadedCommunityProfiles]
+  );
+
+  const uploadCommunityProfile = useCallback(
+    async (draft: UploadDraft) => {
+      const bag = data.bags.find((item) => item.id === draft.bagId);
+      const profile = data.profiles.find((item) => item.id === draft.profileId);
+      const grinder = data.grinders.find((item) => item.id === draft.grinderId);
+      const accountName = publicNameFromDecentAccount(decentAccount);
+      const submittedBy = accountName ?? communityDisplayName.trim();
+      if (!bag || !profile || !grinder || !submittedBy) throw new Error("Community upload is missing required local records.");
+      if (!accountName) await saveCommunityDisplayName(api, submittedBy);
+      const ownerKey = await getOrCreateCommunityOwnerKey(api);
+      const selectedShot = draft.shotId ? data.shots.find((shot) => shot.id === draft.shotId) : undefined;
+      const result = await communityApi.create({
+        ownerKey,
+        recommendation: {
+          submittedBy,
+          bag: {
+            id: bag.id,
+            beanId: bag.beanId,
+            roaster: bag.roaster ?? "",
+            name: bag.name,
+            bean: bag.bean ?? "",
+            country: bag.country ?? "",
+            region: bag.region,
+            process: bag.process ?? "",
+            roastDate: bag.roastDate ?? "",
+            roastLevel: bag.roastLevel,
+            notes: bag.notes
+          },
+          profile: {
+            originalId: profile.id,
+            originalTitle: profile.profile.title ?? profile.id,
+            fileName: "pending.json",
+            installedTitle: profile.profile.title ?? profile.id
+          },
+          grinder: {
+            id: grinder.id,
+            model: grinder.model,
+            burrs: grinder.burrs,
+            settingType: grinder.settingType,
+            notes: grinder.notes
+          },
+          brew: {
+            grindSetting: draft.grindSetting.trim(),
+            beansWeight: Number(draft.beansWeight),
+            drinkWeight: Number(draft.drinkWeight),
+            secondsMin: Number(draft.secondsMin),
+            secondsMax: Number(draft.secondsMax),
+            notes: draft.notes.trim()
+          },
+          visualizerUrl: draft.visualizerUrl.trim() || undefined
+        },
+        profileJson: profile.profile,
+        evidence: selectedShot ? sanitizeShotEvidence(selectedShot) : undefined
+      });
+      const record: UploadedCommunityProfile = {
+        recommendationId: result.recommendation.id,
+        uploadedAt: new Date().toISOString(),
+        updatedAt: result.recommendation.updatedAt,
+        recommendation: result.recommendation
+      };
+      const next = [record, ...uploadedCommunityProfiles.filter((item) => item.recommendationId !== record.recommendationId)];
+      await saveUploadedCommunityProfiles(api, next);
+      setUploadedCommunityProfiles(next);
+      setCommunityRecommendations(result.index.items);
+    },
+    [api, communityApi, communityDisplayName, data.bags, data.grinders, data.profiles, data.shots, decentAccount, uploadedCommunityProfiles]
+  );
 
   const applyProfile = async (profile: ProfileRecord, options: { optimistic?: boolean } = {}) => {
     const extras = data.workflow.context?.extras ?? {};
@@ -1821,7 +1965,7 @@ export function App() {
         )}
       </nav>
       <section className="page-surface">
-        {page !== "bags" && <h1>{navById[page].label}</h1>}
+        {page !== "bags" && page !== "community" && <h1>{navById[page].label}</h1>}
         {data.error && (
           <p className="muted" role="alert" aria-live="assertive">
             {data.error}
@@ -1956,6 +2100,27 @@ export function App() {
           />
         )}
         {page === "history" && <HistoryPage shots={data.shots} bags={data.bags} onOpenShot={(shot) => void openHistoryShotReview(shot)} />}
+        {page === "community" && (
+          <CommunityPage
+            recommendations={communityRecommendations}
+            loading={communityLoading}
+            error={communityError}
+            bags={data.bags}
+            profiles={data.profiles}
+            grinders={data.grinders ?? []}
+            shots={data.shots}
+            downloaded={downloadedCommunityProfiles}
+            uploaded={uploadedCommunityProfiles}
+            submittedBy={publicNameFromDecentAccount(decentAccount) ?? communityDisplayName}
+            submittedByLocked={Boolean(publicNameFromDecentAccount(decentAccount))}
+            manualDisplayName={communityDisplayName}
+            onManualDisplayNameChange={setCommunityDisplayName}
+            onRefresh={refreshCommunity}
+            onDownload={downloadCommunityProfile}
+            onUpload={uploadCommunityProfile}
+            onEditUpload={async () => refreshCommunity()}
+          />
+        )}
         {page === "settings" && (
           <SettingsPage
             settings={data.settings}

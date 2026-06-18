@@ -26,7 +26,7 @@ export interface SkinThemePalette {
   accentAlt: string;
 }
 
-export const DEFAULT_MAIN_MENU_ITEMS = ["brew", "live", "review", "steam", "bags", "profiles", "grinders", "history", "settings"] as const;
+export const DEFAULT_MAIN_MENU_ITEMS = ["brew", "live", "review", "steam", "bags", "profiles", "grinders", "community", "history", "settings"] as const;
 export type MainMenuItemId = (typeof DEFAULT_MAIN_MENU_ITEMS)[number];
 
 export const MAIN_MENU_ITEM_LABELS: Record<MainMenuItemId, string> = {
@@ -37,6 +37,7 @@ export const MAIN_MENU_ITEM_LABELS: Record<MainMenuItemId, string> = {
   bags: "Bags",
   profiles: "Profiles",
   grinders: "Grinders",
+  community: "Community",
   history: "History",
   settings: "Settings"
 };
@@ -68,6 +69,7 @@ export interface SkinSettings {
   skinUpdateBranch: string;
   skinUpdateAsset: string;
   skinUpdatePrerelease: boolean;
+  communityApiBaseUrl: string;
   skinFontScale: number;
   skinThemeId: SkinThemeId;
   customSkinThemes: Record<EditableSkinThemeId, SkinThemePalette>;
@@ -78,6 +80,7 @@ export const SKIN_NAMESPACE = "workflow-skin";
 export const SETTINGS_KEY = "settings";
 export const DEFAULT_SKIN_UPDATE_REPO = "Sabotage1/r2-connector";
 export const DEFAULT_SKIN_UPDATE_BRANCH = "codex/reaprime-workflow-skin";
+export const DEFAULT_COMMUNITY_API_BASE_URL = "https://workflow-skin-community.sabotage1.workers.dev";
 export const MIN_PRESET_SLOT_COUNT = 1;
 export const MAX_PRESET_SLOT_COUNT = 8;
 export const DEFAULT_AUTO_SLEEP_MINUTES = 30;
@@ -173,6 +176,7 @@ export function createDefaultSkinSettings(): SkinSettings {
     skinUpdateBranch: DEFAULT_SKIN_UPDATE_BRANCH,
     skinUpdateAsset: "workflow-skin.zip",
     skinUpdatePrerelease: false,
+    communityApiBaseUrl: DEFAULT_COMMUNITY_API_BASE_URL,
     skinFontScale: 100,
     skinThemeId: "default",
     customSkinThemes: {
@@ -400,6 +404,7 @@ export function normalizeSkinSettings(value: unknown): SkinSettings {
     skinUpdateBranch: normalizeString(value.skinUpdateBranch, DEFAULT_SKIN_UPDATE_BRANCH),
     skinUpdateAsset: normalizeString(value.skinUpdateAsset, "workflow-skin.zip"),
     skinUpdatePrerelease: typeof value.skinUpdatePrerelease === "boolean" ? value.skinUpdatePrerelease : false,
+    communityApiBaseUrl: normalizeString(value.communityApiBaseUrl, DEFAULT_COMMUNITY_API_BASE_URL),
     skinFontScale: normalizeSkinFontScale(value.skinFontScale),
     skinThemeId: normalizeSkinThemeId(value.skinThemeId),
     customSkinThemes: normalizeCustomSkinThemes(value.customSkinThemes),

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import skinManifest from "../../skin-manifest.json";
 import { App } from "../App";
-import type { AppInfo, DeviceInfo, MachineState, ProfileRecord, SensorListItem, ShotRecord, WebUISkin } from "../api/types";
+import type { AppInfo, DecentAccountStatus, DeviceInfo, MachineState, ProfileRecord, SensorListItem, ShotRecord, WebUISkin } from "../api/types";
 import { defaultSkinSettings, type SkinSettings } from "../state/skinSettings";
 
 let profiles: ProfileRecord[] = [
@@ -49,6 +49,8 @@ function mockReaFetch(
     githubReleaseStatus?: number;
     githubManifestVersion?: string;
     githubManifestStatus?: number;
+    communityStatus?: number;
+    decentAccount?: DecentAccountStatus;
     connectDeviceStatus?: number;
     sensorExecuteResults?: Array<{ body: unknown; status?: number }>;
     shotDetailsById?: Record<string, ShotRecord>;
@@ -88,6 +90,12 @@ function mockReaFetch(
   let scanCount = 0;
   let connectCount = 0;
   let sensorExecuteCount = 0;
+  const communityStore = new Map<string, unknown>([
+    ["/api/v1/store/workflow-skin/community-display-name", ""],
+    ["/api/v1/store/workflow-skin/community-downloaded-profiles", []],
+    ["/api/v1/store/workflow-skin/community-uploaded-profiles", []],
+    ["/api/v1/store/workflow-skin/community-owner-key", "owner-key"]
+  ]);
   const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init = {}) => {
     const url = new URL(String(input));
     const method = init.method ?? "GET";
@@ -101,6 +109,13 @@ function mockReaFetch(
       if (options.githubManifestStatus) return Promise.resolve(new Response("manifest unavailable", { status: options.githubManifestStatus }));
       return responseJson({ id: "workflow-skin", name: "WorkFlow", version: options.githubManifestVersion ?? skinManifest.version });
     }
+
+    if (url.hostname === "workflow-skin-community.sabotage1.workers.dev" && method === "GET" && url.pathname === "/api/recommendations") {
+      if (options.communityStatus) return Promise.resolve(new Response("community unavailable", { status: options.communityStatus }));
+      return responseJson({ version: 1, updatedAt: "2026-06-18T00:00:00.000Z", items: [] });
+    }
+
+    if (method === "GET" && url.pathname === "/api/v1/account/decent") return responseJson(options.decentAccount ?? { connected: true, username: "royack" });
 
     if (method === "GET" && url.pathname === "/api/v1/profiles") return responseJson(profiles);
     if (method === "PUT" && url.pathname.startsWith("/api/v1/profiles/")) {
@@ -257,6 +272,18 @@ function mockReaFetch(
     if (method === "PUT" && url.pathname === "/api/v1/kv/workflow-skin/settings") {
       if (options.failSettingsPut) return Promise.resolve(new Response("kv unavailable", { status: 500 }));
       savedSettings = JSON.parse(String(init.body)) as SkinSettings;
+      return Promise.resolve(new Response("", { status: 200 }));
+    }
+    if (method === "GET" && communityStore.has(url.pathname)) return responseJson(communityStore.get(url.pathname));
+    if (method === "POST" && communityStore.has(url.pathname)) {
+      communityStore.set(url.pathname, JSON.parse(String(init.body)));
+      return Promise.resolve(new Response("", { status: 200 }));
+    }
+    if (method === "GET" && url.pathname.startsWith("/api/v1/kv/workflow-skin/community-")) {
+      return responseJson(communityStore.get(url.pathname.replace("/api/v1/kv", "/api/v1/store")) ?? null);
+    }
+    if (method === "PUT" && url.pathname.startsWith("/api/v1/kv/workflow-skin/community-")) {
+      communityStore.set(url.pathname.replace("/api/v1/kv", "/api/v1/store"), JSON.parse(String(init.body)));
       return Promise.resolve(new Response("", { status: 200 }));
     }
     if (method === "POST" && url.pathname === "/api/v1/beans") return responseJson({ id: "bean-1", roaster: "Pilot", name: "Halo" });
@@ -493,6 +520,22 @@ describe("App shell", () => {
     expect(screen.getByRole("group", { name: "Blooming profile workflow" })).toBeInTheDocument();
   });
 
+  it("has a dedicated menu item for community recommendations", async () => {
+    mockReaFetch(initialSettings);
+    render(<App />);
+
+    expect(await screen.findByRole("button", { name: "Community" })).toBeInTheDocument();
+  });
+
+  it("shows community offline state when the Worker cannot be reached", async () => {
+    mockReaFetch(initialSettings, { communityStatus: 500 });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Community" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("GET /api/recommendations failed: 500");
+  });
+
   it("orders grinders below profiles in the default main menu", async () => {
     mockReaFetch(initialSettings);
     render(<App />);
@@ -516,7 +559,7 @@ describe("App shell", () => {
     const navigation = await screen.findByRole("navigation", { name: "Workflow navigation" });
     const labels = Array.from(navigation.querySelectorAll(".nav-button")).map((button) => button.getAttribute("aria-label"));
 
-    expect(labels).toEqual(["Collapse menu", "Brew", "Profiles", "Grinders", "Settings", "Review", "Bags"]);
+    expect(labels).toEqual(["Collapse menu", "Brew", "Profiles", "Grinders", "Settings", "Review", "Bags", "Community"]);
     expect(screen.queryByRole("button", { name: "History" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Steam" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Live" })).not.toBeInTheDocument();

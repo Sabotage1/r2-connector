@@ -28,11 +28,13 @@ describe("skin settings", () => {
     expect(defaultSkinSettings.skinUpdateBranch).toBe("codex/reaprime-workflow-skin");
     expect(defaultSkinSettings.skinUpdateAsset).toBe("workflow-skin.zip");
     expect(defaultSkinSettings.skinUpdatePrerelease).toBe(false);
+    expect((defaultSkinSettings as { communityApiBaseUrl?: string }).communityApiBaseUrl).toBe("https://workflow-skin-community.sabotage1.workers.dev");
     expect(defaultSkinSettings.autoSleepMinutes).toBe(30);
     expect(defaultSkinSettings.r2MeasureDelaySeconds).toBe(20);
     expect(defaultSkinSettings.presetSlotCount).toBe(4);
     expect(defaultSkinSettings.menuCollapsed).toBe(false);
     expect(defaultSkinSettings.mainMenuItems).toEqual(DEFAULT_MAIN_MENU_ITEMS);
+    expect(defaultSkinSettings.mainMenuItems).toContain("community");
     expect(defaultSkinSettings.hiddenMainMenuItemIds).toEqual([]);
     expect(defaultSkinSettings.topStatusIndicatorIds).toEqual(["machine", "wifi", "scale", "water", "r2", "state", "temperature"]);
     expect(mainMenuItemsForSettings(defaultSkinSettings).indexOf("profiles")).toBeLessThan(mainMenuItemsForSettings(defaultSkinSettings).indexOf("grinders"));
@@ -61,6 +63,7 @@ describe("skin settings", () => {
         skinUpdateBranch: " release/candidate ",
         skinUpdateAsset: " workflow-skin.zip ",
         skinUpdatePrerelease: true,
+        communityApiBaseUrl: " https://example.com/community ",
         autoSleepMinutes: 999,
         r2MeasureDelaySeconds: 44.7,
         presetSlotCount: 12,
@@ -96,6 +99,7 @@ describe("skin settings", () => {
     expect(settings.skinUpdateBranch).toBe("release/candidate");
     expect(settings.skinUpdateAsset).toBe("workflow-skin.zip");
     expect(settings.skinUpdatePrerelease).toBe(true);
+    expect((settings as { communityApiBaseUrl?: string }).communityApiBaseUrl).toBe("https://example.com/community");
     expect(settings.autoSleepMinutes).toBe(240);
     expect(settings.r2MeasureDelaySeconds).toBe(45);
     expect(settings.presetSlotCount).toBe(8);

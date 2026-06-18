@@ -13,6 +13,7 @@ import type {
   WebUISkin
 } from "../api/types";
 import {
+  DEFAULT_COMMUNITY_API_BASE_URL,
   DEFAULT_SKIN_THEMES,
   DEFAULT_SKIN_UPDATE_BRANCH,
   DEFAULT_R2_MEASURE_DELAY_SECONDS,
@@ -245,6 +246,7 @@ function normalizeDraftSettings(settings: SkinSettings): SkinSettings {
     skinAutoUpdateEnabled: Boolean(settings.skinAutoUpdateEnabled),
     skinUpdatePrerelease: Boolean(settings.skinUpdatePrerelease),
     skinUpdateBranch: settings.skinUpdateBranch.trim() || DEFAULT_SKIN_UPDATE_BRANCH,
+    communityApiBaseUrl: settings.communityApiBaseUrl.trim() || DEFAULT_COMMUNITY_API_BASE_URL,
     skinFontScale: skinFontScaleValue(settings.skinFontScale),
     skinThemeId: settings.skinThemeId,
     customSkinThemes: settings.customSkinThemes,
@@ -908,6 +910,14 @@ export function SettingsPage({
               <label className="settings-field">
                 Release asset
                 <input value={draftSettings.skinUpdateAsset} placeholder="workflow-skin.zip" onChange={(event) => updateDraftSettings({ skinUpdateAsset: event.target.value })} />
+              </label>
+              <label className="settings-field">
+                Community API
+                <input
+                  aria-label="Community API"
+                  value={draftSettings.communityApiBaseUrl}
+                  onChange={(event) => updateDraftSettings({ communityApiBaseUrl: event.target.value })}
+                />
               </label>
               <label className="inline-toggle settings-update-prerelease">
                 <input
