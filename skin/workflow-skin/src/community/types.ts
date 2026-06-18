@@ -77,6 +77,7 @@ export interface CommunityRecommendation {
   brew: CommunityBrewRecommendation;
   visualizerUrl?: string;
   evidenceFileName?: string;
+  shotScore?: number;
   searchText?: string;
 }
 
@@ -107,4 +108,5 @@ export interface UploadedCommunityProfile {
   uploadedAt: string;
   updatedAt: string;
   recommendation: CommunityRecommendation;
+  evidence?: CommunityShotEvidence;
 }

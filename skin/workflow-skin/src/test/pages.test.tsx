@@ -528,7 +528,11 @@ describe("HistoryPage", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Recommend profile from Blooming espresso" }));
+    const recommendButton = screen.getByRole("button", { name: "Recommend profile from Blooming espresso" });
+    expect(within(recommendButton).queryByText("Recommend")).not.toBeInTheDocument();
+    expect(recommendButton.querySelector("svg")).toBeInTheDocument();
+    expect(recommendButton.querySelector(".lucide-upload")).not.toBeInTheDocument();
+    await userEvent.click(recommendButton);
 
     expect(onRecommendShot).toHaveBeenCalledWith(expect.objectContaining({ id: "shot-1" }));
   });
@@ -1393,9 +1397,10 @@ describe("ScreensaverPage", () => {
 describe("CommunityPage", () => {
   const recommendation = {
     id: "rec-12345678",
-    createdAt: "2026-06-18T00:00:00.000Z",
-    updatedAt: "2026-06-18T00:00:00.000Z",
+    createdAt: "2026-06-18T13:45:00.000Z",
+    updatedAt: "2026-06-18T13:45:00.000Z",
     submittedBy: "Roy",
+    shotScore: 8,
     bag: { id: "bag-1", beanId: "bean-1", roaster: "Pilot", name: "Halo", bean: "Ethiopia Halo", country: "Ethiopia", process: "Washed", roastDate: "2026-06-01" },
     profile: { originalId: "p1", originalTitle: "Blooming", fileName: "rec-12345678.json", installedTitle: "Blooming - Halo - Roy" },
     grinder: { id: "g1", model: "ZP6", burrType: "flat" as const, settingType: "numeric" as const },
@@ -1453,7 +1458,8 @@ describe("CommunityPage", () => {
     await renderCommunityPage();
     await openRecommendProfile();
 
-    expect(screen.getByRole("option", { name: /8\/10/ })).toHaveTextContent("Blooming");
+    expect(screen.getByRole("option", { name: "2026-06-18 - Blooming - 8/10" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "2026-06-18 - Blooming - 8/10" })).not.toHaveTextContent("10:00");
   });
 
   it("shows searchable recommendations and download actions", async () => {
@@ -1482,7 +1488,10 @@ describe("CommunityPage", () => {
     expect(screen.getByRole("heading", { name: "Community" })).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("Search recommendations"), "zp6");
     expect(screen.getByText("Blooming")).toBeInTheDocument();
-    expect(within(screen.getByText("Blooming").closest(".community-row") as HTMLElement).getByText(/Flat burrs/)).toBeInTheDocument();
+    const row = screen.getByText("Blooming").closest(".community-row") as HTMLElement;
+    expect(within(row).getByText("Uploaded 2026-06-18 - Shot score 8/10")).toBeInTheDocument();
+    expect(row).not.toHaveTextContent("13:45");
+    expect(within(row).getByText(/Flat burrs/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Download Blooming" })).toBeInTheDocument();
   });
 
@@ -1655,6 +1664,7 @@ describe("CommunityPage", () => {
             id: "shot-1",
             tds: 8.5,
             ey: 20,
+            enjoyment: 8,
             notes: "sweet balance",
             measurements: [{ machine: { pressure: 7 } }]
           }
@@ -1666,9 +1676,41 @@ describe("CommunityPage", () => {
 
     expect(screen.getByText("Blooming - Halo - Roy")).toBeInTheDocument();
     expect(screen.getByText("Gentle declining pressure")).toBeInTheDocument();
+    expect(screen.getByText("Shot score 8/10")).toBeInTheDocument();
     expect(screen.getByText("TDS 8.5")).toBeInTheDocument();
     expect(screen.getByText("EY 20")).toBeInTheDocument();
     expect(screen.getByText("sweet balance")).toBeInTheDocument();
+  });
+
+  it("shows uploaded profiles with date-only upload, shot score, bag, and brew details", async () => {
+    await renderCommunityPage({
+      uploaded: [
+        {
+          recommendationId: recommendation.id,
+          uploadedAt: "2026-06-18T15:30:00.000Z",
+          updatedAt: "2026-06-18T15:30:00.000Z",
+          recommendation,
+          evidence: {
+            id: "shot-1",
+            enjoyment: 8,
+            tds: 8.5,
+            ey: 20,
+            notes: "sweet balance"
+          }
+        }
+      ]
+    });
+
+    await userEvent.click(screen.getByRole("tab", { name: "Uploaded Profiles" }));
+
+    const row = screen.getByText("Blooming").closest(".community-row") as HTMLElement;
+    expect(within(row).getByText("Uploaded 2026-06-18 - Shot score 8/10")).toBeInTheDocument();
+    expect(row).not.toHaveTextContent("15:30");
+    expect(within(row).getByText("Pilot - Halo - Ethiopia Halo - Ethiopia - Washed - 2026-06-01")).toBeInTheDocument();
+    expect(within(row).getByText("ZP6 - Flat burrs - Grind 4.2 - 18g in - 42g out - By Roy")).toBeInTheDocument();
+    expect(within(row).getByText("TDS 8.5")).toBeInTheDocument();
+    expect(within(row).getByText("EY 20")).toBeInTheDocument();
+    expect(within(row).getByText("sweet balance")).toBeInTheDocument();
   });
 
   it("edits an uploaded profile recommendation and reports completion", async () => {

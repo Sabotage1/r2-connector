@@ -996,7 +996,10 @@ textarea {
 
 .history-recommend-button {
   align-self: stretch;
-  white-space: nowrap;
+  justify-content: center;
+  width: 38px;
+  min-width: 38px;
+  padding: 0;
 }
 
 .history-shot-row.taste-red {
@@ -1969,7 +1972,7 @@ textarea {
   }
 
   .history-recommend-button {
-    justify-self: stretch;
+    justify-self: end;
   }
 
   .history-rating {

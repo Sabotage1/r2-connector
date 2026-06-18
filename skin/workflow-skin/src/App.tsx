@@ -865,6 +865,7 @@ export function App() {
       if (!accountName) await saveCommunityDisplayName(api, submittedBy);
       const ownerKey = await getOrCreateCommunityOwnerKey(api);
       const selectedShot = draft.shotId ? data.shots.find((shot) => shot.id === draft.shotId) : undefined;
+      const evidence = selectedShot ? sanitizeShotEvidence(selectedShot) : undefined;
       const result = await communityApi.create({
         ownerKey,
         recommendation: {
@@ -907,13 +908,14 @@ export function App() {
           visualizerUrl: draft.visualizerUrl.trim() || undefined
         },
         profileJson: profile.profile,
-        evidence: selectedShot ? sanitizeShotEvidence(selectedShot) : undefined
+        evidence
       });
       const record: UploadedCommunityProfile = {
         recommendationId: result.recommendation.id,
         uploadedAt: new Date().toISOString(),
         updatedAt: result.recommendation.updatedAt,
-        recommendation: result.recommendation
+        recommendation: result.recommendation,
+        evidence
       };
       const uploadedAfter = await loadUploadedCommunityProfiles(api);
       const next = [record, ...uploadedAfter.filter((item) => item.recommendationId !== record.recommendationId)];

@@ -1,4 +1,4 @@
-import { Upload } from "lucide-react";
+import { Share2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { ShotRecord } from "../api/types";
 import type { Bag } from "../lib/bags";
@@ -186,9 +186,14 @@ export function HistoryPage({
               <span className={`history-rating ${tone}`}>{tasteScoreLabel(rating)}</span>
             </button>
             {onRecommendShot && (
-              <button type="button" className="ghost-button compact-button history-recommend-button" aria-label={`Recommend profile from ${title}`} onClick={() => onRecommendShot(shot)}>
-                <Upload aria-hidden="true" size={16} />
-                Recommend
+              <button
+                type="button"
+                className="ghost-button compact-button history-recommend-button"
+                aria-label={`Recommend profile from ${title}`}
+                title={`Recommend profile from ${title}`}
+                onClick={() => onRecommendShot(shot)}
+              >
+                <Share2 aria-hidden="true" size={14} />
               </button>
             )}
           </div>

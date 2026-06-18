@@ -2,7 +2,7 @@ import { Download, RefreshCw, Upload } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Grinder, ProfileRecord, ShotRecord } from "../api/types";
 import { matchesCommunitySearch } from "../community/search";
-import type { CommunityRecommendation, DownloadedCommunityProfile, UploadedCommunityProfile } from "../community/types";
+import type { CommunityRecommendation, CommunityShotEvidence, DownloadedCommunityProfile, UploadedCommunityProfile } from "../community/types";
 import type { Bag } from "../lib/bags";
 import { shotTasteRating, tasteScoreLabel } from "../lib/shotTaste";
 
@@ -80,7 +80,7 @@ function profileTitle(profile: ProfileRecord): string {
 
 function shotTitle(shot: ShotRecord): string {
   const profile = shot.workflow.profile?.title ?? shot.workflow.name;
-  const date = shot.timestamp ? new Date(shot.timestamp).toLocaleString() : shot.id;
+  const date = formatDateOnly(shot.timestamp) ?? shot.id;
   const score = tasteScoreLabel(shotTasteRating(shot));
   return [date, profile, score].filter(Boolean).join(" - ");
 }
@@ -93,6 +93,64 @@ function burrTypeLabel(value: unknown): string | undefined {
   if (value === "flat") return "Flat burrs";
   if (value === "conical") return "Conical burrs";
   return undefined;
+}
+
+function formatDateOnly(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  const isoDate = trimmed.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
+  if (isoDate) return isoDate;
+  const date = new Date(trimmed);
+  return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : trimmed;
+}
+
+function scoreFromValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? Math.min(10, Math.max(1, Math.round(value))) : null;
+}
+
+function shotScoreText(value: unknown): string | undefined {
+  const score = scoreFromValue(value);
+  return score === null ? undefined : `Shot score ${tasteScoreLabel(score)}`;
+}
+
+function recommendationShotScore(recommendation: CommunityRecommendation, evidence?: CommunityShotEvidence): string | undefined {
+  return shotScoreText(evidence?.enjoyment ?? recommendation.shotScore);
+}
+
+function recommendationUploadSummary(recommendation: CommunityRecommendation): string | undefined {
+  const date = formatDateOnly(recommendation.createdAt);
+  return [date ? `Uploaded ${date}` : undefined, recommendationShotScore(recommendation)].filter(Boolean).join(" - ") || undefined;
+}
+
+function localUploadSummary(item: UploadedCommunityProfile): string | undefined {
+  const date = formatDateOnly(item.uploadedAt);
+  return [date ? `Uploaded ${date}` : undefined, recommendationShotScore(item.recommendation, item.evidence)].filter(Boolean).join(" - ") || undefined;
+}
+
+function recommendationBagSummary(recommendation: CommunityRecommendation): string {
+  return [
+    recommendation.bag.roaster,
+    recommendation.bag.name,
+    recommendation.bag.bean,
+    recommendation.bag.country,
+    recommendation.bag.process,
+    formatDateOnly(recommendation.bag.roastDate) ?? recommendation.bag.roastDate
+  ]
+    .filter(Boolean)
+    .join(" - ");
+}
+
+function recommendationBrewSummary(recommendation: CommunityRecommendation): string {
+  return [
+    recommendation.grinder.model,
+    burrTypeLabel(recommendation.grinder.burrType),
+    `Grind ${recommendation.brew.grindSetting}`,
+    `${recommendation.brew.beansWeight}g in`,
+    `${recommendation.brew.drinkWeight}g out`,
+    `By ${recommendation.submittedBy}`
+  ]
+    .filter(Boolean)
+    .join(" - ");
 }
 
 function grinderSearchText(recommendation: CommunityRecommendation): string {
@@ -324,23 +382,9 @@ export function CommunityPage({
             return (
               <div className="list-row community-row" key={recommendation.id}>
                 <strong>{title}</strong>
-                <span>
-                  {[recommendation.bag.roaster, recommendation.bag.name, recommendation.bag.bean, recommendation.bag.country, recommendation.bag.process, recommendation.bag.roastDate]
-                    .filter(Boolean)
-                    .join(" - ")}
-                </span>
-                <span>
-                  {[
-                    recommendation.grinder.model,
-                    burrTypeLabel(recommendation.grinder.burrType),
-                    `Grind ${recommendation.brew.grindSetting}`,
-                    `${recommendation.brew.beansWeight}g in`,
-                    `${recommendation.brew.drinkWeight}g out`,
-                    `By ${recommendation.submittedBy}`
-                  ]
-                    .filter(Boolean)
-                    .join(" - ")}
-                </span>
+                {recommendationUploadSummary(recommendation) && <span>{recommendationUploadSummary(recommendation)}</span>}
+                <span>{recommendationBagSummary(recommendation)}</span>
+                <span>{recommendationBrewSummary(recommendation)}</span>
                 <p>{recommendation.brew.notes}</p>
                 <div className="row-actions">
                   <button
@@ -466,11 +510,12 @@ export function CommunityPage({
             <div className="list-row community-row" key={`${item.recommendationId}-${item.localProfileId}`}>
               <strong>{item.localProfileTitle}</strong>
               <p>{item.recommendation.brew.notes}</p>
-              {item.evidence && (
+              {(item.evidence || recommendationShotScore(item.recommendation)) && (
                 <div className="community-evidence-summary">
-                  {typeof item.evidence.tds === "number" && <span>TDS {item.evidence.tds}</span>}
-                  {typeof item.evidence.ey === "number" && <span>EY {item.evidence.ey}</span>}
-                  {item.evidence.notes && <span>{item.evidence.notes}</span>}
+                  {recommendationShotScore(item.recommendation, item.evidence) && <span>{recommendationShotScore(item.recommendation, item.evidence)}</span>}
+                  {typeof item.evidence?.tds === "number" && <span>TDS {item.evidence.tds}</span>}
+                  {typeof item.evidence?.ey === "number" && <span>EY {item.evidence.ey}</span>}
+                  {item.evidence?.notes && <span>{item.evidence.notes}</span>}
                 </div>
               )}
             </div>
@@ -492,7 +537,17 @@ export function CommunityPage({
             return (
               <div className="list-row community-row" key={item.recommendationId}>
                 <strong>{title}</strong>
+                {localUploadSummary(item) && <span>{localUploadSummary(item)}</span>}
+                <span>{recommendationBagSummary(item.recommendation)}</span>
+                <span>{recommendationBrewSummary(item.recommendation)}</span>
                 <p>{item.recommendation.brew.notes}</p>
+                {item.evidence && (
+                  <div className="community-evidence-summary">
+                    {typeof item.evidence.tds === "number" && <span>TDS {item.evidence.tds}</span>}
+                    {typeof item.evidence.ey === "number" && <span>EY {item.evidence.ey}</span>}
+                    {item.evidence.notes && <span>{item.evidence.notes}</span>}
+                  </div>
+                )}
                 <div className="row-actions">
                   <button type="button" className="ghost-button compact-button" disabled={editPending} onClick={() => void editUploadedRecommendation(item.recommendation)}>
                     {editPending ? "Updating" : `Edit ${title}`}

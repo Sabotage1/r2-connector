@@ -19,6 +19,7 @@ const communityRecommendation: CommunityRecommendation = {
   createdAt: "2026-06-18T00:00:00.000Z",
   updatedAt: "2026-06-18T00:00:00.000Z",
   submittedBy: "Roy",
+  shotScore: 8,
   bag: {
     id: "batch-1",
     beanId: "bean-1",
@@ -180,6 +181,7 @@ function mockReaFetch(
         id: "created-rec-1",
         createdAt: "2026-06-18T01:00:00.000Z",
         updatedAt: "2026-06-18T01:00:00.000Z",
+        shotScore: typeof body.evidence?.enjoyment === "number" ? body.evidence.enjoyment : undefined,
         ...body.recommendation
       };
       return responseJson({
@@ -198,6 +200,7 @@ function mockReaFetch(
         ...body.recommendation,
         id: recommendationId,
         createdAt: previous.createdAt,
+        shotScore: typeof body.evidence?.enjoyment === "number" ? body.evidence.enjoyment : previous.shotScore,
         updatedAt: "2026-06-18T02:00:00.000Z"
       };
       return responseJson({
@@ -1840,6 +1843,13 @@ describe("App shell", () => {
         evidence: expect.objectContaining({ id: "history-rec-shot", enjoyment: 8, grindSetting: "4.4", grinderId: "g1" })
       })
     );
+    const uploaded = fetchState.communityStore.get("/api/v1/store/workflow-skin/community-uploaded-profiles") as Array<Record<string, unknown>>;
+    expect(uploaded).toEqual([
+      expect.objectContaining({
+        recommendationId: "created-rec-1",
+        evidence: expect.objectContaining({ id: "history-rec-shot", enjoyment: 8, grindSetting: "4.4", grinderId: "g1" })
+      })
+    ]);
   });
 
   it("saves Beanie machine settings through native machine endpoints", async () => {
