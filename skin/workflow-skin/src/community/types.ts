@@ -12,42 +12,43 @@ export interface DecentAccountStatus {
 export interface CommunityBagSnapshot {
   id: string;
   beanId: string;
-  roaster?: string;
-  name?: string;
-  bean?: string;
-  country?: string;
-  region?: string;
-  process?: string;
-  roastDate?: string;
-  roastLevel?: string;
-  notes?: string;
+  roaster: string;
+  name: string;
+  bean: string;
+  country: string;
+  region: string;
+  process: string;
+  roastDate: string;
+  roastLevel: string;
+  notes: string;
 }
 
 export interface CommunityProfileSnapshot {
   originalId: string;
-  originalTitle?: string;
-  fileName?: string;
-  installedTitle?: string;
+  originalTitle: string;
+  fileName: string;
+  installedTitle: string;
 }
 
 export interface CommunityGrinderSnapshot {
-  id?: string;
+  id: string;
   manufacturer?: string;
-  model?: string;
+  model: string;
   burrs?: string;
   burrSize?: number;
   burrType?: string;
-  settingType?: "numeric" | "preset";
+  settingType: "numeric" | "preset";
   notes?: string;
 }
 
 export interface CommunityBrewRecommendation {
-  grindSetting?: string;
-  beansWeight?: number;
-  drinkWeight?: number;
-  secondsMin?: number;
-  secondsMax?: number;
-  notes?: string;
+  grindSetting: string;
+  beansWeight: number;
+  drinkWeight: number;
+  secondsMin: number;
+  secondsMax: number;
+  secondsGoal?: number;
+  notes: string;
 }
 
 export interface CommunityShotEvidence {
@@ -62,7 +63,6 @@ export interface CommunityShotEvidence {
   notes?: string;
   grindSetting?: string;
   grinderId?: string;
-  grinderModel?: string;
   measurements?: ShotSnapshot[];
 }
 
@@ -73,7 +73,7 @@ export interface CommunityRecommendation {
   submittedBy: string;
   bag: CommunityBagSnapshot;
   profile: CommunityProfileSnapshot;
-  grinder?: CommunityGrinderSnapshot;
+  grinder: CommunityGrinderSnapshot;
   brew: CommunityBrewRecommendation;
   visualizerUrl?: string;
   evidenceFileName?: string;
@@ -82,6 +82,7 @@ export interface CommunityRecommendation {
 
 export interface CommunityIndex {
   version: 1;
+  updatedAt: string;
   items: CommunityRecommendation[];
 }
 
@@ -92,13 +93,18 @@ export interface CommunityDownloadPayload {
 }
 
 export interface DownloadedCommunityProfile {
+  recommendationId: string;
+  localProfileId: string;
+  localProfileTitle: string;
+  downloadedAt: string;
+  updatedAt: string;
   recommendation: CommunityRecommendation;
-  profileJson: Profile;
   evidence?: CommunityShotEvidence;
 }
 
 export interface UploadedCommunityProfile {
+  recommendationId: string;
+  uploadedAt: string;
+  updatedAt: string;
   recommendation: CommunityRecommendation;
-  profileJson: Profile;
-  evidence?: CommunityShotEvidence;
 }

@@ -14,7 +14,6 @@ export function sanitizeShotEvidence(shot: ShotRecord): CommunityShotEvidence {
     notes: shot.annotations?.espressoNotes ?? shot.shotNotes,
     grindSetting: shot.workflow.context?.grinderSetting,
     grinderId: shot.workflow.context?.grinderId,
-    grinderModel: shot.workflow.context?.grinderModel,
     measurements: shot.measurements
   };
 }

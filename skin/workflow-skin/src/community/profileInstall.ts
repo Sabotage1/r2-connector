@@ -13,11 +13,7 @@ function cloneProfile(profileJson: Profile): Profile {
 
 export function shortRecommendationId(id: string): string {
   const trimmed = id.trim();
-  if (!trimmed) return "community";
-  if (/^rec-[A-Za-z0-9]+$/.test(trimmed)) return trimmed;
-
-  const compact = trimmed.replace(/[^A-Za-z0-9]/g, "");
-  return compact.slice(0, 12) || "community";
+  return trimmed.split("-").slice(0, 2).join("-") || trimmed.slice(0, 12);
 }
 
 export function communityProfileTitle(recommendation: CommunityRecommendation): string {

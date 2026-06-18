@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Profile, ShotRecord } from "../api/types";
 import type { CommunityRecommendation } from "../community/types";
 import { publicNameFromDecentAccount } from "../community/identity";
-import { communityProfileTitle, profilePayloadForCommunityInstall } from "../community/profileInstall";
+import { communityProfileTitle, profilePayloadForCommunityInstall, shortRecommendationId } from "../community/profileInstall";
 import { matchesCommunitySearch } from "../community/search";
 import { sanitizeShotEvidence } from "../community/evidence";
 
@@ -65,6 +65,11 @@ describe("community profile installation helpers", () => {
     expect(communityProfileTitle(recommendation)).toBe("Blooming - Halo - Roy - rec-12345678");
   });
 
+  it("shortens hyphenated recommendation ids using the first two segments", () => {
+    expect(shortRecommendationId("rec-12345678")).toBe("rec-12345678");
+    expect(shortRecommendationId("123e4567-e89b-12d3-a456-426614174000")).toBe("123e4567-e89b");
+  });
+
   it("builds a create-profile payload with renamed profile and community metadata", () => {
     const profileJson: Profile = {
       title: "Blooming",
@@ -98,8 +103,10 @@ describe("community search helpers", () => {
   it("matches across bag, recommendation, grinder, and brew fields", () => {
     expect(matchesCommunitySearch(recommendation, "yirgacheffe")).toBe(true);
     expect(matchesCommunitySearch(recommendation, "zp6")).toBe(true);
+    expect(matchesCommunitySearch(recommendation, "gentle declining")).toBe(true);
     expect(matchesCommunitySearch(recommendation, "declining pressure")).toBe(true);
     expect(matchesCommunitySearch(recommendation, "rec-12345678")).toBe(true);
+    expect(matchesCommunitySearch(recommendation, "not-here")).toBe(false);
     expect(matchesCommunitySearch(recommendation, "missing text")).toBe(false);
   });
 });
@@ -149,7 +156,6 @@ describe("community evidence helpers", () => {
       notes: "sweet florals",
       grindSetting: "4.2",
       grinderId: "grinder-1",
-      grinderModel: "ZP6",
       measurements: [
         {
           machine: { timestamp: "2026-06-18T08:00:01.000Z", pressure: 2, flow: 3 },
