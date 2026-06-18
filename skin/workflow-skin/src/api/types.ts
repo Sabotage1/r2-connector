@@ -210,6 +210,15 @@ export interface AppInfo {
   localIp?: string;
 }
 
+export interface DecentAccountStatus {
+  connected?: boolean;
+  username?: string;
+  displayName?: string;
+  name?: string;
+  email?: string;
+  account?: JsonMap;
+}
+
 export interface DisplayState {
   brightness?: number;
   requestedBrightness?: number;

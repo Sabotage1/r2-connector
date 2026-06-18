@@ -26,6 +26,13 @@ describe("ReaPrimeApi", () => {
     expect(fetch).toHaveBeenCalledWith("http://machine:8080/api/v1/profiles", expect.objectContaining({ method: "GET" }));
   });
 
+  it("loads Decent account status", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ connected: true, username: "royack" }), { status: 200 }));
+    const api = new ReaPrimeApi("http://machine:8080");
+    await expect(api.getDecentAccount()).resolves.toEqual({ connected: true, username: "royack" });
+    expect(fetch).toHaveBeenCalledWith("http://machine:8080/api/v1/account/decent", expect.objectContaining({ method: "GET" }));
+  });
+
   it("updates profiles through the ReaPrime profiles API", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ id: "p1", profile: { title: "Bloom v2", author: "Roy" } }), { status: 200 })

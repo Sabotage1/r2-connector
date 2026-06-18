@@ -5,6 +5,7 @@ import type {
   De1AdvancedMachineSettings,
   De1MachineCalibration,
   De1MachineSettings,
+  DecentAccountStatus,
   DeviceInfo,
   DisplayState,
   Grinder,
@@ -400,6 +401,10 @@ export class ReaPrimeApi {
 
   getAppInfo() {
     return this.request<AppInfo>("/api/v1/info");
+  }
+
+  getDecentAccount() {
+    return this.request<DecentAccountStatus>("/api/v1/account/decent");
   }
 
   listDevices() {
