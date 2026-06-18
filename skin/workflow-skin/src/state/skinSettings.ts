@@ -282,6 +282,11 @@ function normalizeString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value.trim() : fallback;
 }
 
+function normalizeRequiredString(value: unknown, fallback: string): string {
+  const normalized = normalizeString(value, fallback);
+  return normalized || fallback;
+}
+
 function normalizeSteamTimer(value: unknown, fallback: number): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 1) return fallback;
   return Math.round(value);
@@ -404,7 +409,7 @@ export function normalizeSkinSettings(value: unknown): SkinSettings {
     skinUpdateBranch: normalizeString(value.skinUpdateBranch, DEFAULT_SKIN_UPDATE_BRANCH),
     skinUpdateAsset: normalizeString(value.skinUpdateAsset, "workflow-skin.zip"),
     skinUpdatePrerelease: typeof value.skinUpdatePrerelease === "boolean" ? value.skinUpdatePrerelease : false,
-    communityApiBaseUrl: normalizeString(value.communityApiBaseUrl, DEFAULT_COMMUNITY_API_BASE_URL),
+    communityApiBaseUrl: normalizeRequiredString(value.communityApiBaseUrl, DEFAULT_COMMUNITY_API_BASE_URL),
     skinFontScale: normalizeSkinFontScale(value.skinFontScale),
     skinThemeId: normalizeSkinThemeId(value.skinThemeId),
     customSkinThemes: normalizeCustomSkinThemes(value.customSkinThemes),

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  DEFAULT_COMMUNITY_API_BASE_URL,
   DEFAULT_MAIN_MENU_ITEMS,
   DEFAULT_STEAM_TIMERS,
   MAX_STEAM_TIMERS,
@@ -120,6 +121,17 @@ describe("skin settings", () => {
     expect(settings.defaultGrinderId).toBe("g2");
     expect(settings.preferredEyMin).toBe(18.5);
     expect(settings.preferredEyMax).toBeUndefined();
+  });
+
+  it("normalizes a blank community API URL to the default Worker", async () => {
+    const api = {
+      getKv: vi.fn().mockResolvedValue({ communityApiBaseUrl: "   " }),
+      putKv: vi.fn()
+    };
+
+    const settings = await loadSkinSettings(api);
+
+    expect(settings.communityApiBaseUrl).toBe(DEFAULT_COMMUNITY_API_BASE_URL);
   });
 
   it("loads corrupt review overrides as an empty record", async () => {
