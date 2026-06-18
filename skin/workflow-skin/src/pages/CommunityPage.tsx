@@ -1,5 +1,6 @@
 import { Download, RefreshCw, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Grinder, ProfileRecord, ShotRecord, ShotSnapshot } from "../api/types";
 import { ShotGraph } from "../components/ShotGraph";
 import { matchesCommunitySearch } from "../community/search";
@@ -157,6 +158,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function evidenceMeasurements(evidence: CommunityShotEvidence | undefined): ShotSnapshot[] {
   if (!Array.isArray(evidence?.measurements)) return [];
   return evidence.measurements.filter(isRecord).map((measurement) => measurement as ShotSnapshot);
+}
+
+function GraphFullscreen({ measurements, onClose }: { measurements: ShotSnapshot[]; onClose: () => void }) {
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="community-graph-fullscreen" role="dialog" aria-modal="true" aria-label="Shot graph fullscreen">
+      <div className="community-graph-fullscreen-header">
+        <button type="button" className="community-graph-close" aria-label="Close shot graph fullscreen" onClick={onClose}>
+          <X aria-hidden="true" size={24} />
+        </button>
+      </div>
+      <div className="community-graph-fullscreen-frame">
+        <ShotGraph measurements={measurements} />
+      </div>
+    </div>,
+    document.body
+  );
 }
 
 function detailValue(value: string | number | undefined, suffix = ""): string | undefined {
@@ -605,14 +624,7 @@ export function CommunityPage({
                   <p className="muted">This recommendation does not include shared shot history.</p>
                 )}
               </div>
-              {graphFullscreen && selectedMeasurements.length > 0 && (
-                <div className="community-graph-fullscreen" role="dialog" aria-modal="true" aria-label="Shot graph fullscreen">
-                  <button type="button" className="community-graph-close" aria-label="Close shot graph fullscreen" onClick={() => setGraphFullscreen(false)}>
-                    <X aria-hidden="true" size={24} />
-                  </button>
-                  <ShotGraph measurements={selectedMeasurements} />
-                </div>
-              )}
+              {graphFullscreen && selectedMeasurements.length > 0 && <GraphFullscreen measurements={selectedMeasurements} onClose={() => setGraphFullscreen(false)} />}
             </div>
           ) : (
             <>
@@ -819,14 +831,7 @@ export function CommunityPage({
                   <p className="muted">This recommendation does not include shared shot history.</p>
                 )}
               </div>
-              {graphFullscreen && editingMeasurements.length > 0 && (
-                <div className="community-graph-fullscreen" role="dialog" aria-modal="true" aria-label="Shot graph fullscreen">
-                  <button type="button" className="community-graph-close" aria-label="Close shot graph fullscreen" onClick={() => setGraphFullscreen(false)}>
-                    <X aria-hidden="true" size={24} />
-                  </button>
-                  <ShotGraph measurements={editingMeasurements} />
-                </div>
-              )}
+              {graphFullscreen && editingMeasurements.length > 0 && <GraphFullscreen measurements={editingMeasurements} onClose={() => setGraphFullscreen(false)} />}
             </div>
           ) : (
             <>

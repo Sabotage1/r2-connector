@@ -1539,6 +1539,7 @@ describe("CommunityPage", () => {
 
     await userEvent.click(screen.getByRole("img", { name: "Shot pressure graph" }));
     const fullscreenGraph = await screen.findByRole("dialog", { name: "Shot graph fullscreen" });
+    expect(fullscreenGraph.parentElement).toBe(document.body);
     expect(within(fullscreenGraph).getByRole("button", { name: "Close shot graph fullscreen" })).toBeInTheDocument();
     expect(within(fullscreenGraph).getByRole("img", { name: "Shot pressure graph" })).toBeInTheDocument();
     await userEvent.click(within(fullscreenGraph).getByRole("button", { name: "Close shot graph fullscreen" }));
