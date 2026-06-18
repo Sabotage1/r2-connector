@@ -65,6 +65,24 @@ describe("community storage", () => {
     expect(api.putKv).toHaveBeenCalledTimes(1);
   });
 
+  it("creates an owner key in WebViews without crypto.randomUUID", async () => {
+    const originalCrypto = globalThis.crypto;
+    const cryptoWithoutRandomUUID = {
+      getRandomValues: originalCrypto.getRandomValues.bind(originalCrypto)
+    } as Crypto;
+    Object.defineProperty(cryptoWithoutRandomUUID, "randomUUID", { value: undefined, configurable: true });
+    Object.defineProperty(globalThis, "crypto", { value: cryptoWithoutRandomUUID, configurable: true });
+    const api = { getKv: vi.fn().mockResolvedValue(null), putKv: vi.fn().mockResolvedValue(undefined) };
+
+    try {
+      const key = await getOrCreateCommunityOwnerKey(api);
+      expect(key).toMatch(/^workflow-owner-/);
+      expect(api.putKv).toHaveBeenCalledWith("workflow-skin", "community-owner-key", key);
+    } finally {
+      Object.defineProperty(globalThis, "crypto", { value: originalCrypto, configurable: true });
+    }
+  });
+
   it("saves a manual display name locally", async () => {
     const api = { getKv: vi.fn().mockResolvedValue("Roy"), putKv: vi.fn().mockResolvedValue(undefined) };
     await saveCommunityDisplayName(api, " Roy ");
