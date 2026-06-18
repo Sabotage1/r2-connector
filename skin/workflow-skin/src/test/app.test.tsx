@@ -135,6 +135,7 @@ function mockReaFetch(
   let sensorExecuteCount = 0;
   const communityDownloadIds: string[] = [];
   const communityCreatePayloads: unknown[] = [];
+  const communityUpdatePayloads: unknown[] = [];
   const createdProfilePayloads: unknown[] = [];
   const updatedProfilePayloads: unknown[] = [];
   const communityStore = new Map<string, unknown>([
@@ -184,6 +185,24 @@ function mockReaFetch(
       return responseJson({
         recommendation,
         index: { version: 1, updatedAt: "2026-06-18T01:00:00.000Z", items: [recommendation] }
+      });
+    }
+
+    if (url.hostname === "workflow-skin-community.sabotage1.workers.dev" && method === "PUT" && url.pathname.startsWith("/api/recommendations/")) {
+      const body = JSON.parse(String(init.body));
+      communityUpdatePayloads.push(body);
+      const recommendationId = decodeURIComponent(url.pathname.split("/").pop() ?? "");
+      const previous = options.communityRecommendations?.find((item) => item.id === recommendationId) ?? communityRecommendation;
+      const recommendation = {
+        ...previous,
+        ...body.recommendation,
+        id: recommendationId,
+        createdAt: previous.createdAt,
+        updatedAt: "2026-06-18T02:00:00.000Z"
+      };
+      return responseJson({
+        recommendation,
+        index: { version: 1, updatedAt: "2026-06-18T02:00:00.000Z", items: [recommendation] }
       });
     }
 
@@ -399,6 +418,9 @@ function mockReaFetch(
     },
     get communityCreatePayloads() {
       return communityCreatePayloads;
+    },
+    get communityUpdatePayloads() {
+      return communityUpdatePayloads;
     },
     get createdProfilePayloads() {
       return createdProfilePayloads;
@@ -741,6 +763,47 @@ describe("App shell", () => {
         recommendationId: "created-rec-1",
         updatedAt: "2026-06-18T01:00:00.000Z",
         recommendation: expect.objectContaining({ submittedBy: "royack" })
+      })
+    ]);
+  });
+
+  it("updates an uploaded community recommendation with the local owner key and profile JSON", async () => {
+    profiles = [{ id: "p1", profile: { title: "Blooming", notes: "Updated local profile notes", steps: [{ name: "Bloom", pressure: 2 }] } }];
+    const fetchState = mockReaFetch(initialSettings, { communityRecommendations: [communityRecommendation] });
+    fetchState.communityStore.set("/api/v1/store/workflow-skin/community-uploaded-profiles", [
+      {
+        recommendationId: communityRecommendation.id,
+        uploadedAt: "2026-06-18T00:00:00.000Z",
+        updatedAt: communityRecommendation.updatedAt,
+        recommendation: communityRecommendation
+      }
+    ]);
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Community" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "Uploaded Profiles" }));
+    await userEvent.click(screen.getByRole("button", { name: "Edit Blooming" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Recommendation updated.");
+    expect(fetchState.communityUpdatePayloads[0]).toEqual(
+      expect.objectContaining({
+        ownerKey: "owner-key",
+        recommendation: expect.objectContaining({
+          submittedBy: "Roy",
+          bag: expect.objectContaining({ id: "batch-1", name: "Halo" }),
+          profile: expect.objectContaining({ originalId: "p1", originalTitle: "Blooming" }),
+          grinder: expect.objectContaining({ id: "g1", model: "ZP6" }),
+          brew: expect.objectContaining({ grindSetting: "4.2", beansWeight: 18 })
+        }),
+        profileJson: expect.objectContaining({ title: "Blooming", notes: "Updated local profile notes" })
+      })
+    );
+    const uploaded = fetchState.communityStore.get("/api/v1/store/workflow-skin/community-uploaded-profiles") as Array<Record<string, unknown>>;
+    expect(uploaded).toEqual([
+      expect.objectContaining({
+        recommendationId: "rec-12345678",
+        updatedAt: "2026-06-18T02:00:00.000Z",
+        recommendation: expect.objectContaining({ updatedAt: "2026-06-18T02:00:00.000Z" })
       })
     ]);
   });

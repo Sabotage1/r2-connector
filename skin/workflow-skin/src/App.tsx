@@ -877,6 +877,40 @@ export function App() {
     [api, communityApi, communityDisplayName, data.bags, data.grinders, data.profiles, data.shots, decentAccount]
   );
 
+  const editCommunityUpload = useCallback(
+    async (recommendation: CommunityRecommendation) => {
+      const ownerKey = await getOrCreateCommunityOwnerKey(api);
+      const latestUploads = await loadUploadedCommunityProfiles(api);
+      const localUpload =
+        latestUploads.find((item) => item.recommendationId === recommendation.id) ?? uploadedCommunityProfiles.find((item) => item.recommendationId === recommendation.id);
+      if (!localUpload) throw new Error("This recommendation is not owned by this machine.");
+
+      const profile = data.profiles.find((item) => item.id === recommendation.profile.originalId);
+      if (!profile) throw new Error("Original local profile is no longer available.");
+
+      const result = await communityApi.update(recommendation.id, {
+        ownerKey,
+        recommendation: {
+          submittedBy: recommendation.submittedBy,
+          bag: recommendation.bag,
+          profile: recommendation.profile,
+          grinder: recommendation.grinder,
+          brew: recommendation.brew,
+          visualizerUrl: recommendation.visualizerUrl
+        },
+        profileJson: profile.profile
+      });
+      const sourceUploads = [localUpload, ...latestUploads.filter((item) => item.recommendationId !== recommendation.id)];
+      const next = sourceUploads.map((item) =>
+        item.recommendationId === recommendation.id ? { ...item, updatedAt: result.recommendation.updatedAt, recommendation: result.recommendation } : item
+      );
+      await saveUploadedCommunityProfiles(api, next);
+      setUploadedCommunityProfiles(next);
+      setCommunityRecommendations(result.index.items);
+    },
+    [api, communityApi, data.profiles, uploadedCommunityProfiles]
+  );
+
   const applyProfile = async (profile: ProfileRecord, options: { optimistic?: boolean } = {}) => {
     const extras = data.workflow.context?.extras ?? {};
     const workflowSkin = extras.workflowSkin && typeof extras.workflowSkin === "object" && !Array.isArray(extras.workflowSkin) ? extras.workflowSkin : {};
@@ -2121,7 +2155,7 @@ export function App() {
             onRefresh={refreshCommunity}
             onDownload={downloadCommunityProfile}
             onUpload={uploadCommunityProfile}
-            onEditUpload={async () => refreshCommunity()}
+            onEditUpload={editCommunityUpload}
           />
         )}
         {page === "settings" && (

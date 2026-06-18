@@ -2007,6 +2007,13 @@ textarea {
   color: var(--muted);
 }
 
+.community-evidence-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--muted);
+}
+
 @media (min-width: 761px) {
   .community-tabs {
     grid-template-columns: repeat(4, minmax(0, 1fr));

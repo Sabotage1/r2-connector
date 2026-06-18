@@ -1566,7 +1566,7 @@ describe("CommunityPage", () => {
     expect(screen.getByLabelText("Notes")).toHaveValue("Gentle declining pressure");
   });
 
-  it("shows downloaded profiles with local title and recommendation notes", async () => {
+  it("shows downloaded profiles with local title, recommendation notes, and evidence details", async () => {
     await renderCommunityPage({
       downloaded: [
         {
@@ -1575,7 +1575,14 @@ describe("CommunityPage", () => {
           localProfileTitle: "Blooming - Halo - Roy",
           downloadedAt: "2026-06-18T00:00:00.000Z",
           updatedAt: "2026-06-18T00:00:00.000Z",
-          recommendation
+          recommendation,
+          evidence: {
+            id: "shot-1",
+            tds: 8.5,
+            ey: 20,
+            notes: "sweet balance",
+            measurements: [{ machine: { pressure: 7 } }]
+          }
         }
       ]
     });
@@ -1584,10 +1591,13 @@ describe("CommunityPage", () => {
 
     expect(screen.getByText("Blooming - Halo - Roy")).toBeInTheDocument();
     expect(screen.getByText("Gentle declining pressure")).toBeInTheDocument();
+    expect(screen.getByText("TDS 8.5")).toBeInTheDocument();
+    expect(screen.getByText("EY 20")).toBeInTheDocument();
+    expect(screen.getByText("sweet balance")).toBeInTheDocument();
   });
 
-  it("edits an uploaded profile recommendation", async () => {
-    const onEditUpload = vi.fn();
+  it("edits an uploaded profile recommendation and reports completion", async () => {
+    const onEditUpload = vi.fn().mockResolvedValue(undefined);
     await renderCommunityPage({
       onEditUpload,
       uploaded: [
@@ -1603,6 +1613,27 @@ describe("CommunityPage", () => {
     await userEvent.click(screen.getByRole("tab", { name: "Uploaded Profiles" }));
     await userEvent.click(screen.getByRole("button", { name: "Edit Blooming" }));
 
-    expect(onEditUpload).toHaveBeenCalledWith(recommendation);
+    await waitFor(() => expect(onEditUpload).toHaveBeenCalledWith(recommendation));
+    expect(screen.getByRole("status")).toHaveTextContent("Recommendation updated.");
+  });
+
+  it("shows an edit failure alert for uploaded recommendations", async () => {
+    const onEditUpload = vi.fn().mockRejectedValue(new Error("Original local profile is no longer available."));
+    await renderCommunityPage({
+      onEditUpload,
+      uploaded: [
+        {
+          recommendationId: recommendation.id,
+          uploadedAt: "2026-06-18T00:00:00.000Z",
+          updatedAt: "2026-06-18T00:00:00.000Z",
+          recommendation
+        }
+      ]
+    });
+
+    await userEvent.click(screen.getByRole("tab", { name: "Uploaded Profiles" }));
+    await userEvent.click(screen.getByRole("button", { name: "Edit Blooming" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Original local profile is no longer available.");
   });
 });

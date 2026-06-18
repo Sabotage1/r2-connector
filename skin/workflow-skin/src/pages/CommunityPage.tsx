@@ -133,6 +133,7 @@ export function CommunityPage({
   const [draft, setDraft] = useState<UploadDraft>(emptyDraft);
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [pendingDownloadId, setPendingDownloadId] = useState<string | null>(null);
+  const [pendingEditId, setPendingEditId] = useState<string | null>(null);
   const displayName = submittedByLocked ? submittedBy ?? "" : manualDisplayName;
   const filteredRecommendations = useMemo(
     () => recommendations.filter((recommendation) => matchesCommunitySearch(recommendation, query)),
@@ -172,6 +173,19 @@ export function CommunityPage({
       setStatus({ type: "error", message: error instanceof Error ? error.message : String(error) });
     } finally {
       setPendingDownloadId(null);
+    }
+  };
+
+  const editUploadedRecommendation = async (recommendation: CommunityRecommendation) => {
+    setPendingEditId(recommendation.id);
+    setStatus(null);
+    try {
+      await onEditUpload(recommendation);
+      setStatus({ type: "success", message: "Recommendation updated." });
+    } catch (error) {
+      setStatus({ type: "error", message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setPendingEditId(null);
     }
   };
 
@@ -364,6 +378,13 @@ export function CommunityPage({
             <div className="list-row community-row" key={`${item.recommendationId}-${item.localProfileId}`}>
               <strong>{item.localProfileTitle}</strong>
               <p>{item.recommendation.brew.notes}</p>
+              {item.evidence && (
+                <div className="community-evidence-summary">
+                  {typeof item.evidence.tds === "number" && <span>TDS {item.evidence.tds}</span>}
+                  {typeof item.evidence.ey === "number" && <span>EY {item.evidence.ey}</span>}
+                  {item.evidence.notes && <span>{item.evidence.notes}</span>}
+                </div>
+              )}
             </div>
           ))}
         </section>
@@ -371,16 +392,22 @@ export function CommunityPage({
 
       {activeTab === "uploaded" && (
         <section id="community-panel-uploaded" className="panel wide community-section" role="tabpanel" aria-labelledby="community-tab-uploaded">
+          {status && (
+            <p className={status.type === "error" ? "status-message error" : "status-message"} role={status.type === "error" ? "alert" : "status"}>
+              {status.message}
+            </p>
+          )}
           {uploaded.length === 0 && <p className="muted">No uploaded profiles yet.</p>}
           {uploaded.map((item) => {
             const title = recommendationTitle(item.recommendation);
+            const editPending = pendingEditId === item.recommendation.id;
             return (
               <div className="list-row community-row" key={item.recommendationId}>
                 <strong>{title}</strong>
                 <p>{item.recommendation.brew.notes}</p>
                 <div className="row-actions">
-                  <button type="button" className="ghost-button compact-button" onClick={() => void onEditUpload(item.recommendation)}>
-                    Edit {title}
+                  <button type="button" className="ghost-button compact-button" disabled={editPending} onClick={() => void editUploadedRecommendation(item.recommendation)}>
+                    {editPending ? "Updating" : `Edit ${title}`}
                   </button>
                 </div>
               </div>
