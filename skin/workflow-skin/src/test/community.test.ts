@@ -164,4 +164,62 @@ describe("community evidence helpers", () => {
       ]
     });
   });
+
+  it("drops private nested measurement fields from public evidence", () => {
+    const shot: ShotRecord = {
+      id: "shot-private-measurements",
+      timestamp: "2026-06-18T08:00:00.000Z",
+      workflow: { profile: { title: "Blooming" }, context: {} },
+      measurements: [
+        {
+          machine: {
+            timestamp: "2026-06-18T08:00:01.000Z",
+            pressure: 2,
+            targetPressure: 3,
+            flow: 1.1,
+            targetFlow: 1.2,
+            mixTemperature: 92,
+            groupTemperature: 91,
+            targetMixTemperature: 93,
+            targetGroupTemperature: 92,
+            state: { state: "espresso", substate: "pour", privateState: "secret" },
+            firmwareSecret: "private"
+          },
+          scale: {
+            timestamp: "2026-06-18T08:00:01.000Z",
+            weight: 12,
+            weightFlow: 0.6,
+            battery: 80,
+            timerValue: 12.5,
+            bluetoothAddress: "private"
+          },
+          rawPacket: "private"
+        } as unknown as NonNullable<ShotRecord["measurements"]>[number]
+      ]
+    };
+
+    expect(sanitizeShotEvidence(shot).measurements).toEqual([
+      {
+        machine: {
+          timestamp: "2026-06-18T08:00:01.000Z",
+          pressure: 2,
+          targetPressure: 3,
+          flow: 1.1,
+          targetFlow: 1.2,
+          mixTemperature: 92,
+          groupTemperature: 91,
+          targetMixTemperature: 93,
+          targetGroupTemperature: 92,
+          state: { state: "espresso", substate: "pour" }
+        },
+        scale: {
+          timestamp: "2026-06-18T08:00:01.000Z",
+          weight: 12,
+          weightFlow: 0.6,
+          battery: 80,
+          timerValue: 12.5
+        }
+      }
+    ]);
+  });
 });
