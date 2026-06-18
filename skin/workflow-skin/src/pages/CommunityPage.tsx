@@ -35,10 +35,10 @@ interface CommunityPageProps {
   submittedByLocked: boolean;
   manualDisplayName: string;
   onManualDisplayNameChange: (value: string) => void;
-  onRefresh: () => void;
-  onDownload: (recommendation: CommunityRecommendation) => void;
-  onUpload: (draft: UploadDraft) => void;
-  onEditUpload: (recommendation: CommunityRecommendation) => void;
+  onRefresh: () => Promise<void> | void;
+  onDownload: (recommendation: CommunityRecommendation) => Promise<void> | void;
+  onUpload: (draft: UploadDraft) => Promise<void> | void;
+  onEditUpload: (recommendation: CommunityRecommendation) => Promise<void> | void;
 }
 
 const emptyDraft: UploadDraft = {
@@ -84,17 +84,27 @@ function hasText(value: string): boolean {
   return Boolean(value.trim());
 }
 
+function positiveFiniteNumber(value: string): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 function isValidDraft(draft: UploadDraft, displayName: string): boolean {
+  const beansWeight = positiveFiniteNumber(draft.beansWeight);
+  const drinkWeight = positiveFiniteNumber(draft.drinkWeight);
+  const secondsMin = positiveFiniteNumber(draft.secondsMin);
+  const secondsMax = positiveFiniteNumber(draft.secondsMax);
   return Boolean(
     draft.bagId &&
       draft.profileId &&
       draft.grinderId &&
       hasText(displayName) &&
       hasText(draft.grindSetting) &&
-      hasText(draft.beansWeight) &&
-      hasText(draft.drinkWeight) &&
-      hasText(draft.secondsMin) &&
-      hasText(draft.secondsMax) &&
+      beansWeight &&
+      drinkWeight &&
+      secondsMin &&
+      secondsMax &&
+      secondsMax >= secondsMin &&
       hasText(draft.notes)
   );
 }
@@ -133,7 +143,7 @@ export function CommunityPage({
     setStatus(null);
   };
 
-  const uploadDraft = () => {
+  const uploadDraft = async () => {
     if (!isValidDraft(draft, displayName)) {
       setStatus({
         type: "error",
@@ -142,28 +152,34 @@ export function CommunityPage({
       return;
     }
 
-    onUpload(draft);
-    setDraft(emptyDraft);
-    setStatus({ type: "success", message: "Recommendation uploaded." });
+    try {
+      await onUpload(draft);
+      setDraft(emptyDraft);
+      setStatus({ type: "success", message: "Recommendation uploaded." });
+    } catch (error) {
+      setStatus({ type: "error", message: error instanceof Error ? error.message : String(error) });
+    }
   };
 
   return (
     <div className="community-page">
       <div className="page-title-row">
         <h1>Community</h1>
-        <button type="button" className="ghost-button compact-button" onClick={onRefresh}>
+        <button type="button" className="ghost-button compact-button" onClick={() => void onRefresh()}>
           <RefreshCw aria-hidden="true" size={16} />
           Refresh
         </button>
       </div>
 
-      <div className="settings-tabs" role="tablist" aria-label="Community sections">
+      <div className="settings-tabs community-tabs" role="tablist" aria-label="Community sections">
         {tabLabels.map((tab) => (
           <button
             key={tab.id}
+            id={`community-tab-${tab.id}`}
             type="button"
             role="tab"
             aria-selected={activeTab === tab.id}
+            aria-controls={`community-panel-${tab.id}`}
             className={activeTab === tab.id ? "settings-tab active" : "settings-tab"}
             onClick={() => {
               setActiveTab(tab.id);
@@ -176,7 +192,7 @@ export function CommunityPage({
       </div>
 
       {activeTab === "recommendations" && (
-        <section className="panel wide community-section">
+        <section id="community-panel-recommendations" className="panel wide community-section" role="tabpanel" aria-labelledby="community-tab-recommendations">
           <label className="settings-field">
             <span>Search recommendations</span>
             <input aria-label="Search recommendations" value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -205,7 +221,7 @@ export function CommunityPage({
                 </span>
                 <p>{recommendation.brew.notes}</p>
                 <div className="row-actions">
-                  <button type="button" className="primary-button compact-button" aria-label={`Download ${title}`} onClick={() => onDownload(recommendation)}>
+                  <button type="button" className="primary-button compact-button" aria-label={`Download ${title}`} onClick={() => void onDownload(recommendation)}>
                     <Download aria-hidden="true" size={16} />
                     Download
                   </button>
@@ -217,7 +233,7 @@ export function CommunityPage({
       )}
 
       {activeTab === "recommend" && (
-        <section className="panel wide community-section">
+        <section id="community-panel-recommend" className="panel wide community-section" role="tabpanel" aria-labelledby="community-tab-recommend">
           <p className="mandatory-help">Shot history is optional, but highly recommended so people can understand the profile from a real graph and shot details.</p>
           <div className="form-grid">
             {submittedByLocked ? (
@@ -302,7 +318,7 @@ export function CommunityPage({
             <textarea aria-label="Notes" value={draft.notes} onChange={(event) => setDraftField("notes", event.target.value)} />
           </label>
           <div className="row-actions">
-            <button type="button" className="primary-button" onClick={uploadDraft}>
+            <button type="button" className="primary-button" onClick={() => void uploadDraft()}>
               <Upload aria-hidden="true" size={16} />
               Upload recommendation
             </button>
@@ -316,7 +332,7 @@ export function CommunityPage({
       )}
 
       {activeTab === "downloaded" && (
-        <section className="panel wide community-section">
+        <section id="community-panel-downloaded" className="panel wide community-section" role="tabpanel" aria-labelledby="community-tab-downloaded">
           {downloaded.length === 0 && <p className="muted">No downloaded profiles yet.</p>}
           {downloaded.map((item) => (
             <div className="list-row community-row" key={`${item.recommendationId}-${item.localProfileId}`}>
@@ -328,7 +344,7 @@ export function CommunityPage({
       )}
 
       {activeTab === "uploaded" && (
-        <section className="panel wide community-section">
+        <section id="community-panel-uploaded" className="panel wide community-section" role="tabpanel" aria-labelledby="community-tab-uploaded">
           {uploaded.length === 0 && <p className="muted">No uploaded profiles yet.</p>}
           {uploaded.map((item) => {
             const title = recommendationTitle(item.recommendation);
@@ -337,7 +353,7 @@ export function CommunityPage({
                 <strong>{title}</strong>
                 <p>{item.recommendation.brew.notes}</p>
                 <div className="row-actions">
-                  <button type="button" className="ghost-button compact-button" onClick={() => onEditUpload(item.recommendation)}>
+                  <button type="button" className="ghost-button compact-button" onClick={() => void onEditUpload(item.recommendation)}>
                     Edit {title}
                   </button>
                 </div>

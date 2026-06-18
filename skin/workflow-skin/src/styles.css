@@ -2006,3 +2006,9 @@ textarea {
   margin: 0;
   color: var(--muted);
 }
+
+@media (min-width: 761px) {
+  .community-tabs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

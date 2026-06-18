@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import skinManifest from "../../skin-manifest.json";
@@ -1366,6 +1366,53 @@ describe("CommunityPage", () => {
     grinder: { id: "g1", model: "ZP6", settingType: "numeric" as const },
     brew: { grindSetting: "4.2", beansWeight: 18, drinkWeight: 42, secondsMin: 28, secondsMax: 34, notes: "Gentle declining pressure" }
   };
+  const bags = [{ id: "bag-1", beanId: "bean-1", roaster: "Pilot", name: "Halo", bean: "Ethiopia Halo", country: "Ethiopia", process: "Washed", roastDate: "2026-06-01" }];
+  const grinders = [{ id: "g1", model: "ZP6", settingType: "numeric" as const }];
+  const shots = [{ id: "shot-1", timestamp: "2026-06-18T10:00:00.000Z", workflow: { profile: { title: "Blooming" } } }];
+
+  async function renderCommunityPage(overrides = {}) {
+    const { CommunityPage } = await import("../pages/CommunityPage");
+    const props = {
+      recommendations: [] as typeof recommendation[],
+      loading: false,
+      error: null,
+      bags,
+      profiles,
+      grinders,
+      shots,
+      downloaded: [],
+      uploaded: [],
+      submittedBy: "Roy",
+      submittedByLocked: true,
+      manualDisplayName: "",
+      onManualDisplayNameChange: vi.fn(),
+      onRefresh: vi.fn(),
+      onDownload: vi.fn(),
+      onUpload: vi.fn(),
+      onEditUpload: vi.fn(),
+      ...overrides
+    };
+    render(<CommunityPage {...props} />);
+    return props;
+  }
+
+  async function openRecommendProfile() {
+    await userEvent.click(screen.getByRole("tab", { name: "Recommend Profile" }));
+  }
+
+  async function fillValidUploadDraft() {
+    await userEvent.selectOptions(screen.getByLabelText("Saved bag"), "bag-1");
+    await userEvent.selectOptions(screen.getByLabelText("Profile"), "p1");
+    await userEvent.selectOptions(screen.getByLabelText("Grinder"), "g1");
+    await userEvent.type(screen.getByLabelText("Grind setting"), "4.2");
+    await userEvent.type(screen.getByLabelText("Beans weight"), "18");
+    await userEvent.type(screen.getByLabelText("Drink weight"), "42");
+    await userEvent.type(screen.getByLabelText("Seconds min"), "28");
+    await userEvent.type(screen.getByLabelText("Seconds max"), "34");
+    await userEvent.type(screen.getByLabelText("Visualizer link"), "https://visualizer.coffee/shots/1");
+    await userEvent.selectOptions(screen.getByLabelText("Shot evidence"), "shot-1");
+    await userEvent.type(screen.getByLabelText("Notes"), "Gentle declining pressure");
+  }
 
   it("shows searchable recommendations and download actions", async () => {
     const { CommunityPage } = await import("../pages/CommunityPage");
@@ -1424,5 +1471,117 @@ describe("CommunityPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "Upload recommendation" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Select a saved bag, profile, grinder, public display name, grind setting, weights, seconds, and notes.");
     expect(onUpload).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid numeric brew values before upload", async () => {
+    const onUpload = vi.fn();
+    await renderCommunityPage({ onUpload });
+    await openRecommendProfile();
+    await fillValidUploadDraft();
+
+    await userEvent.clear(screen.getByLabelText("Beans weight"));
+    await userEvent.type(screen.getByLabelText("Beans weight"), "nope");
+    await userEvent.click(screen.getByRole("button", { name: "Upload recommendation" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Select a saved bag, profile, grinder, public display name, grind setting, weights, seconds, and notes.");
+    expect(onUpload).not.toHaveBeenCalled();
+  });
+
+  it("rejects reversed seconds before upload", async () => {
+    const onUpload = vi.fn();
+    await renderCommunityPage({ onUpload });
+    await openRecommendProfile();
+    await fillValidUploadDraft();
+
+    await userEvent.clear(screen.getByLabelText("Seconds min"));
+    await userEvent.type(screen.getByLabelText("Seconds min"), "40");
+    await userEvent.click(screen.getByRole("button", { name: "Upload recommendation" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Select a saved bag, profile, grinder, public display name, grind setting, weights, seconds, and notes.");
+    expect(onUpload).not.toHaveBeenCalled();
+  });
+
+  it("uploads a valid draft, clears fields, and shows success", async () => {
+    const onUpload = vi.fn().mockResolvedValue(undefined);
+    await renderCommunityPage({ onUpload });
+    await openRecommendProfile();
+    await fillValidUploadDraft();
+
+    await userEvent.click(screen.getByRole("button", { name: "Upload recommendation" }));
+
+    await waitFor(() =>
+      expect(onUpload).toHaveBeenCalledWith({
+        bagId: "bag-1",
+        profileId: "p1",
+        grinderId: "g1",
+        grindSetting: "4.2",
+        beansWeight: "18",
+        drinkWeight: "42",
+        secondsMin: "28",
+        secondsMax: "34",
+        notes: "Gentle declining pressure",
+        visualizerUrl: "https://visualizer.coffee/shots/1",
+        shotId: "shot-1"
+      })
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Recommendation uploaded.");
+    expect(screen.getByLabelText("Saved bag")).toHaveValue("");
+    expect(screen.getByLabelText("Grind setting")).toHaveValue("");
+    expect(screen.getByLabelText("Notes")).toHaveValue("");
+  });
+
+  it("keeps the draft and shows an alert when upload fails", async () => {
+    const onUpload = vi.fn().mockRejectedValue(new Error("Community upload failed"));
+    await renderCommunityPage({ onUpload });
+    await openRecommendProfile();
+    await fillValidUploadDraft();
+
+    await userEvent.click(screen.getByRole("button", { name: "Upload recommendation" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Community upload failed");
+    expect(screen.queryByText("Recommendation uploaded.")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Saved bag")).toHaveValue("bag-1");
+    expect(screen.getByLabelText("Grind setting")).toHaveValue("4.2");
+    expect(screen.getByLabelText("Notes")).toHaveValue("Gentle declining pressure");
+  });
+
+  it("shows downloaded profiles with local title and recommendation notes", async () => {
+    await renderCommunityPage({
+      downloaded: [
+        {
+          recommendationId: recommendation.id,
+          localProfileId: "local-p1",
+          localProfileTitle: "Blooming - Halo - Roy",
+          downloadedAt: "2026-06-18T00:00:00.000Z",
+          updatedAt: "2026-06-18T00:00:00.000Z",
+          recommendation
+        }
+      ]
+    });
+
+    await userEvent.click(screen.getByRole("tab", { name: "Downloaded Profiles" }));
+
+    expect(screen.getByText("Blooming - Halo - Roy")).toBeInTheDocument();
+    expect(screen.getByText("Gentle declining pressure")).toBeInTheDocument();
+  });
+
+  it("edits an uploaded profile recommendation", async () => {
+    const onEditUpload = vi.fn();
+    await renderCommunityPage({
+      onEditUpload,
+      uploaded: [
+        {
+          recommendationId: recommendation.id,
+          uploadedAt: "2026-06-18T00:00:00.000Z",
+          updatedAt: "2026-06-18T00:00:00.000Z",
+          recommendation
+        }
+      ]
+    });
+
+    await userEvent.click(screen.getByRole("tab", { name: "Uploaded Profiles" }));
+    await userEvent.click(screen.getByRole("button", { name: "Edit Blooming" }));
+
+    expect(onEditUpload).toHaveBeenCalledWith(recommendation);
   });
 });
