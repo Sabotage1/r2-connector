@@ -834,7 +834,12 @@ describe("App shell", () => {
     };
     const fetchState = mockReaFetch(initialSettings, {
       communityRecommendations: [communityRecommendation],
-      shotDetailsById: { "history-rec-shot": fullShot }
+      shotDetailsById: { "history-rec-shot": fullShot },
+      beans: [{ id: "bean-1", roaster: "Pilot", name: "Ethiopia Halo", country: "Ethiopia", region: "Yirgacheffe", processing: "Washed", notes: "floral" }],
+      batchesByBeanId: {
+        "bean-1": [{ id: "batch-1", beanId: "bean-1", roastDate: "2026-06-01", roastLevel: "Light", notes: "batch notes", extras: { workflowSkin: { name: "Halo" } } }]
+      },
+      grinders: [{ id: "g1", model: "ZP6", settingType: "numeric", burrType: "flat", burrs: "MP", notes: "travel grinder" }]
     });
     fetchState.communityStore.set("/api/v1/store/workflow-skin/community-uploaded-profiles", [
       {
@@ -850,6 +855,8 @@ describe("App shell", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Community" }));
     await userEvent.click(await screen.findByRole("tab", { name: "Uploaded Profiles" }));
     await userEvent.click(screen.getByRole("button", { name: "Edit Blooming" }));
+    expect(await screen.findByRole("heading", { name: "Edit Blooming" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Save updated recommendation" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Recommendation updated.");
     expect(fetchState.communityUpdatePayloads[0]).toEqual(

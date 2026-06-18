@@ -1537,6 +1537,13 @@ describe("CommunityPage", () => {
     expect(screen.getByText("EY 21.5%")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open Visualizer" })).toHaveAttribute("href", "https://visualizer.coffee/shots/abc");
 
+    await userEvent.click(screen.getByRole("img", { name: "Shot pressure graph" }));
+    const fullscreenGraph = await screen.findByRole("dialog", { name: "Shot graph fullscreen" });
+    expect(within(fullscreenGraph).getByRole("button", { name: "Close shot graph fullscreen" })).toBeInTheDocument();
+    expect(within(fullscreenGraph).getByRole("img", { name: "Shot pressure graph" })).toBeInTheDocument();
+    await userEvent.click(within(fullscreenGraph).getByRole("button", { name: "Close shot graph fullscreen" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Shot graph fullscreen" })).not.toBeInTheDocument());
+
     await userEvent.click(screen.getByRole("button", { name: "Download Blooming" }));
 
     await waitFor(() => expect(onDownload).toHaveBeenCalledWith(recommendationWithEvidence));
@@ -1761,7 +1768,7 @@ describe("CommunityPage", () => {
     expect(within(row).getByText("sweet balance")).toBeInTheDocument();
   });
 
-  it("edits an uploaded profile recommendation and reports completion", async () => {
+  it("opens an uploaded profile detail editor, validates mandatory fields, and saves the updated draft", async () => {
     const onEditUpload = vi.fn().mockResolvedValue(undefined);
     await renderCommunityPage({
       onEditUpload,
@@ -1778,7 +1785,35 @@ describe("CommunityPage", () => {
     await userEvent.click(screen.getByRole("tab", { name: "Uploaded Profiles" }));
     await userEvent.click(screen.getByRole("button", { name: "Edit Blooming" }));
 
-    await waitFor(() => expect(onEditUpload).toHaveBeenCalledWith(recommendation));
+    expect(await screen.findByRole("heading", { name: "Edit Blooming" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Grind setting")).toHaveValue("4.2");
+    expect(screen.getByLabelText("Seconds min")).toHaveValue("28");
+
+    await userEvent.clear(screen.getByLabelText("Notes"));
+    await userEvent.click(screen.getByRole("button", { name: "Save updated recommendation" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Select a saved bag, profile, grinder, public display name, grind setting, weights, seconds, and notes.");
+    expect(onEditUpload).not.toHaveBeenCalled();
+
+    await userEvent.type(screen.getByLabelText("Notes"), "Updated tasting note");
+    await userEvent.click(screen.getByRole("button", { name: "Save updated recommendation" }));
+
+    await waitFor(() =>
+      expect(onEditUpload).toHaveBeenCalledWith(
+        recommendation,
+        expect.objectContaining({
+          bagId: "bag-1",
+          profileId: "p1",
+          grinderId: "g1",
+          grindSetting: "4.2",
+          beansWeight: "18",
+          drinkWeight: "42",
+          secondsMin: "28",
+          secondsMax: "34",
+          notes: "Updated tasting note"
+        })
+      )
+    );
     expect(screen.getByRole("status")).toHaveTextContent("Recommendation updated.");
   });
 
@@ -1798,6 +1833,7 @@ describe("CommunityPage", () => {
 
     await userEvent.click(screen.getByRole("tab", { name: "Uploaded Profiles" }));
     await userEvent.click(screen.getByRole("button", { name: "Edit Blooming" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Save updated recommendation" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Original local profile is no longer available.");
   });

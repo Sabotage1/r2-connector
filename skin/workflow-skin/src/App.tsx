@@ -955,31 +955,63 @@ export function App() {
   );
 
   const editCommunityUpload = useCallback(
-    async (recommendation: CommunityRecommendation) => {
+    async (recommendation: CommunityRecommendation, draft: UploadDraft) => {
       const ownerKey = await getOrCreateCommunityOwnerKey(api);
       const latestUploads = await loadUploadedCommunityProfiles(api);
       const localUpload =
         latestUploads.find((item) => item.recommendationId === recommendation.id) ?? uploadedCommunityProfiles.find((item) => item.recommendationId === recommendation.id);
       if (!localUpload) throw new Error("This recommendation is not owned by this machine.");
 
-      const profile = data.profiles.find((item) => item.id === recommendation.profile.originalId);
-      if (!profile) throw new Error("Original local profile is no longer available.");
+      const bag = data.bags.find((item) => item.id === draft.bagId);
+      const profile = data.profiles.find((item) => item.id === draft.profileId);
+      const grinder = data.grinders.find((item) => item.id === draft.grinderId);
+      if (!bag || !profile || !grinder) throw new Error("Updated recommendation is missing required local records.");
+      if (!isBurrType(grinder.burrType)) throw new Error("Selected grinder is missing Burrs Type.");
 
-      const refreshedEvidence = localUpload.evidence?.id
-        ? await api
-            .getShot(localUpload.evidence.id)
-            .then(sanitizeShotEvidence)
-            .catch(() => localUpload.evidence)
-        : localUpload.evidence;
+      const selectedShot = draft.shotId
+        ? await api.getShot(draft.shotId).catch(() => data.shots.find((shot) => shot.id === draft.shotId))
+        : undefined;
+      const refreshedEvidence = selectedShot ? sanitizeShotEvidence(selectedShot) : undefined;
       const result = await communityApi.update(recommendation.id, {
         ownerKey,
         recommendation: {
           submittedBy: recommendation.submittedBy,
-          bag: recommendation.bag,
-          profile: recommendation.profile,
-          grinder: recommendation.grinder,
-          brew: recommendation.brew,
-          visualizerUrl: recommendation.visualizerUrl
+          bag: {
+            id: bag.id,
+            beanId: bag.beanId,
+            roaster: bag.roaster ?? "",
+            name: bag.name,
+            bean: bag.bean ?? "",
+            country: bag.country ?? "",
+            region: bag.region,
+            process: bag.process ?? "",
+            roastDate: bag.roastDate ?? "",
+            roastLevel: bag.roastLevel,
+            notes: bag.notes
+          },
+          profile: {
+            originalId: profile.id,
+            originalTitle: profile.profile.title ?? profile.id,
+            fileName: recommendation.profile.fileName,
+            installedTitle: recommendation.profile.installedTitle || profile.profile.title || profile.id
+          },
+          grinder: {
+            id: grinder.id,
+            model: grinder.model,
+            burrType: grinder.burrType,
+            burrs: grinder.burrs,
+            settingType: grinder.settingType,
+            notes: grinder.notes
+          },
+          brew: {
+            grindSetting: draft.grindSetting.trim(),
+            beansWeight: Number(draft.beansWeight),
+            drinkWeight: Number(draft.drinkWeight),
+            secondsMin: Number(draft.secondsMin),
+            secondsMax: Number(draft.secondsMax),
+            notes: draft.notes.trim()
+          },
+          visualizerUrl: draft.visualizerUrl.trim() || undefined
         },
         profileJson: profile.profile,
         evidence: refreshedEvidence
@@ -994,7 +1026,7 @@ export function App() {
       setUploadedCommunityProfiles(next);
       setCommunityRecommendations(result.index.items);
     },
-    [api, communityApi, data.profiles, uploadedCommunityProfiles]
+    [api, communityApi, data.bags, data.grinders, data.profiles, data.shots, uploadedCommunityProfiles]
   );
 
   const recommendHistoryShot = (shot: ShotRecord) => {

@@ -1,4 +1,4 @@
-import { Download, RefreshCw, Upload } from "lucide-react";
+import { Download, RefreshCw, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Grinder, ProfileRecord, ShotRecord, ShotSnapshot } from "../api/types";
 import { ShotGraph } from "../components/ShotGraph";
@@ -42,7 +42,7 @@ interface CommunityPageProps {
   onLoadDetails?: (recommendation: CommunityRecommendation) => Promise<CommunityDownloadPayload> | CommunityDownloadPayload;
   onDownload: (recommendation: CommunityRecommendation) => Promise<void> | void;
   onUpload: (draft: UploadDraft) => Promise<void> | void;
-  onEditUpload: (recommendation: CommunityRecommendation) => Promise<void> | void;
+  onEditUpload: (recommendation: CommunityRecommendation, draft: UploadDraft) => Promise<void> | void;
   initialDraft?: Partial<UploadDraft> | null;
   onInitialDraftApplied?: () => void;
 }
@@ -228,6 +228,28 @@ function isValidDraft(draft: UploadDraft, displayName: string): boolean {
   );
 }
 
+function draftNumber(value: number | undefined): string {
+  return typeof value === "number" && Number.isFinite(value) ? String(value) : "";
+}
+
+function uploadDraftFromRecommendation(recommendation: CommunityRecommendation, evidence?: CommunityShotEvidence): UploadDraft {
+  const secondsMin = recommendation.brew.secondsMin ?? recommendation.brew.secondsGoal;
+  const secondsMax = recommendation.brew.secondsMax ?? recommendation.brew.secondsGoal;
+  return {
+    bagId: recommendation.bag.id,
+    profileId: recommendation.profile.originalId,
+    grinderId: recommendation.grinder.id,
+    grindSetting: recommendation.brew.grindSetting,
+    beansWeight: draftNumber(recommendation.brew.beansWeight),
+    drinkWeight: draftNumber(recommendation.brew.drinkWeight),
+    secondsMin: draftNumber(secondsMin),
+    secondsMax: draftNumber(secondsMax),
+    notes: recommendation.brew.notes,
+    visualizerUrl: recommendation.visualizerUrl ?? "",
+    shotId: evidence?.id ?? ""
+  };
+}
+
 export function CommunityPage({
   recommendations,
   loading,
@@ -259,6 +281,9 @@ export function CommunityPage({
   const [pendingDownloadId, setPendingDownloadId] = useState<string | null>(null);
   const [pendingEditId, setPendingEditId] = useState<string | null>(null);
   const [selectedRecommendationId, setSelectedRecommendationId] = useState<string | null>(null);
+  const [editingUploadId, setEditingUploadId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<UploadDraft>(emptyDraft);
+  const [graphFullscreen, setGraphFullscreen] = useState(false);
   const [detailPayloads, setDetailPayloads] = useState<Partial<Record<string, CommunityDownloadPayload>>>({});
   const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -284,6 +309,8 @@ export function CommunityPage({
     : undefined;
   const selectedEvidence = selectedDetailPayload?.evidence ?? selectedLocalEvidence;
   const selectedMeasurements = evidenceMeasurements(selectedEvidence);
+  const editingUpload = editingUploadId ? uploaded.find((item) => item.recommendationId === editingUploadId) ?? null : null;
+  const editingMeasurements = evidenceMeasurements(editingUpload?.evidence);
 
   useEffect(() => {
     if (!initialDraft) return;
@@ -297,6 +324,84 @@ export function CommunityPage({
     setDraft((current) => ({ ...current, [field]: value }));
     setStatus(null);
   };
+
+  const setEditDraftField = (field: keyof UploadDraft, value: string) => {
+    setEditDraft((current) => ({ ...current, [field]: value }));
+    setStatus(null);
+  };
+
+  const draftFields = (currentDraft: UploadDraft, updateField: (field: keyof UploadDraft, value: string) => void) => (
+    <>
+      <label className="settings-field">
+        <span>Saved bag</span>
+        <select aria-label="Saved bag" value={currentDraft.bagId} onChange={(event) => updateField("bagId", event.target.value)}>
+          <option value="">Select saved bag</option>
+          {bags.map((bag) => (
+            <option key={bag.id} value={bag.id}>
+              {bagTitle(bag)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="settings-field">
+        <span>Profile</span>
+        <select aria-label="Profile" value={currentDraft.profileId} onChange={(event) => updateField("profileId", event.target.value)}>
+          <option value="">Select profile</option>
+          {profiles.map((profile) => (
+            <option key={profile.id} value={profile.id}>
+              {profileTitle(profile)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="settings-field">
+        <span>Grinder</span>
+        <select aria-label="Grinder" value={currentDraft.grinderId} onChange={(event) => updateField("grinderId", event.target.value)}>
+          <option value="">Select grinder</option>
+          {grinders.map((grinder) => (
+            <option key={grinder.id} value={grinder.id}>
+              {[grinder.model, burrTypeLabel(grinder.burrType)].filter(Boolean).join(" - ")}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="settings-field">
+        <span>Grind setting</span>
+        <input aria-label="Grind setting" value={currentDraft.grindSetting} onChange={(event) => updateField("grindSetting", event.target.value)} />
+      </label>
+      <label className="settings-field">
+        <span>Beans weight</span>
+        <input aria-label="Beans weight" inputMode="decimal" value={currentDraft.beansWeight} onChange={(event) => updateField("beansWeight", event.target.value)} />
+      </label>
+      <label className="settings-field">
+        <span>Drink weight</span>
+        <input aria-label="Drink weight" inputMode="decimal" value={currentDraft.drinkWeight} onChange={(event) => updateField("drinkWeight", event.target.value)} />
+      </label>
+      <label className="settings-field">
+        <span>Seconds min</span>
+        <input aria-label="Seconds min" inputMode="decimal" value={currentDraft.secondsMin} onChange={(event) => updateField("secondsMin", event.target.value)} />
+      </label>
+      <label className="settings-field">
+        <span>Seconds max</span>
+        <input aria-label="Seconds max" inputMode="decimal" value={currentDraft.secondsMax} onChange={(event) => updateField("secondsMax", event.target.value)} />
+      </label>
+      <label className="settings-field">
+        <span>Visualizer link</span>
+        <input aria-label="Visualizer link" value={currentDraft.visualizerUrl} onChange={(event) => updateField("visualizerUrl", event.target.value)} />
+      </label>
+      <label className="settings-field">
+        <span>Shot evidence</span>
+        <select aria-label="Shot evidence" value={currentDraft.shotId} onChange={(event) => updateField("shotId", event.target.value)}>
+          <option value="">No shot selected</option>
+          {shots.map((shot) => (
+            <option key={shot.id} value={shot.id}>
+              {shotTitle(shot)}
+            </option>
+          ))}
+        </select>
+      </label>
+    </>
+  );
 
   const uploadDraft = async () => {
     if (!isValidDraft(draft, displayName)) {
@@ -346,11 +451,25 @@ export function CommunityPage({
     }
   };
 
-  const editUploadedRecommendation = async (recommendation: CommunityRecommendation) => {
-    setPendingEditId(recommendation.id);
+  const startEditingUploadedRecommendation = (item: UploadedCommunityProfile) => {
+    setEditingUploadId(item.recommendationId);
+    setEditDraft(uploadDraftFromRecommendation(item.recommendation, item.evidence));
+    setStatus(null);
+  };
+
+  const saveUploadedRecommendation = async (item: UploadedCommunityProfile) => {
+    if (!isValidDraft(editDraft, item.recommendation.submittedBy)) {
+      setStatus({
+        type: "error",
+        message: "Select a saved bag, profile, grinder, public display name, grind setting, weights, seconds, and notes."
+      });
+      return;
+    }
+
+    setPendingEditId(item.recommendation.id);
     setStatus(null);
     try {
-      await onEditUpload(recommendation);
+      await onEditUpload(item.recommendation, editDraft);
       setStatus({ type: "success", message: "Recommendation updated." });
     } catch (error) {
       setStatus({ type: "error", message: error instanceof Error ? error.message : String(error) });
@@ -382,6 +501,8 @@ export function CommunityPage({
             onClick={() => {
               setActiveTab(tab.id);
               setSelectedRecommendationId(null);
+              setEditingUploadId(null);
+              setGraphFullscreen(false);
               setStatus(null);
             }}
           >
@@ -395,7 +516,14 @@ export function CommunityPage({
           {selectedRecommendation ? (
             <div className="community-detail-view">
               <div className="community-detail-header">
-                <button type="button" className="ghost-button compact-button" onClick={() => setSelectedRecommendationId(null)}>
+                <button
+                  type="button"
+                  className="ghost-button compact-button"
+                  onClick={() => {
+                    setSelectedRecommendationId(null);
+                    setGraphFullscreen(false);
+                  }}
+                >
                   Back
                 </button>
                 <div>
@@ -469,8 +597,22 @@ export function CommunityPage({
                   <h3>Shot Graph</h3>
                   <span className="muted">{selectedMeasurements.length ? "Shared shot evidence" : "No shot graph shared"}</span>
                 </div>
-                {selectedMeasurements.length ? <ShotGraph measurements={selectedMeasurements} /> : <p className="muted">This recommendation does not include shared shot history.</p>}
+                {selectedMeasurements.length ? (
+                  <button type="button" className="community-graph-open" aria-label="Open shot graph fullscreen" onClick={() => setGraphFullscreen(true)}>
+                    <ShotGraph measurements={selectedMeasurements} />
+                  </button>
+                ) : (
+                  <p className="muted">This recommendation does not include shared shot history.</p>
+                )}
               </div>
+              {graphFullscreen && selectedMeasurements.length > 0 && (
+                <div className="community-graph-fullscreen" role="dialog" aria-modal="true" aria-label="Shot graph fullscreen">
+                  <button type="button" className="community-graph-close" aria-label="Close shot graph fullscreen" onClick={() => setGraphFullscreen(false)}>
+                    <X aria-hidden="true" size={24} />
+                  </button>
+                  <ShotGraph measurements={selectedMeasurements} />
+                </div>
+              )}
             </div>
           ) : (
             <>
@@ -558,74 +700,7 @@ export function CommunityPage({
                 <input aria-label="Public display name" value={manualDisplayName} onChange={(event) => onManualDisplayNameChange(event.target.value)} />
               </label>
             )}
-            <label className="settings-field">
-              <span>Saved bag</span>
-              <select aria-label="Saved bag" value={draft.bagId} onChange={(event) => setDraftField("bagId", event.target.value)}>
-                <option value="">Select saved bag</option>
-                {bags.map((bag) => (
-                  <option key={bag.id} value={bag.id}>
-                    {bagTitle(bag)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="settings-field">
-              <span>Profile</span>
-              <select aria-label="Profile" value={draft.profileId} onChange={(event) => setDraftField("profileId", event.target.value)}>
-                <option value="">Select profile</option>
-                {profiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profileTitle(profile)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="settings-field">
-              <span>Grinder</span>
-              <select aria-label="Grinder" value={draft.grinderId} onChange={(event) => setDraftField("grinderId", event.target.value)}>
-                <option value="">Select grinder</option>
-                {grinders.map((grinder) => (
-                  <option key={grinder.id} value={grinder.id}>
-                    {[grinder.model, burrTypeLabel(grinder.burrType)].filter(Boolean).join(" - ")}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="settings-field">
-              <span>Grind setting</span>
-              <input aria-label="Grind setting" value={draft.grindSetting} onChange={(event) => setDraftField("grindSetting", event.target.value)} />
-            </label>
-            <label className="settings-field">
-              <span>Beans weight</span>
-              <input aria-label="Beans weight" inputMode="decimal" value={draft.beansWeight} onChange={(event) => setDraftField("beansWeight", event.target.value)} />
-            </label>
-            <label className="settings-field">
-              <span>Drink weight</span>
-              <input aria-label="Drink weight" inputMode="decimal" value={draft.drinkWeight} onChange={(event) => setDraftField("drinkWeight", event.target.value)} />
-            </label>
-            <label className="settings-field">
-              <span>Seconds min</span>
-              <input aria-label="Seconds min" inputMode="decimal" value={draft.secondsMin} onChange={(event) => setDraftField("secondsMin", event.target.value)} />
-            </label>
-            <label className="settings-field">
-              <span>Seconds max</span>
-              <input aria-label="Seconds max" inputMode="decimal" value={draft.secondsMax} onChange={(event) => setDraftField("secondsMax", event.target.value)} />
-            </label>
-            <label className="settings-field">
-              <span>Visualizer link</span>
-              <input aria-label="Visualizer link" value={draft.visualizerUrl} onChange={(event) => setDraftField("visualizerUrl", event.target.value)} />
-            </label>
-            <label className="settings-field">
-              <span>Shot evidence</span>
-              <select aria-label="Shot evidence" value={draft.shotId} onChange={(event) => setDraftField("shotId", event.target.value)}>
-                <option value="">No shot selected</option>
-                {shots.map((shot) => (
-                  <option key={shot.id} value={shot.id}>
-                    {shotTitle(shot)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {draftFields(draft, setDraftField)}
           </div>
           <label className="settings-field notes-field">
             <span>Notes</span>
@@ -667,37 +742,126 @@ export function CommunityPage({
 
       {activeTab === "uploaded" && (
         <section id="community-panel-uploaded" className="panel wide community-section" role="tabpanel" aria-labelledby="community-tab-uploaded">
-          {status && (
-            <p className={status.type === "error" ? "status-message error" : "status-message"} role={status.type === "error" ? "alert" : "status"}>
-              {status.message}
-            </p>
-          )}
-          {uploaded.length === 0 && <p className="muted">No uploaded profiles yet.</p>}
-          {uploaded.map((item) => {
-            const title = recommendationTitle(item.recommendation);
-            const editPending = pendingEditId === item.recommendation.id;
-            return (
-              <div className="list-row community-row" key={item.recommendationId}>
-                <strong>{title}</strong>
-                {localUploadSummary(item) && <span>{localUploadSummary(item)}</span>}
-                <span>{recommendationBagSummary(item.recommendation)}</span>
-                <span>{recommendationBrewSummary(item.recommendation)}</span>
-                <p>{item.recommendation.brew.notes}</p>
-                {item.evidence && (
-                  <div className="community-evidence-summary">
-                    {typeof item.evidence.tds === "number" && <span>TDS {item.evidence.tds}</span>}
-                    {typeof item.evidence.ey === "number" && <span>EY {item.evidence.ey}</span>}
-                    {item.evidence.notes && <span>{item.evidence.notes}</span>}
-                  </div>
-                )}
-                <div className="row-actions">
-                  <button type="button" className="ghost-button compact-button" disabled={editPending} onClick={() => void editUploadedRecommendation(item.recommendation)}>
-                    {editPending ? "Updating" : `Edit ${title}`}
-                  </button>
+          {editingUpload ? (
+            <div className="community-detail-view community-upload-edit-view">
+              <div className="community-detail-header">
+                <button
+                  type="button"
+                  className="ghost-button compact-button"
+                  onClick={() => {
+                    setEditingUploadId(null);
+                    setGraphFullscreen(false);
+                    setStatus(null);
+                  }}
+                >
+                  Back
+                </button>
+                <div>
+                  <span className="eyebrow">Uploaded profile</span>
+                  <h2>Edit {recommendationTitle(editingUpload.recommendation)}</h2>
+                </div>
+                <button
+                  type="button"
+                  className="primary-button compact-button"
+                  disabled={pendingEditId === editingUpload.recommendation.id}
+                  onClick={() => void saveUploadedRecommendation(editingUpload)}
+                >
+                  {pendingEditId === editingUpload.recommendation.id ? "Saving" : "Save updated recommendation"}
+                </button>
+              </div>
+              {status && (
+                <p className={status.type === "error" ? "status-message error" : "status-message"} role={status.type === "error" ? "alert" : "status"}>
+                  {status.message}
+                </p>
+              )}
+              <div className="community-detail-grid">
+                <div className="community-detail-card">
+                  <strong>Current Bag</strong>
+                  <span>{recommendationBagSummary(editingUpload.recommendation)}</span>
+                </div>
+                <div className="community-detail-card">
+                  <strong>Current Grinder</strong>
+                  <span>{[editingUpload.recommendation.grinder.model, editingUpload.recommendation.grinder.burrs, burrTypeLabel(editingUpload.recommendation.grinder.burrType)].filter(Boolean).join(" - ")}</span>
+                </div>
+                <div className="community-detail-card">
+                  <strong>Current Brew</strong>
+                  <span>{[`Grind ${editingUpload.recommendation.brew.grindSetting}`, `${editingUpload.recommendation.brew.beansWeight}g in`, `${editingUpload.recommendation.brew.drinkWeight}g out`, secondsSummary(editingUpload.recommendation)].filter(Boolean).join(" - ")}</span>
+                  <p>{editingUpload.recommendation.brew.notes}</p>
+                </div>
+                <div className="community-detail-card">
+                  <strong>Shot</strong>
+                  {recommendationShotScore(editingUpload.recommendation, editingUpload.evidence) && <span>{recommendationShotScore(editingUpload.recommendation, editingUpload.evidence)}</span>}
+                  {editingUpload.evidence?.timestamp && <span>Shot date {formatDateOnly(editingUpload.evidence.timestamp)}</span>}
+                  {[detailValue(editingUpload.evidence?.doseWeight, "g dose"), detailValue(editingUpload.evidence?.drinkWeight, "g drink")].filter(Boolean).length > 0 && (
+                    <span>{[detailValue(editingUpload.evidence?.doseWeight, "g dose"), detailValue(editingUpload.evidence?.drinkWeight, "g drink")].filter(Boolean).join(" - ")}</span>
+                  )}
+                  {typeof editingUpload.evidence?.tds === "number" && <span>TDS {editingUpload.evidence.tds}</span>}
+                  {typeof editingUpload.evidence?.ey === "number" && <span>EY {editingUpload.evidence.ey}%</span>}
+                  {editingUpload.evidence?.notes && <p>{editingUpload.evidence.notes}</p>}
                 </div>
               </div>
-            );
-          })}
+              <p className="mandatory-help">Shot history is optional, but highly recommended so people can understand the profile from a real graph and shot details.</p>
+              <div className="form-grid">{draftFields(editDraft, setEditDraftField)}</div>
+              <label className="settings-field notes-field">
+                <span>Notes</span>
+                <textarea aria-label="Notes" value={editDraft.notes} onChange={(event) => setEditDraftField("notes", event.target.value)} />
+              </label>
+              <div className="community-detail-graph dark-graph-panel">
+                <div className="review-graph-header">
+                  <h3>Shot Graph</h3>
+                  <span className="muted">{editingMeasurements.length ? "Shared shot evidence" : "No shot graph shared"}</span>
+                </div>
+                {editingMeasurements.length ? (
+                  <button type="button" className="community-graph-open" aria-label="Open shot graph fullscreen" onClick={() => setGraphFullscreen(true)}>
+                    <ShotGraph measurements={editingMeasurements} />
+                  </button>
+                ) : (
+                  <p className="muted">This recommendation does not include shared shot history.</p>
+                )}
+              </div>
+              {graphFullscreen && editingMeasurements.length > 0 && (
+                <div className="community-graph-fullscreen" role="dialog" aria-modal="true" aria-label="Shot graph fullscreen">
+                  <button type="button" className="community-graph-close" aria-label="Close shot graph fullscreen" onClick={() => setGraphFullscreen(false)}>
+                    <X aria-hidden="true" size={24} />
+                  </button>
+                  <ShotGraph measurements={editingMeasurements} />
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              {status && (
+                <p className={status.type === "error" ? "status-message error" : "status-message"} role={status.type === "error" ? "alert" : "status"}>
+                  {status.message}
+                </p>
+              )}
+              {uploaded.length === 0 && <p className="muted">No uploaded profiles yet.</p>}
+              {uploaded.map((item) => {
+                const title = recommendationTitle(item.recommendation);
+                return (
+                  <div className="list-row community-row" key={item.recommendationId}>
+                    <strong>{title}</strong>
+                    {localUploadSummary(item) && <span>{localUploadSummary(item)}</span>}
+                    <span>{recommendationBagSummary(item.recommendation)}</span>
+                    <span>{recommendationBrewSummary(item.recommendation)}</span>
+                    <p>{item.recommendation.brew.notes}</p>
+                    {item.evidence && (
+                      <div className="community-evidence-summary">
+                        {typeof item.evidence.tds === "number" && <span>TDS {item.evidence.tds}</span>}
+                        {typeof item.evidence.ey === "number" && <span>EY {item.evidence.ey}</span>}
+                        {item.evidence.notes && <span>{item.evidence.notes}</span>}
+                      </div>
+                    )}
+                    <div className="row-actions">
+                      <button type="button" className="ghost-button compact-button" onClick={() => startEditingUploadedRecommendation(item)}>
+                        Edit {title}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
         </section>
       )}
     </div>

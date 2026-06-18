@@ -81,23 +81,49 @@ function timestampMs(measurement: ShotSnapshot): number | null {
   return Number.isFinite(time) ? time : null;
 }
 
-function elapsedSeconds(measurements: ShotSnapshot[], measurement: ShotSnapshot, index: number, startTime: number | null): number {
+function timerValue(measurement: ShotSnapshot): number | null {
+  const value = measurement.scale?.timerValue;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function timerElapsedSeconds(value: number, timerValuesAreMilliseconds: boolean): number {
+  return timerValuesAreMilliseconds ? value / 1000 : value;
+}
+
+function elapsedTimeline(measurements: ShotSnapshot[]): Array<number | null> {
+  const timerValues = measurements.map(timerValue).filter((value): value is number => value !== null);
+  if (timerValues.length) {
+    const timerValuesAreMilliseconds = timerValues.some((value) => value > 120);
+    let lastTimer: number | null = null;
+    return measurements.map((measurement) => {
+      const timer = timerValue(measurement);
+      if (timer !== null) lastTimer = timerElapsedSeconds(timer, timerValuesAreMilliseconds);
+      return lastTimer;
+    });
+  }
+
+  const timestamps = measurements.map(timestampMs).filter((value): value is number => value !== null);
+  const startTime = timestamps.length ? timestamps[0] : null;
+  return measurements.map((measurement, index) => elapsedSecondsFromTimestamp(measurements, measurement, index, startTime));
+}
+
+function elapsedSecondsFromTimestamp(measurements: ShotSnapshot[], measurement: ShotSnapshot, index: number, startTime: number | null): number {
   const time = timestampMs(measurement);
   if (time !== null && startTime !== null) return Math.max(0, (time - startTime) / 1000);
   return measurements.length <= 1 ? 0 : index;
 }
 
 function chartSeries(measurements: ShotSnapshot[]): ChartSeries[] {
-  const timestamps = measurements.map(timestampMs).filter((value): value is number => value !== null);
-  const startTime = timestamps.length ? timestamps[0] : null;
+  const elapsedTimes = elapsedTimeline(measurements);
 
   return SERIES_DEFINITIONS.map((definition) => {
     const points = measurements.flatMap((measurement, index) => {
       const value = definition.value(measurement);
-      if (value === null) return [];
+      const time = elapsedTimes[index];
+      if (value === null || time === null) return [];
       return [
         {
-          time: elapsedSeconds(measurements, measurement, index, startTime),
+          time,
           value: definition.scale ? definition.scale(value) : value
         }
       ];
