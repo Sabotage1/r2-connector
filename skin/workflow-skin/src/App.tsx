@@ -890,7 +890,9 @@ export function App() {
       if (!isBurrType(grinder.burrType)) throw new Error("Selected grinder is missing Burrs Type.");
       if (!accountName) await saveCommunityDisplayName(api, submittedBy);
       const ownerKey = await getOrCreateCommunityOwnerKey(api);
-      const selectedShot = draft.shotId ? data.shots.find((shot) => shot.id === draft.shotId) : undefined;
+      const selectedShot = draft.shotId
+        ? await api.getShot(draft.shotId).catch(() => data.shots.find((shot) => shot.id === draft.shotId))
+        : undefined;
       const evidence = selectedShot ? sanitizeShotEvidence(selectedShot) : undefined;
       const result = await communityApi.create({
         ownerKey,
@@ -963,6 +965,12 @@ export function App() {
       const profile = data.profiles.find((item) => item.id === recommendation.profile.originalId);
       if (!profile) throw new Error("Original local profile is no longer available.");
 
+      const refreshedEvidence = localUpload.evidence?.id
+        ? await api
+            .getShot(localUpload.evidence.id)
+            .then(sanitizeShotEvidence)
+            .catch(() => localUpload.evidence)
+        : localUpload.evidence;
       const result = await communityApi.update(recommendation.id, {
         ownerKey,
         recommendation: {
@@ -973,11 +981,14 @@ export function App() {
           brew: recommendation.brew,
           visualizerUrl: recommendation.visualizerUrl
         },
-        profileJson: profile.profile
+        profileJson: profile.profile,
+        evidence: refreshedEvidence
       });
       const sourceUploads = [localUpload, ...latestUploads.filter((item) => item.recommendationId !== recommendation.id)];
       const next = sourceUploads.map((item) =>
-        item.recommendationId === recommendation.id ? { ...item, updatedAt: result.recommendation.updatedAt, recommendation: result.recommendation } : item
+        item.recommendationId === recommendation.id
+          ? { ...item, updatedAt: result.recommendation.updatedAt, recommendation: result.recommendation, evidence: refreshedEvidence }
+          : item
       );
       await saveUploadedCommunityProfiles(api, next);
       setUploadedCommunityProfiles(next);

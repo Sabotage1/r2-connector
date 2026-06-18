@@ -771,15 +771,78 @@ describe("App shell", () => {
     ]);
   });
 
+  it("loads full shot measurements before uploading selected community shot evidence", async () => {
+    profiles = [{ id: "p1", profile: { title: "Blooming", notes: "Profile notes", steps: [{ name: "Bloom", pressure: 2 }] } }];
+    const listShot: ShotRecord = {
+      id: "history-rec-shot",
+      timestamp: "2026-06-18T08:00:00.000Z",
+      workflow: { profile: { title: "History espresso" }, context: { beanBatchId: "batch-1", grinderId: "g1" } },
+      annotations: { actualDoseWeight: 18, actualYield: 42, enjoyment: 8, espressoNotes: "Sweet citrus" }
+    };
+    const fullShot: ShotRecord = {
+      ...listShot,
+      measurements: [
+        { machine: { timestamp: "2026-06-18T08:00:00.000Z", pressure: 1, flow: 1 }, scale: { timestamp: "2026-06-18T08:00:00.000Z", weight: 0 } },
+        { machine: { timestamp: "2026-06-18T08:00:31.000Z", pressure: 8, flow: 2 }, scale: { timestamp: "2026-06-18T08:00:31.000Z", weight: 42 } }
+      ]
+    };
+    const fetchState = mockReaFetch(initialSettings, {
+      decentAccount: { connected: true, username: "royack" },
+      shots: [listShot],
+      shotDetailsById: { "history-rec-shot": fullShot },
+      beans: [{ id: "bean-1", roaster: "Pilot", name: "Ethiopia Halo", country: "Ethiopia", processing: "Washed" }],
+      batchesByBeanId: {
+        "bean-1": [{ id: "batch-1", beanId: "bean-1", roastDate: "2026-06-01", extras: { workflowSkin: { name: "Halo" } } }]
+      },
+      grinders: [{ id: "g1", model: "ZP6", settingType: "numeric", burrType: "flat", burrs: "MP" }]
+    });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Community" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "Recommend Profile" }));
+    await userEvent.selectOptions(await screen.findByLabelText("Saved bag"), "batch-1");
+    await userEvent.selectOptions(screen.getByLabelText("Profile"), "p1");
+    await userEvent.selectOptions(screen.getByLabelText("Grinder"), "g1");
+    await userEvent.type(screen.getByLabelText("Grind setting"), "4.2");
+    await userEvent.type(screen.getByLabelText("Beans weight"), "18");
+    await userEvent.type(screen.getByLabelText("Drink weight"), "42");
+    await userEvent.type(screen.getByLabelText("Seconds min"), "28");
+    await userEvent.type(screen.getByLabelText("Seconds max"), "34");
+    await userEvent.selectOptions(screen.getByLabelText("Shot evidence"), "history-rec-shot");
+    await userEvent.type(screen.getByLabelText("Notes"), "Gentle declining pressure");
+    await userEvent.click(screen.getByRole("button", { name: "Upload recommendation" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Recommendation uploaded.");
+    expect(fetchState.communityCreatePayloads[0]).toEqual(
+      expect.objectContaining({
+        evidence: expect.objectContaining({
+          id: "history-rec-shot",
+          measurements: expect.arrayContaining([expect.objectContaining({ machine: expect.objectContaining({ pressure: 8 }) })])
+        })
+      })
+    );
+  });
+
   it("updates an uploaded community recommendation with the local owner key and profile JSON", async () => {
     profiles = [{ id: "p1", profile: { title: "Blooming", notes: "Updated local profile notes", steps: [{ name: "Bloom", pressure: 2 }] } }];
-    const fetchState = mockReaFetch(initialSettings, { communityRecommendations: [communityRecommendation] });
+    const fullShot: ShotRecord = {
+      id: "history-rec-shot",
+      timestamp: "2026-06-18T08:00:00.000Z",
+      workflow: { profile: { title: "History espresso" }, context: { beanBatchId: "batch-1", grinderId: "g1" } },
+      annotations: { enjoyment: 8 },
+      measurements: [{ machine: { timestamp: "2026-06-18T08:00:31.000Z", pressure: 8 } }]
+    };
+    const fetchState = mockReaFetch(initialSettings, {
+      communityRecommendations: [communityRecommendation],
+      shotDetailsById: { "history-rec-shot": fullShot }
+    });
     fetchState.communityStore.set("/api/v1/store/workflow-skin/community-uploaded-profiles", [
       {
         recommendationId: communityRecommendation.id,
         uploadedAt: "2026-06-18T00:00:00.000Z",
         updatedAt: communityRecommendation.updatedAt,
-        recommendation: communityRecommendation
+        recommendation: communityRecommendation,
+        evidence: { id: "history-rec-shot" }
       }
     ]);
     render(<App />);
@@ -799,7 +862,11 @@ describe("App shell", () => {
           grinder: expect.objectContaining({ id: "g1", model: "ZP6", burrType: "flat" }),
           brew: expect.objectContaining({ grindSetting: "4.2", beansWeight: 18 })
         }),
-        profileJson: expect.objectContaining({ title: "Blooming", notes: "Updated local profile notes" })
+        profileJson: expect.objectContaining({ title: "Blooming", notes: "Updated local profile notes" }),
+        evidence: expect.objectContaining({
+          id: "history-rec-shot",
+          measurements: expect.arrayContaining([expect.objectContaining({ machine: expect.objectContaining({ pressure: 8 }) })])
+        })
       })
     );
     const uploaded = fetchState.communityStore.get("/api/v1/store/workflow-skin/community-uploaded-profiles") as Array<Record<string, unknown>>;
@@ -807,7 +874,11 @@ describe("App shell", () => {
       expect.objectContaining({
         recommendationId: "rec-12345678",
         updatedAt: "2026-06-18T02:00:00.000Z",
-        recommendation: expect.objectContaining({ updatedAt: "2026-06-18T02:00:00.000Z" })
+        recommendation: expect.objectContaining({ updatedAt: "2026-06-18T02:00:00.000Z" }),
+        evidence: expect.objectContaining({
+          id: "history-rec-shot",
+          measurements: expect.arrayContaining([expect.objectContaining({ machine: expect.objectContaining({ pressure: 8 }) })])
+        })
       })
     ]);
   });
