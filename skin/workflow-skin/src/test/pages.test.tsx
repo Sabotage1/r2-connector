@@ -1007,6 +1007,9 @@ describe("SettingsPage", () => {
     expect(screen.getByLabelText("Tank preheat target")).toHaveValue(0);
     expect(screen.getByLabelText("Steam flow")).toHaveValue(1.2);
     expect(screen.getByLabelText("Steam purge mode")).toHaveValue("0");
+    expect(screen.queryByLabelText("Heater phase 1 flow")).not.toBeInTheDocument();
+    expect(screen.getByText("Advanced machine settings can change low-level machine behavior. Acknowledge the caution before editing them.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("checkbox", { name: /I understand these advanced settings/i }));
     expect(screen.getByLabelText("Heater phase 1 flow")).toHaveValue(4);
     expect(screen.getByLabelText("Mains voltage hint")).toHaveValue("230");
     expect(screen.getByLabelText("Flow calibration")).toHaveValue(1);
@@ -1403,11 +1406,11 @@ describe("CommunityPage", () => {
     shotScore: 8,
     bag: { id: "bag-1", beanId: "bean-1", roaster: "Pilot", name: "Halo", bean: "Ethiopia Halo", country: "Ethiopia", process: "Washed", roastDate: "2026-06-01" },
     profile: { originalId: "p1", originalTitle: "Blooming", fileName: "rec-12345678.json", installedTitle: "Blooming - Halo - Roy" },
-    grinder: { id: "g1", model: "ZP6", burrType: "flat" as const, settingType: "numeric" as const },
+    grinder: { id: "g1", model: "ZP6", burrType: "flat" as const, burrs: "MP", settingType: "numeric" as const },
     brew: { grindSetting: "4.2", beansWeight: 18, drinkWeight: 42, secondsMin: 28, secondsMax: 34, notes: "Gentle declining pressure" }
   };
   const bags = [{ id: "bag-1", beanId: "bean-1", roaster: "Pilot", name: "Halo", bean: "Ethiopia Halo", country: "Ethiopia", process: "Washed", roastDate: "2026-06-01" }];
-  const grinders = [{ id: "g1", model: "ZP6", burrType: "flat" as const, settingType: "numeric" as const }];
+  const grinders = [{ id: "g1", model: "ZP6", burrType: "flat" as const, burrs: "MP", settingType: "numeric" as const }];
   const shots = [{ id: "shot-1", timestamp: "2026-06-18T10:00:00.000Z", workflow: { profile: { title: "Blooming" } }, annotations: { enjoyment: 8 } }];
 
   async function renderCommunityPage(overrides = {}) {
@@ -1491,8 +1494,53 @@ describe("CommunityPage", () => {
     const row = screen.getByText("Blooming").closest(".community-row") as HTMLElement;
     expect(within(row).getByText("Uploaded 2026-06-18 - Shot score 8/10")).toBeInTheDocument();
     expect(row).not.toHaveTextContent("13:45");
-    expect(within(row).getByText(/Flat burrs/)).toBeInTheDocument();
+    expect(within(row).getByText("ZP6 - MP - Flat burrs - Grind 4.2 - 18g in - 42g out - By Roy")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Download Blooming" })).toBeInTheDocument();
+  });
+
+  it("opens recommendation details with shot graph and downloads from the details page", async () => {
+    const recommendationWithEvidence = {
+      ...recommendation,
+      visualizerUrl: "https://visualizer.coffee/shots/abc",
+      evidenceFileName: "rec-12345678.json"
+    };
+    const onLoadDetails = vi.fn().mockResolvedValue({
+      recommendation: recommendationWithEvidence,
+      profileJson: { title: "Blooming" },
+      evidence: {
+        id: "shot-1",
+        timestamp: "2026-06-18T10:00:00.000Z",
+        profileTitle: "Blooming",
+        doseWeight: 18,
+        drinkWeight: 42,
+        tds: 9.2,
+        ey: 21.5,
+        enjoyment: 8,
+        notes: "Sweet and floral",
+        measurements: [
+          { machine: { timestamp: "2026-06-18T10:00:00.000Z", pressure: 1, flow: 1 }, scale: { timestamp: "2026-06-18T10:00:00.000Z", weight: 0 } },
+          { machine: { timestamp: "2026-06-18T10:00:12.000Z", pressure: 8, flow: 2 }, scale: { timestamp: "2026-06-18T10:00:12.000Z", weight: 24 } }
+        ]
+      }
+    });
+    const onDownload = vi.fn().mockResolvedValue(undefined);
+    await renderCommunityPage({ recommendations: [recommendationWithEvidence], onLoadDetails, onDownload });
+
+    await userEvent.click(screen.getByRole("button", { name: "Open Blooming details" }));
+
+    expect(await screen.findByRole("heading", { name: "Blooming" })).toBeInTheDocument();
+    expect(onLoadDetails).toHaveBeenCalledWith(recommendationWithEvidence);
+    expect(screen.getByRole("img", { name: "Shot pressure graph" })).toBeInTheDocument();
+    expect(screen.getByText("Shot score 8/10")).toBeInTheDocument();
+    expect(screen.getByText("Shot date 2026-06-18")).toBeInTheDocument();
+    expect(screen.getByText("TDS 9.2")).toBeInTheDocument();
+    expect(screen.getByText("EY 21.5%")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Visualizer" })).toHaveAttribute("href", "https://visualizer.coffee/shots/abc");
+
+    await userEvent.click(screen.getByRole("button", { name: "Download Blooming" }));
+
+    await waitFor(() => expect(onDownload).toHaveBeenCalledWith(recommendationWithEvidence));
+    expect(screen.getByRole("status")).toHaveTextContent("Profile downloaded.");
   });
 
   it("searches and filters recommendations by flat or conical burrs type", async () => {
@@ -1707,7 +1755,7 @@ describe("CommunityPage", () => {
     expect(within(row).getByText("Uploaded 2026-06-18 - Shot score 8/10")).toBeInTheDocument();
     expect(row).not.toHaveTextContent("15:30");
     expect(within(row).getByText("Pilot - Halo - Ethiopia Halo - Ethiopia - Washed - 2026-06-01")).toBeInTheDocument();
-    expect(within(row).getByText("ZP6 - Flat burrs - Grind 4.2 - 18g in - 42g out - By Roy")).toBeInTheDocument();
+    expect(within(row).getByText("ZP6 - MP - Flat burrs - Grind 4.2 - 18g in - 42g out - By Roy")).toBeInTheDocument();
     expect(within(row).getByText("TDS 8.5")).toBeInTheDocument();
     expect(within(row).getByText("EY 20")).toBeInTheDocument();
     expect(within(row).getByText("sweet balance")).toBeInTheDocument();

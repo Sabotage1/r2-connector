@@ -822,6 +822,7 @@ describe("App shell", () => {
     expect(labels.indexOf("Profiles")).toBeGreaterThan(-1);
     expect(labels.indexOf("Grinders")).toBeGreaterThan(-1);
     expect(labels.indexOf("Profiles")).toBeLessThan(labels.indexOf("Grinders"));
+    expect(labels.indexOf("Community")).toBe(labels.indexOf("Settings") - 1);
   });
 
   it("uses saved main menu visibility and order", async () => {
@@ -835,7 +836,7 @@ describe("App shell", () => {
     const navigation = await screen.findByRole("navigation", { name: "Workflow navigation" });
     const labels = Array.from(navigation.querySelectorAll(".nav-button")).map((button) => button.getAttribute("aria-label"));
 
-    expect(labels).toEqual(["Collapse menu", "Brew", "Profiles", "Grinders", "Settings", "Review", "Bags", "Community"]);
+    expect(labels).toEqual(["Collapse menu", "Brew", "Profiles", "Grinders", "Review", "Bags", "Community", "Settings"]);
     expect(screen.queryByRole("button", { name: "History" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Steam" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Live" })).not.toBeInTheDocument();
@@ -1852,6 +1853,68 @@ describe("App shell", () => {
     ]);
   });
 
+  it("prefills history recommendations with the saved shot grinder before falling back to the default grinder", async () => {
+    profiles = [{ id: "p1", profile: { title: "Blooming", notes: "Profile notes", steps: [{ name: "Bloom", pressure: 2 }] } }];
+    const baseShot: ShotRecord = {
+      id: "history-rec-shot",
+      timestamp: "2026-06-18T08:00:00.000Z",
+      workflow: {
+        profile: { title: "History espresso" },
+        context: {
+          extras: { workflowSkin: { selectedProfileId: "p1", grindSize: "4.4" } },
+          beanBatchId: "batch-1",
+          targetDoseWeight: 18,
+          targetYield: 42
+        }
+      },
+      annotations: { actualDoseWeight: 18, actualYield: 42, espressoNotes: "Sweet citrus", extras: { workflowSkin: { grinderId: "g2" } } }
+    };
+    const fetchState = mockReaFetch(
+      { ...initialSettings, defaultGrinderId: "g1" },
+      {
+        shots: [baseShot],
+        beans: [{ id: "bean-1", roaster: "Pilot", name: "Ethiopia Halo", country: "Ethiopia", region: "Yirgacheffe", processing: "Washed" }],
+        batchesByBeanId: {
+          "bean-1": [{ id: "batch-1", beanId: "bean-1", roastDate: "2026-06-01", roastLevel: "Light", extras: { workflowSkin: { name: "Halo" } } }]
+        },
+        grinders: [
+          { id: "g1", model: "ZP6", settingType: "numeric", burrType: "flat", burrs: "MP" },
+          { id: "g2", model: "EK43", settingType: "numeric", burrType: "flat", burrs: "SSP HU" }
+        ]
+      }
+    );
+    const { unmount } = render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "History" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Recommend profile from History espresso" }));
+
+    expect(await screen.findByLabelText("Grinder")).toHaveValue("g2");
+
+    fetchState.fetchMock.mockRestore();
+    unmount();
+    profiles = [{ id: "p1", profile: { title: "Blooming", notes: "Profile notes", steps: [{ name: "Bloom", pressure: 2 }] } }];
+    mockReaFetch(
+      { ...initialSettings, defaultGrinderId: "g1" },
+      {
+        shots: [{ ...baseShot, annotations: { actualDoseWeight: 18, actualYield: 42, espressoNotes: "Sweet citrus" } }],
+        beans: [{ id: "bean-1", roaster: "Pilot", name: "Ethiopia Halo", country: "Ethiopia", region: "Yirgacheffe", processing: "Washed" }],
+        batchesByBeanId: {
+          "bean-1": [{ id: "batch-1", beanId: "bean-1", roastDate: "2026-06-01", roastLevel: "Light", extras: { workflowSkin: { name: "Halo" } } }]
+        },
+        grinders: [
+          { id: "g1", model: "ZP6", settingType: "numeric", burrType: "flat", burrs: "MP" },
+          { id: "g2", model: "EK43", settingType: "numeric", burrType: "flat", burrs: "SSP HU" }
+        ]
+      }
+    );
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "History" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Recommend profile from History espresso" }));
+
+    expect(await screen.findByLabelText("Grinder")).toHaveValue("g1");
+  });
+
   it("saves Beanie machine settings through native machine endpoints", async () => {
     const fetchState = mockReaFetch(initialSettings, {
       machineSettings: {
@@ -1879,6 +1942,7 @@ describe("App shell", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
     fireEvent.change(await screen.findByLabelText("Steam flow"), { target: { value: "1.6" } });
+    await userEvent.click(screen.getByRole("checkbox", { name: /I understand these advanced settings/i }));
     fireEvent.change(screen.getByLabelText("Flow calibration"), { target: { value: "1.08" } });
     await userEvent.click(screen.getByRole("button", { name: "Save machine settings" }));
 

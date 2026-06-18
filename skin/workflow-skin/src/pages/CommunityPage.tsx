@@ -1,8 +1,9 @@
 import { Download, RefreshCw, Upload } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { Grinder, ProfileRecord, ShotRecord } from "../api/types";
+import type { Grinder, ProfileRecord, ShotRecord, ShotSnapshot } from "../api/types";
+import { ShotGraph } from "../components/ShotGraph";
 import { matchesCommunitySearch } from "../community/search";
-import type { CommunityRecommendation, CommunityShotEvidence, DownloadedCommunityProfile, UploadedCommunityProfile } from "../community/types";
+import type { CommunityDownloadPayload, CommunityRecommendation, CommunityShotEvidence, DownloadedCommunityProfile, UploadedCommunityProfile } from "../community/types";
 import type { Bag } from "../lib/bags";
 import { shotTasteRating, tasteScoreLabel } from "../lib/shotTaste";
 
@@ -38,6 +39,7 @@ interface CommunityPageProps {
   manualDisplayName: string;
   onManualDisplayNameChange: (value: string) => void;
   onRefresh: () => Promise<void> | void;
+  onLoadDetails?: (recommendation: CommunityRecommendation) => Promise<CommunityDownloadPayload> | CommunityDownloadPayload;
   onDownload: (recommendation: CommunityRecommendation) => Promise<void> | void;
   onUpload: (draft: UploadDraft) => Promise<void> | void;
   onEditUpload: (recommendation: CommunityRecommendation) => Promise<void> | void;
@@ -127,6 +129,14 @@ function localUploadSummary(item: UploadedCommunityProfile): string | undefined 
   return [date ? `Uploaded ${date}` : undefined, recommendationShotScore(item.recommendation, item.evidence)].filter(Boolean).join(" - ") || undefined;
 }
 
+function secondsSummary(recommendation: CommunityRecommendation): string | undefined {
+  if (typeof recommendation.brew.secondsGoal === "number") return `${recommendation.brew.secondsGoal}s goal`;
+  if (typeof recommendation.brew.secondsMin === "number" && typeof recommendation.brew.secondsMax === "number") {
+    return `${recommendation.brew.secondsMin}-${recommendation.brew.secondsMax}s goal`;
+  }
+  return undefined;
+}
+
 function recommendationBagSummary(recommendation: CommunityRecommendation): string {
   return [
     recommendation.bag.roaster,
@@ -140,9 +150,25 @@ function recommendationBagSummary(recommendation: CommunityRecommendation): stri
     .join(" - ");
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function evidenceMeasurements(evidence: CommunityShotEvidence | undefined): ShotSnapshot[] {
+  if (!Array.isArray(evidence?.measurements)) return [];
+  return evidence.measurements.filter(isRecord).map((measurement) => measurement as ShotSnapshot);
+}
+
+function detailValue(value: string | number | undefined, suffix = ""): string | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return `${value}${suffix}`;
+  if (typeof value === "string" && value.trim()) return `${value.trim()}${suffix}`;
+  return undefined;
+}
+
 function recommendationBrewSummary(recommendation: CommunityRecommendation): string {
   return [
     recommendation.grinder.model,
+    recommendation.grinder.burrs,
     burrTypeLabel(recommendation.grinder.burrType),
     `Grind ${recommendation.brew.grindSetting}`,
     `${recommendation.brew.beansWeight}g in`,
@@ -217,6 +243,7 @@ export function CommunityPage({
   manualDisplayName,
   onManualDisplayNameChange,
   onRefresh,
+  onLoadDetails,
   onDownload,
   onUpload,
   onEditUpload,
@@ -231,6 +258,10 @@ export function CommunityPage({
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [pendingDownloadId, setPendingDownloadId] = useState<string | null>(null);
   const [pendingEditId, setPendingEditId] = useState<string | null>(null);
+  const [selectedRecommendationId, setSelectedRecommendationId] = useState<string | null>(null);
+  const [detailPayloads, setDetailPayloads] = useState<Partial<Record<string, CommunityDownloadPayload>>>({});
+  const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const displayName = submittedByLocked ? submittedBy ?? "" : manualDisplayName;
   const activeBurrTypes = useMemo(
     () => (Object.entries(burrTypeFilters) as Array<[BurrTypeFilter, boolean]>).filter(([, active]) => active).map(([type]) => type),
@@ -246,6 +277,13 @@ export function CommunityPage({
       ),
     [activeBurrTypes, grinderQuery, recommendations, query]
   );
+  const selectedRecommendation = selectedRecommendationId ? recommendations.find((recommendation) => recommendation.id === selectedRecommendationId) ?? null : null;
+  const selectedDetailPayload = selectedRecommendation ? detailPayloads[selectedRecommendation.id] : undefined;
+  const selectedLocalEvidence = selectedRecommendation
+    ? downloaded.find((item) => item.recommendationId === selectedRecommendation.id)?.evidence ?? uploaded.find((item) => item.recommendationId === selectedRecommendation.id)?.evidence
+    : undefined;
+  const selectedEvidence = selectedDetailPayload?.evidence ?? selectedLocalEvidence;
+  const selectedMeasurements = evidenceMeasurements(selectedEvidence);
 
   useEffect(() => {
     if (!initialDraft) return;
@@ -291,6 +329,23 @@ export function CommunityPage({
     }
   };
 
+  const openRecommendationDetails = async (recommendation: CommunityRecommendation) => {
+    setSelectedRecommendationId(recommendation.id);
+    setStatus(null);
+    setDetailError(null);
+    if (!onLoadDetails || detailPayloads[recommendation.id]) return;
+
+    setDetailLoadingId(recommendation.id);
+    try {
+      const payload = await onLoadDetails(recommendation);
+      setDetailPayloads((current) => ({ ...current, [recommendation.id]: payload }));
+    } catch (error) {
+      setDetailError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDetailLoadingId(null);
+    }
+  };
+
   const editUploadedRecommendation = async (recommendation: CommunityRecommendation) => {
     setPendingEditId(recommendation.id);
     setStatus(null);
@@ -326,6 +381,7 @@ export function CommunityPage({
             className={activeTab === tab.id ? "settings-tab active" : "settings-tab"}
             onClick={() => {
               setActiveTab(tab.id);
+              setSelectedRecommendationId(null);
               setStatus(null);
             }}
           >
@@ -336,71 +392,157 @@ export function CommunityPage({
 
       {activeTab === "recommendations" && (
         <section id="community-panel-recommendations" className="panel wide community-section" role="tabpanel" aria-labelledby="community-tab-recommendations">
-          <div className="community-search-grid">
-            <label className="settings-field">
-              <span>Search recommendations</span>
-              <input aria-label="Search recommendations" value={query} onChange={(event) => setQuery(event.target.value)} />
-            </label>
-            <label className="settings-field">
-              <span>Grinder</span>
-              <input aria-label="Grinder recommendation filter" value={grinderQuery} onChange={(event) => setGrinderQuery(event.target.value)} />
-            </label>
-          </div>
-          <div className="community-filter-row" role="group" aria-label="Burrs Type filters">
-            <label className="inline-toggle">
-              <input
-                type="checkbox"
-                checked={burrTypeFilters.flat}
-                onChange={(event) => setBurrTypeFilters((current) => ({ ...current, flat: event.target.checked }))}
-              />
-              Flat burrs
-            </label>
-            <label className="inline-toggle">
-              <input
-                type="checkbox"
-                checked={burrTypeFilters.conical}
-                onChange={(event) => setBurrTypeFilters((current) => ({ ...current, conical: event.target.checked }))}
-              />
-              Conical burrs
-            </label>
-          </div>
-          {error && (
-            <p className="status-message error" role="alert">
-              {error}
-            </p>
-          )}
-          {status && (
-            <p className={status.type === "error" ? "status-message error" : "status-message"} role={status.type === "error" ? "alert" : "status"}>
-              {status.message}
-            </p>
-          )}
-          {loading && <p className="muted">Loading community recommendations.</p>}
-          {!loading && filteredRecommendations.length === 0 && <p className="muted">No recommendations found.</p>}
-          {filteredRecommendations.map((recommendation) => {
-            const title = recommendationTitle(recommendation);
-            const downloadPending = pendingDownloadId === recommendation.id;
-            return (
-              <div className="list-row community-row" key={recommendation.id}>
-                <strong>{title}</strong>
-                {recommendationUploadSummary(recommendation) && <span>{recommendationUploadSummary(recommendation)}</span>}
-                <span>{recommendationBagSummary(recommendation)}</span>
-                <span>{recommendationBrewSummary(recommendation)}</span>
-                <p>{recommendation.brew.notes}</p>
-                <div className="row-actions">
-                  <button
-                    type="button"
-                    className="primary-button compact-button"
-                    aria-label={`Download ${title}`}
-                    disabled={downloadPending}
-                    onClick={() => void downloadRecommendation(recommendation)}
-                  >
-                    <Download aria-hidden="true" size={16} />
-                    {downloadPending ? "Downloading" : "Download"}
-                  </button>
+          {selectedRecommendation ? (
+            <div className="community-detail-view">
+              <div className="community-detail-header">
+                <button type="button" className="ghost-button compact-button" onClick={() => setSelectedRecommendationId(null)}>
+                  Back
+                </button>
+                <div>
+                  <span className="eyebrow">Recommended profile</span>
+                  <h2>{recommendationTitle(selectedRecommendation)}</h2>
+                </div>
+                <button
+                  type="button"
+                  className="primary-button compact-button"
+                  aria-label={`Download ${recommendationTitle(selectedRecommendation)}`}
+                  disabled={pendingDownloadId === selectedRecommendation.id}
+                  onClick={() => void downloadRecommendation(selectedRecommendation)}
+                >
+                  <Download aria-hidden="true" size={16} />
+                  {pendingDownloadId === selectedRecommendation.id ? "Downloading" : "Download"}
+                </button>
+              </div>
+              {status && (
+                <p className={status.type === "error" ? "status-message error" : "status-message"} role={status.type === "error" ? "alert" : "status"}>
+                  {status.message}
+                </p>
+              )}
+              {detailError && (
+                <p className="status-message error" role="alert">
+                  Could not load shot details: {detailError}
+                </p>
+              )}
+              {detailLoadingId === selectedRecommendation.id && (
+                <p className="muted" role="status">
+                  Loading shot details.
+                </p>
+              )}
+              <div className="community-detail-grid">
+                <div className="community-detail-card">
+                  <strong>Bag</strong>
+                  <span>{recommendationBagSummary(selectedRecommendation)}</span>
+                  {selectedRecommendation.bag.region && <span>Region {selectedRecommendation.bag.region}</span>}
+                  {selectedRecommendation.bag.roastLevel && <span>Roast {selectedRecommendation.bag.roastLevel}</span>}
+                  {selectedRecommendation.bag.notes && <p>{selectedRecommendation.bag.notes}</p>}
+                </div>
+                <div className="community-detail-card">
+                  <strong>Grinder</strong>
+                  <span>{[selectedRecommendation.grinder.model, selectedRecommendation.grinder.burrs, burrTypeLabel(selectedRecommendation.grinder.burrType)].filter(Boolean).join(" - ")}</span>
+                  {selectedRecommendation.grinder.settingType && <span>Setting type {selectedRecommendation.grinder.settingType}</span>}
+                  {selectedRecommendation.grinder.notes && <p>{selectedRecommendation.grinder.notes}</p>}
+                </div>
+                <div className="community-detail-card">
+                  <strong>Brew</strong>
+                  <span>{[`Grind ${selectedRecommendation.brew.grindSetting}`, `${selectedRecommendation.brew.beansWeight}g in`, `${selectedRecommendation.brew.drinkWeight}g out`, secondsSummary(selectedRecommendation)].filter(Boolean).join(" - ")}</span>
+                  <p>{selectedRecommendation.brew.notes}</p>
+                </div>
+                <div className="community-detail-card">
+                  <strong>Shot</strong>
+                  {recommendationShotScore(selectedRecommendation, selectedEvidence) && <span>{recommendationShotScore(selectedRecommendation, selectedEvidence)}</span>}
+                  {selectedEvidence?.timestamp && <span>Shot date {formatDateOnly(selectedEvidence.timestamp)}</span>}
+                  {[detailValue(selectedEvidence?.doseWeight, "g dose"), detailValue(selectedEvidence?.drinkWeight, "g drink")].filter(Boolean).length > 0 && (
+                    <span>{[detailValue(selectedEvidence?.doseWeight, "g dose"), detailValue(selectedEvidence?.drinkWeight, "g drink")].filter(Boolean).join(" - ")}</span>
+                  )}
+                  {typeof selectedEvidence?.tds === "number" && <span>TDS {selectedEvidence.tds}</span>}
+                  {typeof selectedEvidence?.ey === "number" && <span>EY {selectedEvidence.ey}%</span>}
+                  {selectedEvidence?.notes && <p>{selectedEvidence.notes}</p>}
+                  {selectedRecommendation.visualizerUrl && (
+                    <a href={selectedRecommendation.visualizerUrl} target="_blank" rel="noreferrer">
+                      Open Visualizer
+                    </a>
+                  )}
                 </div>
               </div>
-            );
-          })}
+              <div className="community-detail-graph dark-graph-panel">
+                <div className="review-graph-header">
+                  <h3>Shot Graph</h3>
+                  <span className="muted">{selectedMeasurements.length ? "Shared shot evidence" : "No shot graph shared"}</span>
+                </div>
+                {selectedMeasurements.length ? <ShotGraph measurements={selectedMeasurements} /> : <p className="muted">This recommendation does not include shared shot history.</p>}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="community-search-grid">
+                <label className="settings-field">
+                  <span>Search recommendations</span>
+                  <input aria-label="Search recommendations" value={query} onChange={(event) => setQuery(event.target.value)} />
+                </label>
+                <label className="settings-field">
+                  <span>Grinder</span>
+                  <input aria-label="Grinder recommendation filter" value={grinderQuery} onChange={(event) => setGrinderQuery(event.target.value)} />
+                </label>
+              </div>
+              <div className="community-filter-row" role="group" aria-label="Burrs Type filters">
+                <label className="inline-toggle">
+                  <input
+                    type="checkbox"
+                    checked={burrTypeFilters.flat}
+                    onChange={(event) => setBurrTypeFilters((current) => ({ ...current, flat: event.target.checked }))}
+                  />
+                  Flat burrs
+                </label>
+                <label className="inline-toggle">
+                  <input
+                    type="checkbox"
+                    checked={burrTypeFilters.conical}
+                    onChange={(event) => setBurrTypeFilters((current) => ({ ...current, conical: event.target.checked }))}
+                  />
+                  Conical burrs
+                </label>
+              </div>
+              {error && (
+                <p className="status-message error" role="alert">
+                  {error}
+                </p>
+              )}
+              {status && (
+                <p className={status.type === "error" ? "status-message error" : "status-message"} role={status.type === "error" ? "alert" : "status"}>
+                  {status.message}
+                </p>
+              )}
+              {loading && <p className="muted">Loading community recommendations.</p>}
+              {!loading && filteredRecommendations.length === 0 && <p className="muted">No recommendations found.</p>}
+              {filteredRecommendations.map((recommendation) => {
+                const title = recommendationTitle(recommendation);
+                const downloadPending = pendingDownloadId === recommendation.id;
+                return (
+                  <div className="list-row community-row" key={recommendation.id}>
+                    <button type="button" className="community-row-open" aria-label={`Open ${title} details`} onClick={() => void openRecommendationDetails(recommendation)}>
+                      <strong>{title}</strong>
+                      {recommendationUploadSummary(recommendation) && <span>{recommendationUploadSummary(recommendation)}</span>}
+                      <span>{recommendationBagSummary(recommendation)}</span>
+                      <span>{recommendationBrewSummary(recommendation)}</span>
+                      <p>{recommendation.brew.notes}</p>
+                    </button>
+                    <div className="row-actions">
+                      <button
+                        type="button"
+                        className="primary-button compact-button"
+                        aria-label={`Download ${title}`}
+                        disabled={downloadPending}
+                        onClick={() => void downloadRecommendation(recommendation)}
+                      >
+                        <Download aria-hidden="true" size={16} />
+                        {downloadPending ? "Downloading" : "Download"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
         </section>
       )}
 

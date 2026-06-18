@@ -36,6 +36,8 @@ describe("skin settings", () => {
     expect(defaultSkinSettings.menuCollapsed).toBe(false);
     expect(defaultSkinSettings.mainMenuItems).toEqual(DEFAULT_MAIN_MENU_ITEMS);
     expect(defaultSkinSettings.mainMenuItems).toContain("community");
+    expect(defaultSkinSettings.mainMenuItems[defaultSkinSettings.mainMenuItems.length - 2]).toBe("community");
+    expect(defaultSkinSettings.mainMenuItems[defaultSkinSettings.mainMenuItems.length - 1]).toBe("settings");
     expect(defaultSkinSettings.hiddenMainMenuItemIds).toEqual([]);
     expect(defaultSkinSettings.topStatusIndicatorIds).toEqual(["machine", "wifi", "scale", "water", "r2", "state", "temperature"]);
     expect(mainMenuItemsForSettings(defaultSkinSettings).indexOf("profiles")).toBeLessThan(mainMenuItemsForSettings(defaultSkinSettings).indexOf("grinders"));
@@ -105,7 +107,9 @@ describe("skin settings", () => {
     expect(settings.r2MeasureDelaySeconds).toBe(45);
     expect(settings.presetSlotCount).toBe(8);
     expect(settings.menuCollapsed).toBe(true);
-    expect(settings.mainMenuItems.slice(0, 3)).toEqual(["settings", "profiles", "brew"]);
+    expect(settings.mainMenuItems.slice(0, 2)).toEqual(["profiles", "brew"]);
+    expect(settings.mainMenuItems[settings.mainMenuItems.length - 2]).toBe("community");
+    expect(settings.mainMenuItems[settings.mainMenuItems.length - 1]).toBe("settings");
     expect(settings.mainMenuItems).toEqual(expect.arrayContaining([...DEFAULT_MAIN_MENU_ITEMS]));
     expect(settings.hiddenMainMenuItemIds).toEqual(["history"]);
     expect(settings.topStatusIndicatorIds).toEqual(["wifi", "pressure"]);

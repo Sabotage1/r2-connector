@@ -34,8 +34,12 @@ export class CommunityApi {
     if (!response.ok) {
       let message = text;
       try {
-        const payload = JSON.parse(text) as { error?: unknown };
-        if (typeof payload.error === "string") message = payload.error;
+        const payload = JSON.parse(text) as { error?: unknown; message?: unknown };
+        if (typeof payload.message === "string") {
+          message = payload.message;
+        } else if (typeof payload.error === "string") {
+          message = payload.error;
+        }
       } catch {
         message = text;
       }

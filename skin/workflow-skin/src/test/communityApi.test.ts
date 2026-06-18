@@ -48,6 +48,14 @@ describe("CommunityApi", () => {
     await expect(new CommunityApi("https://worker.example").listRecommendations()).rejects.toThrow("GET /api/recommendations failed: 400 bad upload");
   });
 
+  it("prefers detailed Worker error messages over generic error codes", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ error: "bad_request", message: "Missing required fields: bag.process." }), { status: 400 })
+    );
+
+    await expect(new CommunityApi("https://worker.example").create(writePayload)).rejects.toThrow("POST /api/recommendations failed: 400 Missing required fields: bag.process.");
+  });
+
   it("trims trailing base URL slashes and encodes recommendation ids", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ id: "profile/one", submittedBy: "Roy" }), { status: 200 }));
     await new CommunityApi("https://worker.example///").getRecommendation("profile/one");

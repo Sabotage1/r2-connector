@@ -319,6 +319,7 @@ export function SettingsPage({
   const [machineDraft, setMachineDraft] = useState(() => normalizeMachineSettingsDraft(machineSettings));
   const [advancedMachineDraft, setAdvancedMachineDraft] = useState(() => normalizeAdvancedMachineSettingsDraft(advancedMachineSettings));
   const [calibrationDraft, setCalibrationDraft] = useState(() => normalizeMachineCalibrationDraft(machineCalibration));
+  const [advancedMachineAcknowledged, setAdvancedMachineAcknowledged] = useState(false);
   const savedSettings = normalizeDraftSettings(acknowledgedSettings);
   const nextSettings = normalizeDraftSettings(draftSettings);
   const settingsChanged = JSON.stringify(nextSettings) !== JSON.stringify(savedSettings);
@@ -578,123 +579,126 @@ export function SettingsPage({
           </div>
           <div className="list-row settings-machine-row">
             <strong>Advanced machine settings</strong>
-            <div className="machine-settings-grid">
-              <label className="settings-field">
-                Fan threshold
-                <input
-                  aria-label="Fan threshold"
-                  type="number"
-                  min={0}
-                  max={100}
-                  step={1}
-                  value={machineDraft.fan}
-                  onChange={(event) => updateMachineDraft({ fan: Number(event.target.value) })}
-                />
-              </label>
-              <label className="settings-field">
-                Heater idle temperature
-                <input
-                  aria-label="Heater idle temperature"
-                  type="number"
-                  min={0}
-                  max={110}
-                  step={1}
-                  value={advancedMachineDraft.heaterIdleTemp}
-                  onChange={(event) => updateAdvancedMachineDraft({ heaterIdleTemp: Number(event.target.value) })}
-                />
-              </label>
-              <label className="settings-field">
-                Heater phase 1 flow
-                <input
-                  aria-label="Heater phase 1 flow"
-                  type="number"
-                  min={0}
-                  max={20}
-                  step={0.1}
-                  value={advancedMachineDraft.heaterPh1Flow}
-                  onChange={(event) => updateAdvancedMachineDraft({ heaterPh1Flow: Number(event.target.value) })}
-                />
-              </label>
-              <label className="settings-field">
-                Heater phase 2 flow
-                <input
-                  aria-label="Heater phase 2 flow"
-                  type="number"
-                  min={0}
-                  max={20}
-                  step={0.1}
-                  value={advancedMachineDraft.heaterPh2Flow}
-                  onChange={(event) => updateAdvancedMachineDraft({ heaterPh2Flow: Number(event.target.value) })}
-                />
-              </label>
-              <label className="settings-field">
-                Heater phase 2 timeout
-                <input
-                  aria-label="Heater phase 2 timeout"
-                  type="number"
-                  min={0}
-                  max={120}
-                  step={1}
-                  value={advancedMachineDraft.heaterPh2Timeout}
-                  onChange={(event) => updateAdvancedMachineDraft({ heaterPh2Timeout: Number(event.target.value) })}
-                />
-              </label>
-              <label className="settings-field">
-                Mains voltage hint
-                <select
-                  aria-label="Mains voltage hint"
-                  value={String(advancedMachineDraft.heaterVoltage)}
-                  onChange={(event) => updateAdvancedMachineDraft({ heaterVoltage: Number(event.target.value) })}
-                >
-                  <option value="110">110 V</option>
-                  <option value="120">120 V</option>
-                  <option value="220">220 V</option>
-                  <option value="230">230 V</option>
-                  <option value="240">240 V</option>
-                </select>
-              </label>
-              <label className="settings-field">
-                Refill kit
-                <select
-                  aria-label="Refill kit"
-                  value={String(advancedMachineDraft.refillKitSetting)}
-                  onChange={(event) => updateAdvancedMachineDraft({ refillKitSetting: Number(event.target.value) })}
-                >
-                  <option value="0">Off</option>
-                  <option value="1">Manual</option>
-                  <option value="2">Automatic</option>
-                  <option value="3">Always on</option>
-                </select>
-              </label>
-              <label className="settings-field">
-                Flow calibration
-                <input
-                  aria-label="Flow calibration"
-                  type="number"
-                  min={0.1}
-                  max={3}
-                  step={0.01}
-                  value={calibrationDraft.flowMultiplier}
-                  onChange={(event) => updateCalibrationDraft({ flowMultiplier: Number(event.target.value) })}
-                />
-              </label>
-              <label className="inline-toggle machine-usb-toggle">
-                <input
-                  type="checkbox"
-                  checked={machineDraft.usb}
-                  onChange={(event) => updateMachineDraft({ usb: event.target.checked })}
-                />
-                USB charger output
-              </label>
-            </div>
-            <div className="profile-workflow-controls">
-              <button type="button" className="primary-button" disabled={!onSaveMachineSettings} onClick={saveMachineSettings}>
-                Save machine settings
-              </button>
-              <button type="button" className="ghost-button" disabled={!onResetMachineSettings} onClick={() => void onResetMachineSettings?.()}>
-                Reset machine settings
-              </button>
-            </div>
+            <span>Advanced machine settings can change low-level machine behavior. Acknowledge the caution before editing them.</span>
+            <label className="inline-toggle">
+              <input type="checkbox" checked={advancedMachineAcknowledged} onChange={(event) => setAdvancedMachineAcknowledged(event.target.checked)} />
+              I understand these advanced settings can affect machine safety and I should proceed with caution.
+            </label>
+            {advancedMachineAcknowledged && (
+              <div className="machine-settings-grid">
+                <label className="settings-field">
+                  Fan threshold
+                  <input
+                    aria-label="Fan threshold"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={machineDraft.fan}
+                    onChange={(event) => updateMachineDraft({ fan: Number(event.target.value) })}
+                  />
+                </label>
+                <label className="settings-field">
+                  Heater idle temperature
+                  <input
+                    aria-label="Heater idle temperature"
+                    type="number"
+                    min={0}
+                    max={110}
+                    step={1}
+                    value={advancedMachineDraft.heaterIdleTemp}
+                    onChange={(event) => updateAdvancedMachineDraft({ heaterIdleTemp: Number(event.target.value) })}
+                  />
+                </label>
+                <label className="settings-field">
+                  Heater phase 1 flow
+                  <input
+                    aria-label="Heater phase 1 flow"
+                    type="number"
+                    min={0}
+                    max={20}
+                    step={0.1}
+                    value={advancedMachineDraft.heaterPh1Flow}
+                    onChange={(event) => updateAdvancedMachineDraft({ heaterPh1Flow: Number(event.target.value) })}
+                  />
+                </label>
+                <label className="settings-field">
+                  Heater phase 2 flow
+                  <input
+                    aria-label="Heater phase 2 flow"
+                    type="number"
+                    min={0}
+                    max={20}
+                    step={0.1}
+                    value={advancedMachineDraft.heaterPh2Flow}
+                    onChange={(event) => updateAdvancedMachineDraft({ heaterPh2Flow: Number(event.target.value) })}
+                  />
+                </label>
+                <label className="settings-field">
+                  Heater phase 2 timeout
+                  <input
+                    aria-label="Heater phase 2 timeout"
+                    type="number"
+                    min={0}
+                    max={120}
+                    step={1}
+                    value={advancedMachineDraft.heaterPh2Timeout}
+                    onChange={(event) => updateAdvancedMachineDraft({ heaterPh2Timeout: Number(event.target.value) })}
+                  />
+                </label>
+                <label className="settings-field">
+                  Mains voltage hint
+                  <select
+                    aria-label="Mains voltage hint"
+                    value={String(advancedMachineDraft.heaterVoltage)}
+                    onChange={(event) => updateAdvancedMachineDraft({ heaterVoltage: Number(event.target.value) })}
+                  >
+                    <option value="110">110 V</option>
+                    <option value="120">120 V</option>
+                    <option value="220">220 V</option>
+                    <option value="230">230 V</option>
+                    <option value="240">240 V</option>
+                  </select>
+                </label>
+                <label className="settings-field">
+                  Refill kit
+                  <select
+                    aria-label="Refill kit"
+                    value={String(advancedMachineDraft.refillKitSetting)}
+                    onChange={(event) => updateAdvancedMachineDraft({ refillKitSetting: Number(event.target.value) })}
+                  >
+                    <option value="0">Off</option>
+                    <option value="1">Manual</option>
+                    <option value="2">Automatic</option>
+                    <option value="3">Always on</option>
+                  </select>
+                </label>
+                <label className="settings-field">
+                  Flow calibration
+                  <input
+                    aria-label="Flow calibration"
+                    type="number"
+                    min={0.1}
+                    max={3}
+                    step={0.01}
+                    value={calibrationDraft.flowMultiplier}
+                    onChange={(event) => updateCalibrationDraft({ flowMultiplier: Number(event.target.value) })}
+                  />
+                </label>
+                <label className="inline-toggle machine-usb-toggle">
+                  <input type="checkbox" checked={machineDraft.usb} onChange={(event) => updateMachineDraft({ usb: event.target.checked })} />
+                  USB charger output
+                </label>
+              </div>
+            )}
+          </div>
+          <div className="profile-workflow-controls">
+            <button type="button" className="primary-button" disabled={!onSaveMachineSettings} onClick={saveMachineSettings}>
+              Save machine settings
+            </button>
+            <button type="button" className="ghost-button" disabled={!onResetMachineSettings} onClick={() => void onResetMachineSettings?.()}>
+              Reset machine settings
+            </button>
           </div>
         </section>
       )}

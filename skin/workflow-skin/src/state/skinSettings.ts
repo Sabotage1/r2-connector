@@ -26,7 +26,7 @@ export interface SkinThemePalette {
   accentAlt: string;
 }
 
-export const DEFAULT_MAIN_MENU_ITEMS = ["brew", "live", "review", "steam", "bags", "profiles", "grinders", "community", "history", "settings"] as const;
+export const DEFAULT_MAIN_MENU_ITEMS = ["brew", "live", "review", "steam", "bags", "profiles", "grinders", "history", "community", "settings"] as const;
 export type MainMenuItemId = (typeof DEFAULT_MAIN_MENU_ITEMS)[number];
 
 export const MAIN_MENU_ITEM_LABELS: Record<MainMenuItemId, string> = {
@@ -242,7 +242,8 @@ export function mainMenuItemsForSettings(settings: Pick<SkinSettings, "mainMenuI
     if (!ordered.includes(item)) ordered.push(item);
   }
 
-  return ordered;
+  const pinned = ordered.filter((item) => item !== "community" && item !== "settings");
+  return [...pinned, "community", "settings"];
 }
 
 export function hiddenMainMenuItemIdsForSettings(settings: Pick<SkinSettings, "hiddenMainMenuItemIds"> | { hiddenMainMenuItemIds?: unknown }): MainMenuItemId[] {

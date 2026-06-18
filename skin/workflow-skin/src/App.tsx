@@ -543,7 +543,26 @@ function contextWorkflowSkinGrindSize(shot: ShotRecord): string | undefined {
   return typeof grindSize === "string" && grindSize.trim() ? grindSize.trim() : undefined;
 }
 
-function communityUploadDraftFromShot(shot: ShotRecord, profiles: ProfileRecord[]): UploadDraft {
+function workflowSkinExtraString(value: unknown, key: string): string | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === "string" && field.trim() ? field.trim() : undefined;
+}
+
+function shotWorkflowSkinGrinderId(shot: ShotRecord): string | undefined {
+  return (
+    workflowSkinExtraString(shot.annotations?.extras?.workflowSkin, "grinderId") ??
+    workflowSkinExtraString(shot.workflow.context?.extras?.workflowSkin, "grinderId")
+  );
+}
+
+function selectedGrinderIdForCommunityDraft(shot: ShotRecord, settings: SkinSettings, grinders: Grinder[]): string {
+  const grinderIds = new Set(grinders.map((grinder) => grinder.id));
+  const candidates = [shotWorkflowSkinGrinderId(shot), settings.defaultGrinderId, settings.lastGrinderId, shot.workflow.context?.grinderId];
+  return candidates.find((id) => Boolean(id) && (grinderIds.size === 0 || grinderIds.has(id as string))) ?? "";
+}
+
+function communityUploadDraftFromShot(shot: ShotRecord, profiles: ProfileRecord[], settings: SkinSettings, grinders: Grinder[]): UploadDraft {
   const context = shot.workflow.context;
   const stats = shotStats(shot);
   const seconds = positiveNumber(stats.durationSeconds);
@@ -553,7 +572,7 @@ function communityUploadDraftFromShot(shot: ShotRecord, profiles: ProfileRecord[
   return {
     bagId: context?.beanBatchId ?? "",
     profileId: selectedProfileIdFromWorkflow(shot.workflow, profiles) ?? "",
-    grinderId: context?.grinderId ?? "",
+    grinderId: selectedGrinderIdForCommunityDraft(shot, settings, grinders),
     grindSetting: grindSizeFromShot(shot) ?? contextWorkflowSkinGrindSize(shot) ?? "",
     beansWeight: draftNumber(dose),
     drinkWeight: draftNumber(drinkWeight),
@@ -853,6 +872,13 @@ export function App() {
     [api, communityApi, data]
   );
 
+  const loadCommunityRecommendationDetails = useCallback(
+    async (recommendation: CommunityRecommendation) => {
+      return communityApi.download(recommendation.id);
+    },
+    [communityApi]
+  );
+
   const uploadCommunityProfile = useCallback(
     async (draft: UploadDraft) => {
       const bag = data.bags.find((item) => item.id === draft.bagId);
@@ -962,7 +988,7 @@ export function App() {
 
   const recommendHistoryShot = (shot: ShotRecord) => {
     setStatus(null);
-    setCommunityInitialDraft(communityUploadDraftFromShot(shot, data.profiles));
+    setCommunityInitialDraft(communityUploadDraftFromShot(shot, data.profiles, data.settings, data.grinders));
     setPage("community");
   };
 
@@ -2212,6 +2238,7 @@ export function App() {
             manualDisplayName={communityDisplayName}
             onManualDisplayNameChange={setCommunityDisplayName}
             onRefresh={refreshCommunity}
+            onLoadDetails={loadCommunityRecommendationDetails}
             onDownload={downloadCommunityProfile}
             onUpload={uploadCommunityProfile}
             onEditUpload={editCommunityUpload}
