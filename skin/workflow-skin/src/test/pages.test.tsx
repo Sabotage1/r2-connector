@@ -1443,6 +1443,27 @@ describe("CommunityPage", () => {
     expect(screen.getByRole("button", { name: "Download Blooming" })).toBeInTheDocument();
   });
 
+  it("shows download success status after the download promise resolves", async () => {
+    const onDownload = vi.fn().mockResolvedValue(undefined);
+    await renderCommunityPage({ recommendations: [recommendation], onDownload });
+
+    await userEvent.click(screen.getByRole("button", { name: "Download Blooming" }));
+
+    await waitFor(() => expect(onDownload).toHaveBeenCalledWith(recommendation));
+    expect(screen.getByRole("status")).toHaveTextContent("Profile downloaded.");
+  });
+
+  it("shows a download failure alert and keeps the recommendation visible", async () => {
+    const onDownload = vi.fn().mockRejectedValue(new Error("Download failed"));
+    await renderCommunityPage({ recommendations: [recommendation], onDownload });
+
+    await userEvent.click(screen.getByRole("button", { name: "Download Blooming" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Download failed");
+    expect(screen.getByRole("button", { name: "Download Blooming" })).not.toBeDisabled();
+    expect(screen.queryByText("Profile downloaded.")).not.toBeInTheDocument();
+  });
+
   it("requires existing saved bag, profile, grinder, brew values, and notes before upload", async () => {
     const { CommunityPage } = await import("../pages/CommunityPage");
     const onUpload = vi.fn();

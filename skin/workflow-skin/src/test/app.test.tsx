@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import skinManifest from "../../skin-manifest.json";
 import { App } from "../App";
-import type { AppInfo, DecentAccountStatus, DeviceInfo, MachineState, ProfileRecord, SensorListItem, ShotRecord, WebUISkin } from "../api/types";
+import type { AppInfo, Bean, BeanBatch, DecentAccountStatus, DeviceInfo, Grinder, MachineState, ProfileRecord, SensorListItem, ShotRecord, WebUISkin } from "../api/types";
+import type { CommunityDownloadPayload, CommunityRecommendation } from "../community/types";
 import { defaultSkinSettings, type SkinSettings } from "../state/skinSettings";
 
 let profiles: ProfileRecord[] = [
@@ -12,6 +13,41 @@ let profiles: ProfileRecord[] = [
 ];
 
 type DeviceScanContext = { machineState: MachineState; quick: boolean; scanCount: number; connectCount: number };
+
+const communityRecommendation: CommunityRecommendation = {
+  id: "rec-12345678",
+  createdAt: "2026-06-18T00:00:00.000Z",
+  updatedAt: "2026-06-18T00:00:00.000Z",
+  submittedBy: "Roy",
+  bag: {
+    id: "batch-1",
+    beanId: "bean-1",
+    roaster: "Pilot",
+    name: "Halo",
+    bean: "Ethiopia Halo",
+    country: "Ethiopia",
+    region: "Yirgacheffe",
+    process: "Washed",
+    roastDate: "2026-06-01",
+    roastLevel: "Light",
+    notes: "floral"
+  },
+  profile: {
+    originalId: "p1",
+    originalTitle: "Blooming",
+    fileName: "rec-12345678.json",
+    installedTitle: "Blooming - Halo - Roy"
+  },
+  grinder: { id: "g1", model: "ZP6", settingType: "numeric" },
+  brew: {
+    grindSetting: "4.2",
+    beansWeight: 18,
+    drinkWeight: 42,
+    secondsMin: 28,
+    secondsMax: 34,
+    notes: "Gentle declining pressure"
+  }
+};
 
 function responseJson(value: unknown, status = 200) {
   return Promise.resolve(new Response(JSON.stringify(value), { status }));
@@ -50,10 +86,15 @@ function mockReaFetch(
     githubManifestVersion?: string;
     githubManifestStatus?: number;
     communityStatus?: number;
+    communityRecommendations?: CommunityRecommendation[];
+    communityDownloadPayloads?: Record<string, CommunityDownloadPayload>;
     decentAccount?: DecentAccountStatus;
     connectDeviceStatus?: number;
     sensorExecuteResults?: Array<{ body: unknown; status?: number }>;
     shotDetailsById?: Record<string, ShotRecord>;
+    beans?: Bean[];
+    batchesByBeanId?: Record<string, BeanBatch[]>;
+    grinders?: Grinder[];
     machineSettings?: Record<string, unknown>;
     advancedMachineSettings?: Record<string, unknown>;
     machineCalibration?: Record<string, unknown>;
@@ -87,9 +128,15 @@ function mockReaFetch(
   let machineState = options.machineState ?? { connected: true, wifi: { connected: true, ipAddress: "192.168.1.20" } };
   let devices = options.devices ?? [];
   let sensors = options.sensors ?? [];
+  let beans = options.beans ?? [];
+  let grinders = options.grinders ?? [];
   let scanCount = 0;
   let connectCount = 0;
   let sensorExecuteCount = 0;
+  const communityDownloadIds: string[] = [];
+  const communityCreatePayloads: unknown[] = [];
+  const createdProfilePayloads: unknown[] = [];
+  const updatedProfilePayloads: unknown[] = [];
   const communityStore = new Map<string, unknown>([
     ["/api/v1/store/workflow-skin/community-display-name", ""],
     ["/api/v1/store/workflow-skin/community-downloaded-profiles", []],
@@ -112,7 +159,32 @@ function mockReaFetch(
 
     if (url.hostname === "workflow-skin-community.sabotage1.workers.dev" && method === "GET" && url.pathname === "/api/recommendations") {
       if (options.communityStatus) return Promise.resolve(new Response("community unavailable", { status: options.communityStatus }));
-      return responseJson({ version: 1, updatedAt: "2026-06-18T00:00:00.000Z", items: [] });
+      return responseJson({ version: 1, updatedAt: "2026-06-18T00:00:00.000Z", items: options.communityRecommendations ?? [] });
+    }
+
+    if (url.hostname === "workflow-skin-community.sabotage1.workers.dev" && method === "GET" && url.pathname.startsWith("/api/download/")) {
+      const recommendationId = decodeURIComponent(url.pathname.split("/").pop() ?? "");
+      communityDownloadIds.push(recommendationId);
+      const payload = options.communityDownloadPayloads?.[recommendationId] ?? {
+        recommendation: communityRecommendation,
+        profileJson: { title: "Community source profile", notes: "Original notes", steps: [{ name: "bloom", pressure: 2 }] }
+      };
+      return responseJson(payload);
+    }
+
+    if (url.hostname === "workflow-skin-community.sabotage1.workers.dev" && method === "POST" && url.pathname === "/api/recommendations") {
+      const body = JSON.parse(String(init.body));
+      communityCreatePayloads.push(body);
+      const recommendation = {
+        id: "created-rec-1",
+        createdAt: "2026-06-18T01:00:00.000Z",
+        updatedAt: "2026-06-18T01:00:00.000Z",
+        ...body.recommendation
+      };
+      return responseJson({
+        recommendation,
+        index: { version: 1, updatedAt: "2026-06-18T01:00:00.000Z", items: [recommendation] }
+      });
     }
 
     if (method === "GET" && url.pathname === "/api/v1/account/decent") return responseJson(options.decentAccount ?? { connected: true, username: "royack" });
@@ -121,15 +193,17 @@ function mockReaFetch(
     if (method === "PUT" && url.pathname.startsWith("/api/v1/profiles/")) {
       const profileId = decodeURIComponent(url.pathname.split("/").pop() ?? "");
       if (options.rejectProfileUpdate) return Promise.resolve(new Response("Cannot modify default profile content", { status: 400 }));
-      const body = JSON.parse(String(init.body)) as { profile?: (typeof profiles)[number]["profile"] };
+      const body = JSON.parse(String(init.body)) as { profile?: (typeof profiles)[number]["profile"]; metadata?: Record<string, unknown> };
+      updatedProfilePayloads.push({ id: profileId, ...body });
       const current = profiles.find((profile) => profile.id === profileId);
-      const updated = { id: options.updatedProfileId ?? profileId, profile: body.profile ?? current?.profile ?? {} };
+      const updated = { id: options.updatedProfileId ?? profileId, profile: body.profile ?? current?.profile ?? {}, metadata: body.metadata };
       profiles = profiles.map((profile) => (profile.id === profileId ? updated : profile));
       return responseJson(updated);
     }
     if (method === "POST" && url.pathname === "/api/v1/profiles") {
-      const body = JSON.parse(String(init.body)) as { profile: (typeof profiles)[number]["profile"]; parentId?: string };
-      const created = { id: "p3", parentId: body.parentId, profile: body.profile };
+      const body = JSON.parse(String(init.body)) as { profile: (typeof profiles)[number]["profile"]; parentId?: string; metadata?: Record<string, unknown> };
+      createdProfilePayloads.push(body);
+      const created = { id: "p3", parentId: body.parentId, profile: body.profile, metadata: body.metadata };
       profiles = [...profiles, created];
       return responseJson(created, 201);
     }
@@ -208,8 +282,12 @@ function mockReaFetch(
       displayState = { ...displayState, wakeLockOverride: false };
       return responseJson(displayState);
     }
-    if (method === "GET" && url.pathname === "/api/v1/beans") return responseJson([]);
-    if (method === "GET" && url.pathname === "/api/v1/grinders") return responseJson([]);
+    if (method === "GET" && url.pathname === "/api/v1/beans") return responseJson(beans);
+    if (method === "GET" && url.pathname.startsWith("/api/v1/beans/") && url.pathname.endsWith("/batches")) {
+      const beanId = decodeURIComponent(url.pathname.split("/")[4] ?? "");
+      return responseJson(options.batchesByBeanId?.[beanId] ?? []);
+    }
+    if (method === "GET" && url.pathname === "/api/v1/grinders") return responseJson(grinders);
     if (method === "GET" && url.pathname === "/api/v1/shots") return responseJson({ items: shots, total: shots.length, limit: 100, offset: 0 });
     if (method === "GET" && url.pathname === "/api/v1/shots/latest") return responseJson(shots[0] ?? null);
     if (method === "GET" && url.pathname.startsWith("/api/v1/shots/")) {
@@ -315,6 +393,21 @@ function mockReaFetch(
     },
     get sensorExecuteCount() {
       return sensorExecuteCount;
+    },
+    get communityDownloadIds() {
+      return communityDownloadIds;
+    },
+    get communityCreatePayloads() {
+      return communityCreatePayloads;
+    },
+    get createdProfilePayloads() {
+      return createdProfilePayloads;
+    },
+    get updatedProfilePayloads() {
+      return updatedProfilePayloads;
+    },
+    get communityStore() {
+      return communityStore;
     },
     get displayState() {
       return displayState;
@@ -534,6 +627,122 @@ describe("App shell", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Community" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("GET /api/recommendations failed: 500");
+  });
+
+  it("downloads a community recommendation into local profiles and records it in storage", async () => {
+    const fetchState = mockReaFetch(initialSettings, {
+      communityRecommendations: [communityRecommendation],
+      communityDownloadPayloads: {
+        [communityRecommendation.id]: {
+          recommendation: communityRecommendation,
+          profileJson: { title: "Source Blooming", notes: "Original notes", steps: [{ name: "Bloom", pressure: 2 }] }
+        }
+      }
+    });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Community" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Download Blooming" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Profile downloaded.");
+    expect(fetchState.communityDownloadIds).toEqual([communityRecommendation.id]);
+    expect(fetchState.createdProfilePayloads[0]).toEqual(
+      expect.objectContaining({
+        profile: expect.objectContaining({
+          title: "Blooming - Halo - Roy - rec-12345678",
+          author: "Roy",
+          notes: expect.stringContaining("Community recommendation: rec-12345678")
+        }),
+        metadata: expect.objectContaining({
+          communityRecommendationId: "rec-12345678",
+          communityRecommendationUpdatedAt: communityRecommendation.updatedAt,
+          communitySubmittedBy: "Roy"
+        })
+      })
+    );
+    const downloaded = fetchState.communityStore.get("/api/v1/store/workflow-skin/community-downloaded-profiles") as Array<Record<string, unknown>>;
+    expect(downloaded).toEqual([
+      expect.objectContaining({
+        recommendationId: "rec-12345678",
+        localProfileId: "p3",
+        localProfileTitle: "Blooming - Halo - Roy - rec-12345678",
+        updatedAt: communityRecommendation.updatedAt
+      })
+    ]);
+  });
+
+  it("uploads a local bag profile and grinder as a community recommendation", async () => {
+    profiles = [{ id: "p1", profile: { title: "Blooming", notes: "Profile notes", steps: [{ name: "Bloom", pressure: 2 }] } }];
+    const fetchState = mockReaFetch(initialSettings, {
+      decentAccount: { connected: true, username: "royack" },
+      beans: [{ id: "bean-1", roaster: "Pilot", name: "Ethiopia Halo", country: "Ethiopia", region: "Yirgacheffe", processing: "Washed", notes: "floral" }],
+      batchesByBeanId: {
+        "bean-1": [{ id: "batch-1", beanId: "bean-1", roastDate: "2026-06-01", roastLevel: "Light", notes: "batch notes", extras: { workflowSkin: { name: "Halo" } } }]
+      },
+      grinders: [{ id: "g1", model: "ZP6", settingType: "numeric", burrs: "MP", notes: "travel grinder" }]
+    });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Community" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "Recommend Profile" }));
+    await userEvent.selectOptions(await screen.findByLabelText("Saved bag"), "batch-1");
+    await userEvent.selectOptions(screen.getByLabelText("Profile"), "p1");
+    await userEvent.selectOptions(screen.getByLabelText("Grinder"), "g1");
+    await userEvent.type(screen.getByLabelText("Grind setting"), "4.2");
+    await userEvent.type(screen.getByLabelText("Beans weight"), "18");
+    await userEvent.type(screen.getByLabelText("Drink weight"), "42");
+    await userEvent.type(screen.getByLabelText("Seconds min"), "28");
+    await userEvent.type(screen.getByLabelText("Seconds max"), "34");
+    await userEvent.type(screen.getByLabelText("Notes"), "Gentle declining pressure");
+    await userEvent.click(screen.getByRole("button", { name: "Upload recommendation" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Recommendation uploaded.");
+    expect(fetchState.communityCreatePayloads[0]).toEqual(
+      expect.objectContaining({
+        ownerKey: "owner-key",
+        recommendation: expect.objectContaining({
+          submittedBy: "royack",
+          bag: expect.objectContaining({
+            id: "batch-1",
+            beanId: "bean-1",
+            roaster: "Pilot",
+            name: "Halo",
+            bean: "Ethiopia Halo",
+            country: "Ethiopia",
+            process: "Washed",
+            roastDate: "2026-06-01"
+          }),
+          profile: expect.objectContaining({
+            originalId: "p1",
+            originalTitle: "Blooming",
+            installedTitle: "Blooming"
+          }),
+          grinder: expect.objectContaining({
+            id: "g1",
+            model: "ZP6",
+            burrs: "MP",
+            settingType: "numeric"
+          }),
+          brew: {
+            grindSetting: "4.2",
+            beansWeight: 18,
+            drinkWeight: 42,
+            secondsMin: 28,
+            secondsMax: 34,
+            notes: "Gentle declining pressure"
+          }
+        }),
+        profileJson: expect.objectContaining({ title: "Blooming", notes: "Profile notes" })
+      })
+    );
+    const uploaded = fetchState.communityStore.get("/api/v1/store/workflow-skin/community-uploaded-profiles") as Array<Record<string, unknown>>;
+    expect(uploaded).toEqual([
+      expect.objectContaining({
+        recommendationId: "created-rec-1",
+        updatedAt: "2026-06-18T01:00:00.000Z",
+        recommendation: expect.objectContaining({ submittedBy: "royack" })
+      })
+    ]);
   });
 
   it("orders grinders below profiles in the default main menu", async () => {

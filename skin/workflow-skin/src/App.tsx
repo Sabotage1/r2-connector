@@ -785,25 +785,27 @@ export function App() {
 
   const downloadCommunityProfile = useCallback(
     async (recommendation: CommunityRecommendation) => {
+      const downloadedBefore = await loadDownloadedCommunityProfiles(api);
       const payload = await communityApi.download(recommendation.id);
-      const existing = downloadedCommunityProfiles.find((item) => item.recommendationId === recommendation.id);
+      const existing = downloadedBefore.find((item) => item.recommendationId === recommendation.id);
       const installPayload = profilePayloadForCommunityInstall(payload.recommendation, payload.profileJson);
       const savedProfile = existing ? await api.updateProfile(existing.localProfileId, installPayload) : await api.createProfile(installPayload);
       const record: DownloadedCommunityProfile = {
         recommendationId: recommendation.id,
         localProfileId: savedProfile.id,
-        localProfileTitle: savedProfile.profile.title ?? recommendation.profile.installedTitle,
+        localProfileTitle: savedProfile.profile.title ?? payload.recommendation.profile.installedTitle,
         downloadedAt: existing?.downloadedAt ?? new Date().toISOString(),
-        updatedAt: recommendation.updatedAt,
+        updatedAt: payload.recommendation.updatedAt,
         recommendation: payload.recommendation,
         evidence: payload.evidence
       };
-      const next = [record, ...downloadedCommunityProfiles.filter((item) => item.recommendationId !== recommendation.id)];
+      const downloadedAfter = await loadDownloadedCommunityProfiles(api);
+      const next = [record, ...downloadedAfter.filter((item) => item.recommendationId !== recommendation.id)];
       await saveDownloadedCommunityProfiles(api, next);
       setDownloadedCommunityProfiles(next);
       await data.refresh();
     },
-    [api, communityApi, data, downloadedCommunityProfiles]
+    [api, communityApi, data]
   );
 
   const uploadCommunityProfile = useCallback(
@@ -866,12 +868,13 @@ export function App() {
         updatedAt: result.recommendation.updatedAt,
         recommendation: result.recommendation
       };
-      const next = [record, ...uploadedCommunityProfiles.filter((item) => item.recommendationId !== record.recommendationId)];
+      const uploadedAfter = await loadUploadedCommunityProfiles(api);
+      const next = [record, ...uploadedAfter.filter((item) => item.recommendationId !== record.recommendationId)];
       await saveUploadedCommunityProfiles(api, next);
       setUploadedCommunityProfiles(next);
       setCommunityRecommendations(result.index.items);
     },
-    [api, communityApi, communityDisplayName, data.bags, data.grinders, data.profiles, data.shots, decentAccount, uploadedCommunityProfiles]
+    [api, communityApi, communityDisplayName, data.bags, data.grinders, data.profiles, data.shots, decentAccount]
   );
 
   const applyProfile = async (profile: ProfileRecord, options: { optimistic?: boolean } = {}) => {

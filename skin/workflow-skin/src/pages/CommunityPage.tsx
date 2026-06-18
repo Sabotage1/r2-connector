@@ -132,6 +132,7 @@ export function CommunityPage({
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState<UploadDraft>(emptyDraft);
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [pendingDownloadId, setPendingDownloadId] = useState<string | null>(null);
   const displayName = submittedByLocked ? submittedBy ?? "" : manualDisplayName;
   const filteredRecommendations = useMemo(
     () => recommendations.filter((recommendation) => matchesCommunitySearch(recommendation, query)),
@@ -158,6 +159,19 @@ export function CommunityPage({
       setStatus({ type: "success", message: "Recommendation uploaded." });
     } catch (error) {
       setStatus({ type: "error", message: error instanceof Error ? error.message : String(error) });
+    }
+  };
+
+  const downloadRecommendation = async (recommendation: CommunityRecommendation) => {
+    setPendingDownloadId(recommendation.id);
+    setStatus(null);
+    try {
+      await onDownload(recommendation);
+      setStatus({ type: "success", message: "Profile downloaded." });
+    } catch (error) {
+      setStatus({ type: "error", message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setPendingDownloadId(null);
     }
   };
 
@@ -202,10 +216,16 @@ export function CommunityPage({
               {error}
             </p>
           )}
+          {status && (
+            <p className={status.type === "error" ? "status-message error" : "status-message"} role={status.type === "error" ? "alert" : "status"}>
+              {status.message}
+            </p>
+          )}
           {loading && <p className="muted">Loading community recommendations.</p>}
           {!loading && filteredRecommendations.length === 0 && <p className="muted">No recommendations found.</p>}
           {filteredRecommendations.map((recommendation) => {
             const title = recommendationTitle(recommendation);
+            const downloadPending = pendingDownloadId === recommendation.id;
             return (
               <div className="list-row community-row" key={recommendation.id}>
                 <strong>{title}</strong>
@@ -221,9 +241,15 @@ export function CommunityPage({
                 </span>
                 <p>{recommendation.brew.notes}</p>
                 <div className="row-actions">
-                  <button type="button" className="primary-button compact-button" aria-label={`Download ${title}`} onClick={() => void onDownload(recommendation)}>
+                  <button
+                    type="button"
+                    className="primary-button compact-button"
+                    aria-label={`Download ${title}`}
+                    disabled={downloadPending}
+                    onClick={() => void downloadRecommendation(recommendation)}
+                  >
                     <Download aria-hidden="true" size={16} />
-                    Download
+                    {downloadPending ? "Downloading" : "Download"}
                   </button>
                 </div>
               </div>
