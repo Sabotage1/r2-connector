@@ -11,16 +11,16 @@ function ownerKey(): string {
 }
 
 export async function getOrCreateCommunityOwnerKey(api: KvApi): Promise<string> {
-  const existing = await api.getKv<string>(SKIN_NAMESPACE, COMMUNITY_OWNER_KEY);
-  if (existing?.trim()) return existing.trim();
+  const existing = await api.getKv<unknown>(SKIN_NAMESPACE, COMMUNITY_OWNER_KEY);
+  if (typeof existing === "string" && existing.trim()) return existing.trim();
   const next = ownerKey();
   await api.putKv(SKIN_NAMESPACE, COMMUNITY_OWNER_KEY, next);
   return next;
 }
 
 export async function loadCommunityDisplayName(api: KvApi): Promise<string | null> {
-  const value = await api.getKv<string>(SKIN_NAMESPACE, COMMUNITY_DISPLAY_NAME_KEY);
-  return value?.trim() || null;
+  const value = await api.getKv<unknown>(SKIN_NAMESPACE, COMMUNITY_DISPLAY_NAME_KEY);
+  return typeof value === "string" ? value.trim() || null : null;
 }
 
 export async function saveCommunityDisplayName(api: KvApi, value: string): Promise<void> {
@@ -28,7 +28,8 @@ export async function saveCommunityDisplayName(api: KvApi, value: string): Promi
 }
 
 export async function loadDownloadedCommunityProfiles(api: KvApi): Promise<DownloadedCommunityProfile[]> {
-  return (await api.getKv<DownloadedCommunityProfile[]>(SKIN_NAMESPACE, COMMUNITY_DOWNLOADED_KEY)) ?? [];
+  const value = await api.getKv<unknown>(SKIN_NAMESPACE, COMMUNITY_DOWNLOADED_KEY);
+  return Array.isArray(value) ? (value as DownloadedCommunityProfile[]) : [];
 }
 
 export async function saveDownloadedCommunityProfiles(api: KvApi, value: DownloadedCommunityProfile[]): Promise<void> {
@@ -36,7 +37,8 @@ export async function saveDownloadedCommunityProfiles(api: KvApi, value: Downloa
 }
 
 export async function loadUploadedCommunityProfiles(api: KvApi): Promise<UploadedCommunityProfile[]> {
-  return (await api.getKv<UploadedCommunityProfile[]>(SKIN_NAMESPACE, COMMUNITY_UPLOADED_KEY)) ?? [];
+  const value = await api.getKv<unknown>(SKIN_NAMESPACE, COMMUNITY_UPLOADED_KEY);
+  return Array.isArray(value) ? (value as UploadedCommunityProfile[]) : [];
 }
 
 export async function saveUploadedCommunityProfiles(api: KvApi, value: UploadedCommunityProfile[]): Promise<void> {

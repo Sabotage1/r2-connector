@@ -23,13 +23,12 @@ export class CommunityApi {
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const method = init.method ?? "GET";
+    const headers = new Headers(init.headers);
+    if (!headers.has("content-type")) headers.set("content-type", "application/json");
     const response = await fetch(`${this.baseUrl.replace(/\/+$/, "")}${path}`, {
       ...init,
       method,
-      headers: {
-        "content-type": "application/json",
-        ...(init.headers ?? {})
-      }
+      headers
     });
     const text = await response.text();
     if (!response.ok) {
