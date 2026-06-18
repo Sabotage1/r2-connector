@@ -1354,3 +1354,75 @@ describe("ScreensaverPage", () => {
     expect(visibleQuote).toHaveClass("screensaver-subtitle");
   });
 });
+
+describe("CommunityPage", () => {
+  const recommendation = {
+    id: "rec-12345678",
+    createdAt: "2026-06-18T00:00:00.000Z",
+    updatedAt: "2026-06-18T00:00:00.000Z",
+    submittedBy: "Roy",
+    bag: { id: "bag-1", beanId: "bean-1", roaster: "Pilot", name: "Halo", bean: "Ethiopia Halo", country: "Ethiopia", process: "Washed", roastDate: "2026-06-01" },
+    profile: { originalId: "p1", originalTitle: "Blooming", fileName: "rec-12345678.json", installedTitle: "Blooming - Halo - Roy" },
+    grinder: { id: "g1", model: "ZP6", settingType: "numeric" as const },
+    brew: { grindSetting: "4.2", beansWeight: 18, drinkWeight: 42, secondsMin: 28, secondsMax: 34, notes: "Gentle declining pressure" }
+  };
+
+  it("shows searchable recommendations and download actions", async () => {
+    const { CommunityPage } = await import("../pages/CommunityPage");
+    render(
+      <CommunityPage
+        recommendations={[recommendation]}
+        loading={false}
+        error={null}
+        bags={[]}
+        profiles={[]}
+        grinders={[]}
+        shots={[]}
+        downloaded={[]}
+        uploaded={[]}
+        submittedBy="Roy"
+        submittedByLocked
+        manualDisplayName=""
+        onManualDisplayNameChange={vi.fn()}
+        onRefresh={vi.fn()}
+        onDownload={vi.fn()}
+        onUpload={vi.fn()}
+        onEditUpload={vi.fn()}
+      />
+    );
+    expect(screen.getByRole("heading", { name: "Community" })).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Search recommendations"), "zp6");
+    expect(screen.getByText("Blooming")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download Blooming" })).toBeInTheDocument();
+  });
+
+  it("requires existing saved bag, profile, grinder, brew values, and notes before upload", async () => {
+    const { CommunityPage } = await import("../pages/CommunityPage");
+    const onUpload = vi.fn();
+    render(
+      <CommunityPage
+        recommendations={[]}
+        loading={false}
+        error={null}
+        bags={[]}
+        profiles={[]}
+        grinders={[]}
+        shots={[]}
+        downloaded={[]}
+        uploaded={[]}
+        submittedBy={null}
+        submittedByLocked={false}
+        manualDisplayName=""
+        onManualDisplayNameChange={vi.fn()}
+        onRefresh={vi.fn()}
+        onDownload={vi.fn()}
+        onUpload={onUpload}
+        onEditUpload={vi.fn()}
+      />
+    );
+    await userEvent.click(screen.getByRole("tab", { name: "Recommend Profile" }));
+    await userEvent.click(screen.getByRole("button", { name: "Upload recommendation" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Select a saved bag, profile, grinder, public display name, grind setting, weights, seconds, and notes.");
+    expect(onUpload).not.toHaveBeenCalled();
+  });
+});

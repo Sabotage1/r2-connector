@@ -1989,3 +1989,20 @@ textarea {
     grid-column: auto;
   }
 }
+
+.community-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.community-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.community-row p {
+  margin: 0;
+  color: var(--muted);
+}
