@@ -177,13 +177,15 @@ export function HistoryPage({
         return (
           <div className="history-shot-entry" key={shot.id}>
             <button type="button" className={rowClassName} aria-label={`Open shot review for ${title}`} onClick={() => onOpenShot?.(shot)}>
-              <strong>{new Date(shot.timestamp).toLocaleString()}</strong>
+              <div className="history-shot-card-header">
+                <strong>{new Date(shot.timestamp).toLocaleString()}</strong>
+                <span className={`history-rating ${tone}`}>{tasteScoreLabel(rating)}</span>
+              </div>
               <span>{title}</span>
               <span>{bag ? `${bag.roaster} ${bag.bean}` : "No bag"}</span>
               <span>
                 EY {shot.annotations?.drinkEy ?? "—"} · Grind {grindSizeFromShot(shot) ?? "—"}
               </span>
-              <span className={`history-rating ${tone}`}>{tasteScoreLabel(rating)}</span>
             </button>
             {onRecommendShot && (
               <button

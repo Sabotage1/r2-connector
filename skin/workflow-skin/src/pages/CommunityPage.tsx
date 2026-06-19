@@ -136,8 +136,7 @@ function StarRating({ value }: { value: unknown }) {
   if (rating === null) return null;
   return (
     <span className="community-star-rating" aria-label={`Recommendation rating ${rating} out of 5 stars`}>
-      {"★".repeat(rating)}
-      {"☆".repeat(5 - rating)}
+      {"⭐".repeat(rating)}
     </span>
   );
 }
@@ -837,8 +836,10 @@ export function CommunityPage({
                 return (
                   <div className="list-row community-row" key={recommendation.id}>
                     <button type="button" className="community-row-open" aria-label={`Open ${title} details`} onClick={() => void openRecommendationDetails(recommendation)}>
-                      <strong>{title}</strong>
-                      <StarRating value={recommendation.rating} />
+                      <div className="community-card-header">
+                        <strong>{title}</strong>
+                        <StarRating value={recommendation.rating} />
+                      </div>
                       <span>{communityRankText(recommendation)}</span>
                       {recommendationUploadSummary(recommendation) && <span>{recommendationUploadSummary(recommendation)}</span>}
                       <span>{recommendationBagSummary(recommendation)}</span>
@@ -908,8 +909,10 @@ export function CommunityPage({
           {downloaded.length === 0 && <p className="muted">No downloaded profiles yet.</p>}
           {downloaded.map((item) => (
             <div className="list-row community-row" key={`${item.recommendationId}-${item.localProfileId}`}>
-              <strong>{item.localProfileTitle}</strong>
-              <StarRating value={item.recommendation.rating} />
+              <div className="community-card-header">
+                <strong>{item.localProfileTitle}</strong>
+                <StarRating value={item.recommendation.rating} />
+              </div>
               <span>{communityRankText(item.recommendation)}</span>
               <p>{item.recommendation.brew.notes}</p>
               {(item.evidence || recommendationShotScore(item.recommendation)) && (
@@ -1037,8 +1040,10 @@ export function CommunityPage({
                 const title = recommendationTitle(item.recommendation);
                 return (
                   <div className="list-row community-row" key={item.recommendationId}>
-                    <strong>{title}</strong>
-                    <StarRating value={item.recommendation.rating} />
+                    <div className="community-card-header">
+                      <strong>{title}</strong>
+                      <StarRating value={item.recommendation.rating} />
+                    </div>
                     {localUploadSummary(item) && <span>{localUploadSummary(item)}</span>}
                     <span>{recommendationBagSummary(item.recommendation)}</span>
                     <span>{recommendationBrewSummary(item.recommendation)}</span>

@@ -493,11 +493,17 @@ describe("HistoryPage", () => {
 
     const goldShot = screen.getByRole("button", { name: "Open shot review for Blooming espresso" });
     expect(goldShot).toHaveClass("history-shot-row", "taste-gold", "golden");
-    expect(within(goldShot).getByText("10/10 🔥")).toHaveClass("history-rating", "gold");
+    const goldRank = within(goldShot).getByText("10/10 🔥");
+    expect(goldRank).toHaveClass("history-rating", "gold");
+    expect(goldShot.querySelector(".history-shot-card-header")).not.toBeNull();
+    expect(goldRank.closest(".history-shot-card-header")).toBe(goldShot.querySelector(".history-shot-card-header"));
 
     const yellowShot = screen.getByRole("button", { name: "Open shot review for Turbo flow" });
     expect(yellowShot).toHaveClass("history-shot-row", "taste-yellow");
-    expect(within(yellowShot).getByText("4/10")).toHaveClass("history-rating", "yellow");
+    const yellowRank = within(yellowShot).getByText("4/10");
+    expect(yellowRank).toHaveClass("history-rating", "yellow");
+    expect(yellowShot.querySelector(".history-shot-card-header")).not.toBeNull();
+    expect(yellowRank.closest(".history-shot-card-header")).toBe(yellowShot.querySelector(".history-shot-card-header"));
 
     await userEvent.click(goldShot);
     expect(onOpenShot).toHaveBeenCalledWith(expect.objectContaining({ id: "shot-1" }));
@@ -1552,8 +1558,12 @@ describe("CommunityPage", () => {
 
     const fiveStarRow = screen.getByText("Blooming").closest(".community-row") as HTMLElement;
     const threeStarRow = screen.getByText("Classic").closest(".community-row") as HTMLElement;
-    expect(within(fiveStarRow).getByLabelText("Recommendation rating 5 out of 5 stars")).toBeInTheDocument();
-    expect(within(threeStarRow).getByLabelText("Recommendation rating 3 out of 5 stars")).toBeInTheDocument();
+    const fiveStarBadge = within(fiveStarRow).getByLabelText("Recommendation rating 5 out of 5 stars");
+    const threeStarBadge = within(threeStarRow).getByLabelText("Recommendation rating 3 out of 5 stars");
+    expect(fiveStarBadge).toHaveTextContent("⭐⭐⭐⭐⭐");
+    expect(threeStarBadge).toHaveTextContent("⭐⭐⭐");
+    expect(fiveStarBadge.closest(".community-card-header")).toBe(fiveStarRow.querySelector(".community-card-header"));
+    expect(threeStarBadge.closest(".community-card-header")).toBe(threeStarRow.querySelector(".community-card-header"));
 
     await userEvent.selectOptions(screen.getByLabelText("Minimum recommendation rating"), "4");
 
