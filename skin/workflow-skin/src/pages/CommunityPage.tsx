@@ -1,5 +1,5 @@
 import { Download, RefreshCw, Trash2, Upload, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Grinder, ProfileRecord, ShotRecord, ShotSnapshot } from "../api/types";
 import { ShotGraph } from "../components/ShotGraph";
@@ -309,6 +309,7 @@ export function CommunityPage({
   const [detailPayloads, setDetailPayloads] = useState<Partial<Record<string, CommunityDownloadPayload>>>({});
   const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const recommendStatusRef = useRef<HTMLParagraphElement | null>(null);
   const displayName = submittedByLocked ? submittedBy ?? "" : manualDisplayName;
   const activeBurrTypes = useMemo(
     () => (Object.entries(burrTypeFilters) as Array<[BurrTypeFilter, boolean]>).filter(([, active]) => active).map(([type]) => type),
@@ -341,6 +342,13 @@ export function CommunityPage({
     setStatus(null);
     onInitialDraftApplied?.();
   }, [initialDraft, onInitialDraftApplied]);
+
+  useEffect(() => {
+    if (activeTab !== "recommend" || !status) return;
+    const statusElement = recommendStatusRef.current;
+    if (typeof statusElement?.scrollIntoView !== "function") return;
+    statusElement.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [activeTab, status]);
 
   const setDraftField = (field: keyof UploadDraft, value: string) => {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -720,6 +728,11 @@ export function CommunityPage({
       {activeTab === "recommend" && (
         <section id="community-panel-recommend" className="panel wide community-section" role="tabpanel" aria-labelledby="community-tab-recommend">
           <p className="mandatory-help">Shot history is optional, but highly recommended so people can understand the profile from a real graph and shot details.</p>
+          {status && (
+            <p ref={recommendStatusRef} className={status.type === "error" ? "status-message error" : "status-message"} role={status.type === "error" ? "alert" : "status"}>
+              {status.message}
+            </p>
+          )}
           <div className="form-grid">
             {submittedByLocked ? (
               <p className="muted">Uploading as Decent account {submittedBy ?? "connected user"}.</p>
@@ -741,11 +754,6 @@ export function CommunityPage({
               Upload recommendation
             </button>
           </div>
-          {status && (
-            <p className={status.type === "error" ? "status-message error" : "status-message"} role={status.type === "error" ? "alert" : "status"}>
-              {status.message}
-            </p>
-          )}
         </section>
       )}
 

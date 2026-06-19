@@ -1549,6 +1549,40 @@ describe("CommunityPage", () => {
     expect(onUpload).not.toHaveBeenCalled();
   });
 
+  it("shows upload validation and success messages above the recommendation fields", async () => {
+    const onUpload = vi.fn().mockResolvedValue(undefined);
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scrollIntoView });
+
+    try {
+      await renderCommunityPage({ onUpload });
+      await openRecommendProfile();
+
+      await userEvent.click(screen.getByRole("button", { name: "Upload recommendation" }));
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("Select a saved bag, profile, grinder, public display name, grind setting, weights, seconds, and notes.");
+      expect(alert.compareDocumentPosition(screen.getByLabelText("Saved bag")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "center", behavior: "smooth" });
+
+      scrollIntoView.mockClear();
+      await fillValidUploadDraft();
+      await userEvent.click(screen.getByRole("button", { name: "Upload recommendation" }));
+
+      await waitFor(() => expect(onUpload).toHaveBeenCalled());
+      const status = screen.getByRole("status");
+      expect(status).toHaveTextContent("Recommendation uploaded.");
+      expect(status.compareDocumentPosition(screen.getByLabelText("Saved bag")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "center", behavior: "smooth" });
+    } finally {
+      if (originalScrollIntoView) {
+        Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: originalScrollIntoView });
+      } else {
+        delete (HTMLElement.prototype as unknown as { scrollIntoView?: unknown }).scrollIntoView;
+      }
+    }
+  });
+
   it("rejects invalid numeric brew values before upload", async () => {
     const onUpload = vi.fn();
     await renderCommunityPage({ onUpload });
