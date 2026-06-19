@@ -1,4 +1,3 @@
-import { Play } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Grinder, ProfileRecord, ShotRecord, Workflow } from "../api/types";
 import { MetricTile } from "../components/MetricTile";
@@ -88,8 +87,6 @@ export function BrewPage({
   settings,
   onApplyProfile,
   onEditSlot,
-  onStartBrew,
-  brewPending,
   grinders = [],
   onUpdateRecipe,
   onSelectBag
@@ -102,8 +99,6 @@ export function BrewPage({
   settings: SkinSettings;
   onApplyProfile: (profile: ProfileRecord) => void;
   onEditSlot: (index: number) => void;
-  onStartBrew: () => void;
-  brewPending?: boolean;
   onUpdateRecipe?: (recipe: { dose?: number; yield?: number }) => void;
   onSelectBag?: (bagId: string) => void;
 }) {
@@ -215,10 +210,6 @@ export function BrewPage({
         {grinders.length > 0 && <MetricTile label="Grinders" value={`${grinders.length} configured`} />}
         <button type="button" className="ghost-button recipe-save-button" onClick={() => onUpdateRecipe?.({ dose: cleanNumber(doseText), yield: cleanNumber(yieldText) })}>
           Save recipe
-        </button>
-        <button type="button" className="primary-button brew-start-button" disabled={brewPending} onClick={onStartBrew}>
-          <Play size={18} />
-          <span>{brewPending ? "Starting" : "Start Brew"}</span>
         </button>
       </section>
       <section className="panel wide">

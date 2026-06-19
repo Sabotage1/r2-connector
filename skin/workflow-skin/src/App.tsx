@@ -47,6 +47,7 @@ import { buildConnectivityStatuses } from "./lib/connectivity";
 import type { ConnectivityStatus } from "./lib/connectivity";
 import { trimLiveGraphWarmup } from "./lib/liveMeasurements";
 import { machineModeLabel, machineTemperature } from "./lib/machineState";
+import { isBrewingMode, isIdleMode, isSleepingMode, isSteamingMode, shouldPollMachineState, workflowActivityForMode } from "./lib/machineMode";
 import { grindSizeFromShot, shotStats } from "./lib/shotStats";
 import { selectedProfileIdFromWorkflow, type CompletedWorkflowActivity } from "./lib/workflowRouting";
 import { BagsPage } from "./pages/BagsPage";
@@ -309,34 +310,6 @@ function screensaverBrightnessValue(value: number | undefined): number {
   return Math.min(100, Math.max(0, Math.round(value ?? 8)));
 }
 
-function compactMachineMode(state: string | undefined): string {
-  return state?.trim().toLowerCase().replace(/[^a-z]/g, "") ?? "";
-}
-
-function isBrewingMode(state: string | undefined): boolean {
-  const mode = compactMachineMode(state);
-  return mode === "espresso" || mode === "brewing";
-}
-
-function isSteamingMode(state: string | undefined): boolean {
-  const mode = compactMachineMode(state);
-  return mode === "steam" || mode === "steaming" || mode.includes("steam");
-}
-
-function isIdleMode(state: string | undefined): boolean {
-  return compactMachineMode(state) === "idle";
-}
-
-function workflowActivityForMode(state: string | undefined): CompletedWorkflowActivity | null {
-  if (isBrewingMode(state)) return "brew";
-  if (isSteamingMode(state)) return "steam";
-  return null;
-}
-
-function isSleepingMode(state: string | undefined): boolean {
-  return compactMachineMode(state) === "sleeping";
-}
-
 async function wakeMachineIfNeeded(api: ReaPrimeApi, fallbackMachineState: MachineState | null): Promise<MachineState | null> {
   const latestState = await api.getMachineState().catch(() => fallbackMachineState);
   if (!isSleepingMachine(latestState)) return latestState;
@@ -570,7 +543,6 @@ export function App() {
   const [editingSlotIndex, setEditingSlotIndex] = useState<number | null>(null);
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [sleepPending, setSleepPending] = useState(false);
-  const [brewPending, setBrewPending] = useState(false);
   const [expandedStatusId, setExpandedStatusId] = useState<TopStatusIndicatorId | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [lastUseAt, setLastUseAt] = useState(() => Date.now());
@@ -1062,8 +1034,12 @@ export function App() {
 
   useEffect(() => {
     if (!data.loaded) return;
-    const shouldPollMachineState = Boolean(workflowActivityForMode(currentMachineMode) || completedActivityRef.current);
-    if (!shouldPollMachineState) {
+    const shouldPoll = shouldPollMachineState({
+      currentMode: currentMachineMode,
+      liveMode: liveTelemetry.machineMode?.state,
+      hasCompletedActivity: Boolean(completedActivityRef.current)
+    });
+    if (!shouldPoll) {
       setFastMachineState(null);
       return;
     }
@@ -1082,7 +1058,7 @@ export function App() {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [api, currentMachineMode, data.loaded, page]);
+  }, [api, currentMachineMode, data.loaded, liveTelemetry.machineMode?.state, page]);
 
   const routeCompletedActivity = useCallback(
     async (completed: { activity: CompletedWorkflowActivity; profileId?: string }) => {
@@ -1433,28 +1409,6 @@ export function App() {
         scaleReconnectRef.current.pending = false;
       });
   }, [data.loaded, machineSleeping, nativeDevices, page]);
-
-  const startBrew = async () => {
-    setBrewPending(true);
-    setLastUseAt(Date.now());
-    try {
-      await requestScaleConnection().catch(() => undefined);
-      await api.requestMachineState("espresso");
-      const latestMachineState = await api.getMachineState().catch(() => null);
-      if (latestMachineState) setFastMachineState(latestMachineState);
-      if (isBrewingMode(latestMachineState?.state?.state)) {
-        setPage("live");
-        setStatus({ type: "success", message: "Brew started." });
-      } else {
-        await data.refresh();
-        setStatus({ type: "success", message: "Brew start requested. Waiting for machine." });
-      }
-    } catch (error) {
-      setStatus({ type: "error", message: `Could not start brew: ${errorMessage(error)}` });
-    } finally {
-      setBrewPending(false);
-    }
-  };
 
   const saveBag = async (bag: Bag) => {
     const bean = await api.createBean({
@@ -1910,10 +1864,6 @@ export function App() {
               setStatus(null);
               setEditingSlotIndex(index);
             }}
-            onStartBrew={() => {
-              void startBrew();
-            }}
-            brewPending={brewPending}
             grinders={data.grinders ?? []}
             onUpdateRecipe={async ({ dose, yield: targetYield }) => {
               await api.updateWorkflow({

@@ -77,7 +77,6 @@ describe("ProfilePresetGrid", () => {
 
 describe("BrewPage", () => {
   it("highlights the preset that matches the selected workflow profile", () => {
-    const onStartBrew = vi.fn();
     render(
       <BrewPage
         workflow={{ context: { extras: { workflowSkin: { selectedProfileId: "p2" } } } }}
@@ -94,15 +93,13 @@ describe("BrewPage", () => {
         }}
         onApplyProfile={vi.fn()}
         onEditSlot={vi.fn()}
-        onStartBrew={onStartBrew}
       />
     );
 
     expect(screen.getByRole("button", { name: /Sweet Classic/i })).toHaveAttribute("aria-current", "true");
   });
 
-  it("shows a dedicated start brew button", async () => {
-    const onStartBrew = vi.fn();
+  it("does not show a dedicated start brew button on the main page", () => {
     render(
       <BrewPage
         workflow={{ context: { targetDoseWeight: 18, targetYield: 36 } }}
@@ -112,13 +109,10 @@ describe("BrewPage", () => {
         settings={{ ...defaultSkinSettings, shownProfileIds: ["p1", "p2"] }}
         onApplyProfile={vi.fn()}
         onEditSlot={vi.fn()}
-        onStartBrew={onStartBrew}
       />
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Start Brew" }));
-
-    expect(onStartBrew).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Start Brew" })).not.toBeInTheDocument();
   });
 });
 
@@ -1182,7 +1176,6 @@ describe("BrewPage workflow controls", () => {
         }}
         onApplyProfile={vi.fn()}
         onEditSlot={vi.fn()}
-        onStartBrew={vi.fn()}
       />
     );
 
@@ -1202,7 +1195,6 @@ describe("BrewPage workflow controls", () => {
         settings={{ ...defaultSkinSettings, presetSlotCount: 2, shownProfileIds: ["p1", "p2"] }}
         onApplyProfile={vi.fn()}
         onEditSlot={vi.fn()}
-        onStartBrew={vi.fn()}
         onUpdateRecipe={onUpdateRecipe}
       />
     );
@@ -1234,7 +1226,6 @@ describe("BrewPage workflow controls", () => {
         settings={{ ...defaultSkinSettings, presetSlotCount: 2, shownProfileIds: ["p1", "p2"] }}
         onApplyProfile={vi.fn()}
         onEditSlot={vi.fn()}
-        onStartBrew={vi.fn()}
       />
     );
 
@@ -1271,7 +1262,6 @@ describe("BrewPage workflow controls", () => {
         settings={{ ...defaultSkinSettings, presetSlotCount: 2, shownProfileIds: ["p1", "p2"] }}
         onApplyProfile={vi.fn()}
         onEditSlot={vi.fn()}
-        onStartBrew={vi.fn()}
         onUpdateRecipe={onUpdateRecipe}
         onSelectBag={onSelectBag}
       />

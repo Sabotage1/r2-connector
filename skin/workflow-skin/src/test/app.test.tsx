@@ -1303,47 +1303,17 @@ describe("App shell", () => {
     );
   });
 
-  it("starts espresso mode and opens live data when Start Brew is pressed", async () => {
+  it("does not expose a main-page Start Brew button", async () => {
     const fetchState = mockReaFetch(initialSettings);
     render(<App />);
 
-    await userEvent.click(await screen.findByRole("button", { name: "Start Brew" }));
+    expect(await screen.findByRole("heading", { name: "Brew" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start Brew" })).not.toBeInTheDocument();
 
-    expect(await screen.findByRole("heading", { name: "Live Brew" })).toBeInTheDocument();
-    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+    expect(fetchState.fetchMock).not.toHaveBeenCalledWith(
       "http://localhost:8080/api/v1/machine/state/espresso",
       expect.objectContaining({ method: "PUT" })
     );
-  });
-
-  it("rechecks the scale connection before requesting espresso mode", async () => {
-    const fetchState = mockReaFetch(initialSettings, {
-      devices: [{ id: "scale-1", name: "Acaia Lunar", type: "scale", state: "disconnected" }],
-      scanDevicesResult: [{ id: "scale-1", name: "Acaia Lunar", type: "scale", state: "discovered" }]
-    });
-    render(<App />);
-
-    await screen.findByRole("button", { name: "Start Brew" });
-    await waitFor(() => expect(fetchState.scanCount).toBeGreaterThan(0));
-    fetchState.fetchMock.mockClear();
-
-    await userEvent.click(screen.getByRole("button", { name: "Start Brew" }));
-
-    await waitFor(() => {
-      expect(fetchState.fetchMock).toHaveBeenCalledWith("http://localhost:8080/api/v1/machine/state/espresso", expect.objectContaining({ method: "PUT" }));
-    });
-    const calls = fetchState.fetchMock.mock.calls.map(([url, init]) => ({
-      url: String(url),
-      method: (init as RequestInit | undefined)?.method ?? "GET"
-    }));
-    const scanIndex = calls.findIndex((call) => call.url.includes("/api/v1/devices/scan?connect=true&quick=false"));
-    const connectIndex = calls.findIndex((call) => call.url.endsWith("/api/v1/devices/connect") && call.method === "PUT");
-    const espressoIndex = calls.findIndex((call) => call.url.endsWith("/api/v1/machine/state/espresso") && call.method === "PUT");
-
-    expect(scanIndex).toBeGreaterThanOrEqual(0);
-    expect(connectIndex).toBeGreaterThanOrEqual(0);
-    expect(scanIndex).toBeLessThan(espressoIndex);
-    expect(connectIndex).toBeLessThan(espressoIndex);
   });
 
   it("opens live data when the machine is already brewing", async () => {
@@ -1708,6 +1678,44 @@ describe("App shell", () => {
     );
     expect(fetchState.displayState).toEqual(expect.objectContaining({ brightness: 13, wakeLockOverride: false }));
     expect(await screen.findByText("Machine sleeping")).toBeInTheDocument();
+  });
+
+  it("auto sleeps from settings after the configured idle timer", async () => {
+    vi.useFakeTimers();
+    const fetchState = mockReaFetch(
+      { ...initialSettings, autoSleepMinutes: 1, screensaverBrightness: 13 },
+      {
+        machineState: { connected: true, state: { state: "idle" }, wifi: { connected: true, ipAddress: "192.168.1.20" } }
+      }
+    );
+    render(<App />);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByRole("heading", { name: "Settings", level: 1 })).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(59_999);
+      await Promise.resolve();
+    });
+    expect(fetchState.fetchMock).not.toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/machine/state/sleeping",
+      expect.objectContaining({ method: "PUT" })
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(1_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(fetchState.fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/machine/state/sleeping",
+      expect.objectContaining({ method: "PUT" })
+    );
+    expect(screen.getByText("Machine sleeping")).toBeInTheDocument();
   });
 
   it("puts the machine to sleep and moves into screensaver mode", async () => {
