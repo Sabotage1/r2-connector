@@ -1594,6 +1594,47 @@ describe("CommunityPage", () => {
     expect(screen.getByText("Blooming")).toBeInTheDocument();
   });
 
+  it("sorts recommendations by rank count and uploader score with highest values first", async () => {
+    const highUploaderScore = {
+      ...recommendation,
+      id: "rec-high-uploader-score",
+      rating: 5,
+      communityRatingAverage: 4.8,
+      communityRatingCount: 1,
+      profile: { ...recommendation.profile, originalTitle: "High Uploader Score", installedTitle: "High Uploader Score - Halo - Roy" }
+    };
+    const manyRanksLowScore = {
+      ...recommendation,
+      id: "rec-many-ranks-low-score",
+      rating: 2,
+      communityRatingAverage: 3.4,
+      communityRatingCount: 9,
+      profile: { ...recommendation.profile, originalTitle: "Many Ranks Low Score", installedTitle: "Many Ranks Low Score - Halo - Roy" }
+    };
+    const manyRanksHighScore = {
+      ...recommendation,
+      id: "rec-many-ranks-high-score",
+      rating: 4,
+      communityRatingAverage: 3.9,
+      communityRatingCount: 9,
+      profile: { ...recommendation.profile, originalTitle: "Many Ranks High Score", installedTitle: "Many Ranks High Score - Halo - Roy" }
+    };
+    await renderCommunityPage({ recommendations: [highUploaderScore, manyRanksLowScore, manyRanksHighScore] });
+
+    const visibleTitles = () => Array.from(document.querySelectorAll(".community-row-open strong")).map((element) => element.textContent);
+
+    expect(visibleTitles()).toEqual(["High Uploader Score", "Many Ranks Low Score", "Many Ranks High Score"]);
+
+    await userEvent.selectOptions(screen.getByLabelText("Sort recommendations"), "rank-count");
+    expect(visibleTitles()).toEqual(["Many Ranks Low Score", "Many Ranks High Score", "High Uploader Score"]);
+
+    await userEvent.selectOptions(screen.getByLabelText("Sort recommendations"), "uploader-rating");
+    expect(visibleTitles()).toEqual(["High Uploader Score", "Many Ranks High Score", "Many Ranks Low Score"]);
+
+    await userEvent.selectOptions(screen.getByLabelText("Sort recommendations"), "rank-count-uploader-rating");
+    expect(visibleTitles()).toEqual(["Many Ranks High Score", "Many Ranks Low Score", "High Uploader Score"]);
+  });
+
   it("lets people rank recommendations from the list and the detail page", async () => {
     const rankedRecommendation = {
       ...recommendation,

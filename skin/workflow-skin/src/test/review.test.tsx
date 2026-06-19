@@ -576,6 +576,25 @@ describe("ReviewPage", () => {
     expect(screen.getByLabelText("Grinder")).toHaveValue("g2");
   });
 
+  it("shows the default grinder first when review has no saved shot grinder", () => {
+    render(
+      <ReviewPage
+        shot={{ ...shot, id: "s-default-order", workflow: { context: { targetDoseWeight: 18, beanBatchId: "batch-1" } } }}
+        previousShots={[]}
+        onSaveAnnotations={vi.fn()}
+        onUploadVisualizer={vi.fn()}
+        r2Sensor={null}
+        onReadR2={vi.fn()}
+        grinders={grinders}
+        defaultGrinderId="g2"
+      />
+    );
+
+    const grinderSelect = screen.getByLabelText("Grinder") as HTMLSelectElement;
+    expect(grinderSelect).toHaveValue("g2");
+    expect(Array.from(grinderSelect.options).map((option) => option.textContent)).toEqual(["No grinder selected", "ZP6", "EK43"]);
+  });
+
   it("renders imperfect shot workflow data without crashing", () => {
     const imperfectShot = {
       id: "imperfect",

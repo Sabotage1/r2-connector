@@ -69,6 +69,10 @@ export function ReviewPage({
   const stats = shotStats(shot);
   const context = shotContext(shot);
   const grinderById = useMemo(() => new Map(grinders.map((grinder) => [grinder.id, grinder])), [grinders]);
+  const orderedGrinders = useMemo(() => {
+    const defaultGrinder = defaultGrinderId ? grinderById.get(defaultGrinderId) : undefined;
+    return defaultGrinder ? [defaultGrinder, ...grinders.filter((grinder) => grinder.id !== defaultGrinder.id)] : grinders;
+  }, [defaultGrinderId, grinderById, grinders]);
   const savedWorkflowSkin = workflowSkinExtras(shot.annotations);
   const initialGrinderId =
     (typeof savedWorkflowSkin.grinderId === "string" ? savedWorkflowSkin.grinderId : undefined) ??
@@ -397,7 +401,7 @@ export function ReviewPage({
             Grinder
             <select aria-label="Grinder" value={selectedGrinderId} onChange={(event) => setSelectedGrinderId(event.target.value)}>
               <option value="">No grinder selected</option>
-              {grinders.map((grinder) => (
+              {orderedGrinders.map((grinder) => (
                 <option key={grinder.id} value={grinder.id}>
                   {grinder.model}
                 </option>

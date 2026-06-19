@@ -11,6 +11,7 @@ import { shotTasteRating, tasteScoreLabel } from "../lib/shotTaste";
 type CommunityTab = "recommendations" | "recommend" | "downloaded" | "uploaded";
 type BurrTypeFilter = "flat" | "conical";
 type RatingFilter = "" | "1" | "2" | "3" | "4" | "5";
+type RecommendationSort = "" | "rank-count" | "uploader-rating" | "rank-count-uploader-rating";
 
 export interface UploadDraft {
   bagId: string;
@@ -188,6 +189,30 @@ function recommendationDisplayRating(recommendation: CommunityRecommendation): n
 
 function ratingFilterValue(recommendation: CommunityRecommendation): number | null {
   return recommendationDisplayRating(recommendation);
+}
+
+function uploaderRatingValue(recommendation: CommunityRecommendation): number {
+  return recommendationRating(recommendation.rating) ?? 0;
+}
+
+function sortRecommendations(recommendations: CommunityRecommendation[], sort: RecommendationSort): CommunityRecommendation[] {
+  if (!sort) return recommendations;
+  return recommendations
+    .map((recommendation, index) => ({ recommendation, index }))
+    .sort((left, right) => {
+      if (sort === "rank-count" || sort === "rank-count-uploader-rating") {
+        const rankDifference = communityRankCount(right.recommendation) - communityRankCount(left.recommendation);
+        if (rankDifference !== 0) return rankDifference;
+      }
+
+      if (sort === "uploader-rating" || sort === "rank-count-uploader-rating") {
+        const ratingDifference = uploaderRatingValue(right.recommendation) - uploaderRatingValue(left.recommendation);
+        if (ratingDifference !== 0) return ratingDifference;
+      }
+
+      return left.index - right.index;
+    })
+    .map(({ recommendation }) => recommendation);
 }
 
 function CommunityRankControl({
@@ -409,6 +434,7 @@ export function CommunityPage({
   const [query, setQuery] = useState("");
   const [grinderQuery, setGrinderQuery] = useState("");
   const [minimumRating, setMinimumRating] = useState<RatingFilter>("");
+  const [recommendationSort, setRecommendationSort] = useState<RecommendationSort>("");
   const [draft, setDraft] = useState<UploadDraft>(emptyDraft);
   const [burrTypeFilters, setBurrTypeFilters] = useState<Record<BurrTypeFilter, boolean>>({ flat: false, conical: false });
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -430,15 +456,17 @@ export function CommunityPage({
     [burrTypeFilters]
   );
   const filteredRecommendations = useMemo(
-    () =>
-      recommendations.filter(
+    () => {
+      const matchingRecommendations = recommendations.filter(
         (recommendation) =>
           matchesCommunitySearch(recommendation, query) &&
           matchesGrinderFilter(recommendation, grinderQuery) &&
           matchesRatingFilter(recommendation, minimumRating) &&
           (activeBurrTypes.length === 0 || (isBurrTypeFilter(recommendation.grinder.burrType) && activeBurrTypes.includes(recommendation.grinder.burrType)))
-      ),
-    [activeBurrTypes, grinderQuery, minimumRating, recommendations, query]
+      );
+      return sortRecommendations(matchingRecommendations, recommendationSort);
+    },
+    [activeBurrTypes, grinderQuery, minimumRating, recommendationSort, recommendations, query]
   );
   const selectedRecommendation = selectedRecommendationId ? recommendations.find((recommendation) => recommendation.id === selectedRecommendationId) ?? null : null;
   const selectedDetailPayload = selectedRecommendation ? detailPayloads[selectedRecommendation.id] : undefined;
@@ -822,6 +850,15 @@ export function CommunityPage({
                     <option value="3">3+ stars</option>
                     <option value="2">2+ stars</option>
                     <option value="1">1+ star</option>
+                  </select>
+                </label>
+                <label className="settings-field">
+                  <span>Sort by</span>
+                  <select aria-label="Sort recommendations" value={recommendationSort} onChange={(event) => setRecommendationSort(event.target.value as RecommendationSort)}>
+                    <option value="">Community order</option>
+                    <option value="rank-count">Most ranks</option>
+                    <option value="uploader-rating">Uploader score</option>
+                    <option value="rank-count-uploader-rating">Most ranks, then uploader score</option>
                   </select>
                 </label>
               </div>
