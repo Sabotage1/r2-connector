@@ -171,6 +171,16 @@ function skinFontScaleValue(value: number | undefined): number {
   return Math.min(MAX_SKIN_FONT_SCALE, Math.max(MIN_SKIN_FONT_SCALE, Math.round(value)));
 }
 
+function numberInputValue(value: number | undefined): string | number {
+  return typeof value === "number" && Number.isFinite(value) ? value : "";
+}
+
+function numberInputDraft(value: string): number {
+  if (!value.trim()) return Number.NaN;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
 function normalizeDraftSettings(settings: SkinSettings): SkinSettings {
   const presetSlotCount = Math.min(MAX_PRESET_SLOT_COUNT, Math.max(MIN_PRESET_SLOT_COUNT, Math.round(settings.presetSlotCount || 4)));
   const next: SkinSettings = {
@@ -242,8 +252,6 @@ export function SettingsPage({
   const settingsChanged = JSON.stringify(nextSettings) !== JSON.stringify(savedSettings);
   const r2Configured = Boolean(draftSettings.r2SensorId);
   const screensaverBrightness = brightnessValue(draftSettings.screensaverBrightness);
-  const autoSleepMinutes = autoSleepValue(draftSettings.autoSleepMinutes);
-  const r2MeasureDelaySeconds = r2MeasureDelayValue(draftSettings.r2MeasureDelaySeconds);
   const skinFontScale = skinFontScaleValue(draftSettings.skinFontScale);
   const skinThemes = skinThemesForSettings(draftSettings);
 
@@ -280,8 +288,17 @@ export function SettingsPage({
     setCalibrationDraft((current) => ({ ...current, ...patch }));
   };
 
-  const updatePresetCount = (value: number) => {
-    const presetSlotCount = Math.min(MAX_PRESET_SLOT_COUNT, Math.max(MIN_PRESET_SLOT_COUNT, Math.round(value)));
+  const updatePresetCount = (value: string) => {
+    if (!value.trim()) {
+      setDraftSettings((current) => ({ ...current, presetSlotCount: Number.NaN }));
+      return;
+    }
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      setDraftSettings((current) => ({ ...current, presetSlotCount: Number.NaN }));
+      return;
+    }
+    const presetSlotCount = Math.min(MAX_PRESET_SLOT_COUNT, Math.max(MIN_PRESET_SLOT_COUNT, Math.round(parsed)));
     setDraftSettings((current) => ({
       ...current,
       presetSlotCount,
@@ -334,7 +351,11 @@ export function SettingsPage({
   };
 
   const saveMachineSettings = () => {
-    void onSaveMachineSettings?.(machineDraft, advancedMachineDraft, calibrationDraft);
+    void onSaveMachineSettings?.(
+      normalizeMachineSettingsDraft(machineDraft),
+      normalizeAdvancedMachineSettingsDraft(advancedMachineDraft),
+      normalizeMachineCalibrationDraft(calibrationDraft)
+    );
   };
 
   return (
@@ -381,8 +402,8 @@ export function SettingsPage({
                 min={0}
                 max={MAX_AUTO_SLEEP_MINUTES}
                 step={1}
-                value={autoSleepMinutes}
-                onChange={(event) => updateDraftSettings({ autoSleepMinutes: Number(event.target.value) })}
+                value={numberInputValue(draftSettings.autoSleepMinutes)}
+                onChange={(event) => updateDraftSettings({ autoSleepMinutes: numberInputDraft(event.target.value) })}
               />
             </label>
             <span>Set 0 to disable automatic sleep.</span>
@@ -414,8 +435,8 @@ export function SettingsPage({
                   min={0}
                   max={99}
                   step={1}
-                  value={machineDraft.tankTemp}
-                  onChange={(event) => updateMachineDraft({ tankTemp: Number(event.target.value) })}
+                  value={numberInputValue(machineDraft.tankTemp)}
+                  onChange={(event) => updateMachineDraft({ tankTemp: numberInputDraft(event.target.value) })}
                 />
               </label>
               <label className="settings-field">
@@ -426,8 +447,8 @@ export function SettingsPage({
                   min={0}
                   max={5}
                   step={0.1}
-                  value={machineDraft.steamFlow}
-                  onChange={(event) => updateMachineDraft({ steamFlow: Number(event.target.value) })}
+                  value={numberInputValue(machineDraft.steamFlow)}
+                  onChange={(event) => updateMachineDraft({ steamFlow: numberInputDraft(event.target.value) })}
                 />
               </label>
               <label className="settings-field">
@@ -451,8 +472,8 @@ export function SettingsPage({
                   min={0}
                   max={20}
                   step={0.1}
-                  value={machineDraft.hotWaterFlow}
-                  onChange={(event) => updateMachineDraft({ hotWaterFlow: Number(event.target.value) })}
+                  value={numberInputValue(machineDraft.hotWaterFlow)}
+                  onChange={(event) => updateMachineDraft({ hotWaterFlow: numberInputDraft(event.target.value) })}
                 />
               </label>
               <label className="settings-field">
@@ -463,8 +484,8 @@ export function SettingsPage({
                   min={0}
                   max={110}
                   step={1}
-                  value={machineDraft.flushTemp}
-                  onChange={(event) => updateMachineDraft({ flushTemp: Number(event.target.value) })}
+                  value={numberInputValue(machineDraft.flushTemp)}
+                  onChange={(event) => updateMachineDraft({ flushTemp: numberInputDraft(event.target.value) })}
                 />
               </label>
               <label className="settings-field">
@@ -475,8 +496,8 @@ export function SettingsPage({
                   min={0}
                   max={20}
                   step={0.1}
-                  value={machineDraft.flushFlow}
-                  onChange={(event) => updateMachineDraft({ flushFlow: Number(event.target.value) })}
+                  value={numberInputValue(machineDraft.flushFlow)}
+                  onChange={(event) => updateMachineDraft({ flushFlow: numberInputDraft(event.target.value) })}
                 />
               </label>
               <label className="settings-field">
@@ -487,8 +508,8 @@ export function SettingsPage({
                   min={0}
                   max={120}
                   step={1}
-                  value={machineDraft.flushTimeout}
-                  onChange={(event) => updateMachineDraft({ flushTimeout: Number(event.target.value) })}
+                  value={numberInputValue(machineDraft.flushTimeout)}
+                  onChange={(event) => updateMachineDraft({ flushTimeout: numberInputDraft(event.target.value) })}
                 />
               </label>
             </div>
@@ -510,8 +531,8 @@ export function SettingsPage({
                     min={0}
                     max={100}
                     step={1}
-                    value={machineDraft.fan}
-                    onChange={(event) => updateMachineDraft({ fan: Number(event.target.value) })}
+                    value={numberInputValue(machineDraft.fan)}
+                    onChange={(event) => updateMachineDraft({ fan: numberInputDraft(event.target.value) })}
                   />
                 </label>
                 <label className="settings-field">
@@ -522,8 +543,8 @@ export function SettingsPage({
                     min={0}
                     max={110}
                     step={1}
-                    value={advancedMachineDraft.heaterIdleTemp}
-                    onChange={(event) => updateAdvancedMachineDraft({ heaterIdleTemp: Number(event.target.value) })}
+                    value={numberInputValue(advancedMachineDraft.heaterIdleTemp)}
+                    onChange={(event) => updateAdvancedMachineDraft({ heaterIdleTemp: numberInputDraft(event.target.value) })}
                   />
                 </label>
                 <label className="settings-field">
@@ -534,8 +555,8 @@ export function SettingsPage({
                     min={0}
                     max={20}
                     step={0.1}
-                    value={advancedMachineDraft.heaterPh1Flow}
-                    onChange={(event) => updateAdvancedMachineDraft({ heaterPh1Flow: Number(event.target.value) })}
+                    value={numberInputValue(advancedMachineDraft.heaterPh1Flow)}
+                    onChange={(event) => updateAdvancedMachineDraft({ heaterPh1Flow: numberInputDraft(event.target.value) })}
                   />
                 </label>
                 <label className="settings-field">
@@ -546,8 +567,8 @@ export function SettingsPage({
                     min={0}
                     max={20}
                     step={0.1}
-                    value={advancedMachineDraft.heaterPh2Flow}
-                    onChange={(event) => updateAdvancedMachineDraft({ heaterPh2Flow: Number(event.target.value) })}
+                    value={numberInputValue(advancedMachineDraft.heaterPh2Flow)}
+                    onChange={(event) => updateAdvancedMachineDraft({ heaterPh2Flow: numberInputDraft(event.target.value) })}
                   />
                 </label>
                 <label className="settings-field">
@@ -558,8 +579,8 @@ export function SettingsPage({
                     min={0}
                     max={120}
                     step={1}
-                    value={advancedMachineDraft.heaterPh2Timeout}
-                    onChange={(event) => updateAdvancedMachineDraft({ heaterPh2Timeout: Number(event.target.value) })}
+                    value={numberInputValue(advancedMachineDraft.heaterPh2Timeout)}
+                    onChange={(event) => updateAdvancedMachineDraft({ heaterPh2Timeout: numberInputDraft(event.target.value) })}
                   />
                 </label>
                 <label className="settings-field">
@@ -597,8 +618,8 @@ export function SettingsPage({
                     min={0.1}
                     max={3}
                     step={0.01}
-                    value={calibrationDraft.flowMultiplier}
-                    onChange={(event) => updateCalibrationDraft({ flowMultiplier: Number(event.target.value) })}
+                    value={numberInputValue(calibrationDraft.flowMultiplier)}
+                    onChange={(event) => updateCalibrationDraft({ flowMultiplier: numberInputDraft(event.target.value) })}
                   />
                 </label>
                 <label className="inline-toggle machine-usb-toggle">
@@ -645,8 +666,8 @@ export function SettingsPage({
                 min={0}
                 max={MAX_R2_MEASURE_DELAY_SECONDS}
                 step={1}
-                value={r2MeasureDelaySeconds}
-                onChange={(event) => updateDraftSettings({ r2MeasureDelaySeconds: Number(event.target.value) })}
+                value={numberInputValue(draftSettings.r2MeasureDelaySeconds)}
+                onChange={(event) => updateDraftSettings({ r2MeasureDelaySeconds: numberInputDraft(event.target.value) })}
               />
             </label>
             <span>Delay is in seconds after the shot is done brewing and the skin moves to the Review page.</span>
@@ -778,13 +799,13 @@ export function SettingsPage({
                 type="number"
                 min={MIN_PRESET_SLOT_COUNT}
                 max={MAX_PRESET_SLOT_COUNT}
-                value={draftSettings.presetSlotCount}
-                onChange={(event) => updatePresetCount(Number(event.target.value))}
+                value={numberInputValue(draftSettings.presetSlotCount)}
+                onChange={(event) => updatePresetCount(event.target.value)}
               />
             </label>
             <div className="settings-preset-title-grid">
-              {ensurePresetSlots(draftSettings.presetSlots, draftSettings.presetSlotCount)
-                .slice(0, draftSettings.presetSlotCount)
+              {ensurePresetSlots(draftSettings.presetSlots, Number.isFinite(draftSettings.presetSlotCount) ? draftSettings.presetSlotCount : 0)
+                .slice(0, Number.isFinite(draftSettings.presetSlotCount) ? draftSettings.presetSlotCount : 0)
                 .map((slot, index) => (
                   <label className="settings-field" key={index}>
                     Preset {index + 1} title

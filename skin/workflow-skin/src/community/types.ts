@@ -75,6 +75,7 @@ export interface CommunityRecommendation {
   profile: CommunityProfileSnapshot;
   grinder: CommunityGrinderSnapshot;
   brew: CommunityBrewRecommendation;
+  rating?: number;
   visualizerUrl?: string;
   evidenceFileName?: string;
   shotScore?: number;

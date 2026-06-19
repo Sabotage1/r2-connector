@@ -10,6 +10,7 @@ import { shotTasteRating, tasteScoreLabel } from "../lib/shotTaste";
 
 type CommunityTab = "recommendations" | "recommend" | "downloaded" | "uploaded";
 type BurrTypeFilter = "flat" | "conical";
+type RatingFilter = "" | "1" | "2" | "3" | "4" | "5";
 
 export interface UploadDraft {
   bagId: string;
@@ -20,6 +21,7 @@ export interface UploadDraft {
   drinkWeight: string;
   secondsMin: string;
   secondsMax: string;
+  rating: string;
   notes: string;
   visualizerUrl: string;
   shotId: string;
@@ -58,6 +60,7 @@ const emptyDraft: UploadDraft = {
   drinkWeight: "",
   secondsMin: "",
   secondsMax: "",
+  rating: "5",
   notes: "",
   visualizerUrl: "",
   shotId: ""
@@ -115,6 +118,26 @@ function scoreFromValue(value: unknown): number | null {
 function shotScoreText(value: unknown): string | undefined {
   const score = scoreFromValue(value);
   return score === null ? undefined : `Shot score ${tasteScoreLabel(score)}`;
+}
+
+function recommendationRating(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 5 ? value : null;
+}
+
+function ratingLabel(value: unknown): string | undefined {
+  const rating = recommendationRating(value);
+  return rating === null ? undefined : `${rating} out of 5 stars`;
+}
+
+function StarRating({ value }: { value: unknown }) {
+  const rating = recommendationRating(value);
+  if (rating === null) return null;
+  return (
+    <span className="community-star-rating" aria-label={`Recommendation rating ${rating} out of 5 stars`}>
+      {"★".repeat(rating)}
+      {"☆".repeat(5 - rating)}
+    </span>
+  );
 }
 
 function recommendationShotScore(recommendation: CommunityRecommendation, evidence?: CommunityShotEvidence): string | undefined {
@@ -219,6 +242,13 @@ function matchesGrinderFilter(recommendation: CommunityRecommendation, query: st
   return !normalizedQuery || grinderSearchText(recommendation).includes(normalizedQuery);
 }
 
+function matchesRatingFilter(recommendation: CommunityRecommendation, filter: RatingFilter): boolean {
+  if (!filter) return true;
+  const minimumRating = Number(filter);
+  const rating = recommendationRating(recommendation.rating);
+  return rating !== null && rating >= minimumRating;
+}
+
 function hasText(value: string): boolean {
   return Boolean(value.trim());
 }
@@ -233,10 +263,12 @@ function isValidDraft(draft: UploadDraft, displayName: string): boolean {
   const drinkWeight = positiveFiniteNumber(draft.drinkWeight);
   const secondsMin = positiveFiniteNumber(draft.secondsMin);
   const secondsMax = positiveFiniteNumber(draft.secondsMax);
+  const rating = recommendationRating(Number(draft.rating));
   return Boolean(
     draft.bagId &&
       draft.profileId &&
       draft.grinderId &&
+      rating &&
       hasText(displayName) &&
       hasText(draft.grindSetting) &&
       beansWeight &&
@@ -255,6 +287,7 @@ function draftNumber(value: number | undefined): string {
 function uploadDraftFromRecommendation(recommendation: CommunityRecommendation, evidence?: CommunityShotEvidence): UploadDraft {
   const secondsMin = recommendation.brew.secondsMin ?? recommendation.brew.secondsGoal;
   const secondsMax = recommendation.brew.secondsMax ?? recommendation.brew.secondsGoal;
+  const rating = recommendationRating(recommendation.rating) ?? 5;
   return {
     bagId: recommendation.bag.id,
     profileId: recommendation.profile.originalId,
@@ -264,6 +297,7 @@ function uploadDraftFromRecommendation(recommendation: CommunityRecommendation, 
     drinkWeight: draftNumber(recommendation.brew.drinkWeight),
     secondsMin: draftNumber(secondsMin),
     secondsMax: draftNumber(secondsMax),
+    rating: String(rating),
     notes: recommendation.brew.notes,
     visualizerUrl: recommendation.visualizerUrl ?? "",
     shotId: evidence?.id ?? ""
@@ -296,6 +330,7 @@ export function CommunityPage({
   const [activeTab, setActiveTab] = useState<CommunityTab>("recommendations");
   const [query, setQuery] = useState("");
   const [grinderQuery, setGrinderQuery] = useState("");
+  const [minimumRating, setMinimumRating] = useState<RatingFilter>("");
   const [draft, setDraft] = useState<UploadDraft>(emptyDraft);
   const [burrTypeFilters, setBurrTypeFilters] = useState<Record<BurrTypeFilter, boolean>>({ flat: false, conical: false });
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -321,9 +356,10 @@ export function CommunityPage({
         (recommendation) =>
           matchesCommunitySearch(recommendation, query) &&
           matchesGrinderFilter(recommendation, grinderQuery) &&
+          matchesRatingFilter(recommendation, minimumRating) &&
           (activeBurrTypes.length === 0 || (isBurrTypeFilter(recommendation.grinder.burrType) && activeBurrTypes.includes(recommendation.grinder.burrType)))
       ),
-    [activeBurrTypes, grinderQuery, recommendations, query]
+    [activeBurrTypes, grinderQuery, minimumRating, recommendations, query]
   );
   const selectedRecommendation = selectedRecommendationId ? recommendations.find((recommendation) => recommendation.id === selectedRecommendationId) ?? null : null;
   const selectedDetailPayload = selectedRecommendation ? detailPayloads[selectedRecommendation.id] : undefined;
@@ -393,6 +429,16 @@ export function CommunityPage({
               {[grinder.model, burrTypeLabel(grinder.burrType)].filter(Boolean).join(" - ")}
             </option>
           ))}
+        </select>
+      </label>
+      <label className="settings-field">
+        <span>Recommendation rating</span>
+        <select aria-label="Recommendation rating" value={currentDraft.rating} onChange={(event) => updateField("rating", event.target.value)}>
+          <option value="5">5 stars</option>
+          <option value="4">4 stars</option>
+          <option value="3">3 stars</option>
+          <option value="2">2 stars</option>
+          <option value="1">1 star</option>
         </select>
       </label>
       <label className="settings-field">
@@ -616,6 +662,7 @@ export function CommunityPage({
                 </div>
                 <div className="community-detail-card">
                   <strong>Brew</strong>
+                  {ratingLabel(selectedRecommendation.rating) && <StarRating value={selectedRecommendation.rating} />}
                   <span>{[`Grind ${selectedRecommendation.brew.grindSetting}`, `${selectedRecommendation.brew.beansWeight}g in`, `${selectedRecommendation.brew.drinkWeight}g out`, secondsSummary(selectedRecommendation)].filter(Boolean).join(" - ")}</span>
                   <p>{selectedRecommendation.brew.notes}</p>
                 </div>
@@ -662,6 +709,17 @@ export function CommunityPage({
                   <span>Grinder</span>
                   <input aria-label="Grinder recommendation filter" value={grinderQuery} onChange={(event) => setGrinderQuery(event.target.value)} />
                 </label>
+                <label className="settings-field">
+                  <span>Minimum stars</span>
+                  <select aria-label="Minimum recommendation rating" value={minimumRating} onChange={(event) => setMinimumRating(event.target.value as RatingFilter)}>
+                    <option value="">Any rating</option>
+                    <option value="5">5 stars</option>
+                    <option value="4">4+ stars</option>
+                    <option value="3">3+ stars</option>
+                    <option value="2">2+ stars</option>
+                    <option value="1">1+ star</option>
+                  </select>
+                </label>
               </div>
               <div className="community-filter-row" role="group" aria-label="Burrs Type filters">
                 <label className="inline-toggle">
@@ -700,6 +758,7 @@ export function CommunityPage({
                   <div className="list-row community-row" key={recommendation.id}>
                     <button type="button" className="community-row-open" aria-label={`Open ${title} details`} onClick={() => void openRecommendationDetails(recommendation)}>
                       <strong>{title}</strong>
+                      <StarRating value={recommendation.rating} />
                       {recommendationUploadSummary(recommendation) && <span>{recommendationUploadSummary(recommendation)}</span>}
                       <span>{recommendationBagSummary(recommendation)}</span>
                       <span>{recommendationBrewSummary(recommendation)}</span>
@@ -763,6 +822,7 @@ export function CommunityPage({
           {downloaded.map((item) => (
             <div className="list-row community-row" key={`${item.recommendationId}-${item.localProfileId}`}>
               <strong>{item.localProfileTitle}</strong>
+              <StarRating value={item.recommendation.rating} />
               <p>{item.recommendation.brew.notes}</p>
               {(item.evidence || recommendationShotScore(item.recommendation)) && (
                 <div className="community-evidence-summary">
@@ -832,6 +892,7 @@ export function CommunityPage({
                 </div>
                 <div className="community-detail-card">
                   <strong>Current Brew</strong>
+                  {ratingLabel(editingUpload.recommendation.rating) && <StarRating value={editingUpload.recommendation.rating} />}
                   <span>{[`Grind ${editingUpload.recommendation.brew.grindSetting}`, `${editingUpload.recommendation.brew.beansWeight}g in`, `${editingUpload.recommendation.brew.drinkWeight}g out`, secondsSummary(editingUpload.recommendation)].filter(Boolean).join(" - ")}</span>
                   <p>{editingUpload.recommendation.brew.notes}</p>
                 </div>
@@ -881,6 +942,7 @@ export function CommunityPage({
                 return (
                   <div className="list-row community-row" key={item.recommendationId}>
                     <strong>{title}</strong>
+                    <StarRating value={item.recommendation.rating} />
                     {localUploadSummary(item) && <span>{localUploadSummary(item)}</span>}
                     <span>{recommendationBagSummary(item.recommendation)}</span>
                     <span>{recommendationBrewSummary(item.recommendation)}</span>

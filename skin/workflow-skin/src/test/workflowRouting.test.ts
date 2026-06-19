@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ProfileRecord, ShotRecord } from "../api/types";
-import { postActivityPage, postShotPageForShot } from "../lib/workflowRouting";
+import { postActivityPage, postShotPageForShot, selectedProfileIdFromWorkflow } from "../lib/workflowRouting";
 import { defaultSkinSettings } from "../state/skinSettings";
 
 const profiles: ProfileRecord[] = [
@@ -20,6 +20,30 @@ function shotWithProfile(profileId: string): ShotRecord {
 }
 
 describe("postShotPageForShot", () => {
+  it("ignores stale selected profile metadata when the workflow profile title points to another saved profile", () => {
+    expect(
+      selectedProfileIdFromWorkflow(
+        {
+          profile: { title: "Flat White" },
+          context: { extras: { workflowSkin: { selectedProfileId: "espresso" } } }
+        },
+        profiles
+      )
+    ).toBe("milk");
+  });
+
+  it("uses selected profile metadata when the workflow profile title is not a saved profile title", () => {
+    expect(
+      selectedProfileIdFromWorkflow(
+        {
+          profile: { title: "History espresso" },
+          context: { extras: { workflowSkin: { selectedProfileId: "espresso" } } }
+        },
+        profiles
+      )
+    ).toBe("espresso");
+  });
+
   it("routes milk profiles to review first when review is enabled", () => {
     const settings = {
       ...defaultSkinSettings,

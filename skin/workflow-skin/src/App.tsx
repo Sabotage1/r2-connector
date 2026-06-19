@@ -451,6 +451,7 @@ function communityUploadDraftFromShot(shot: ShotRecord, profiles: ProfileRecord[
     secondsMin: draftNumber(seconds),
     secondsMax: draftNumber(seconds),
     notes,
+    rating: "5",
     visualizerUrl: "",
     shotId: shot.id
   };
@@ -789,6 +790,7 @@ export function App() {
             settingType: grinder.settingType,
             notes: grinder.notes
           },
+          rating: Number(draft.rating),
           brew: {
             grindSetting: draft.grindSetting.trim(),
             beansWeight: Number(draft.beansWeight),
@@ -867,6 +869,7 @@ export function App() {
             settingType: grinder.settingType,
             notes: grinder.notes
           },
+          rating: Number(draft.rating),
           brew: {
             grindSetting: draft.grindSetting.trim(),
             beansWeight: Number(draft.beansWeight),

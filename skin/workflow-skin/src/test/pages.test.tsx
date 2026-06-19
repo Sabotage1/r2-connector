@@ -1102,6 +1102,31 @@ describe("SettingsPage", () => {
     );
   });
 
+  it("lets preset count be cleared and retyped before saving eight main-page presets", async () => {
+    const onUpdateSettings = vi.fn();
+    render(<SettingsPage settings={defaultSkinSettings} r2Sensor={null} onUpdateSettings={onUpdateSettings} />);
+
+    await userEvent.click(screen.getByRole("tab", { name: "Skin settings" }));
+    const presetCount = screen.getByLabelText("Preset cards on main page") as HTMLInputElement;
+    await userEvent.clear(presetCount);
+
+    expect(presetCount.value).toBe("");
+
+    await userEvent.type(presetCount, "8");
+
+    expect(presetCount.value).toBe("8");
+    expect(screen.getByLabelText("Preset 8 title")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
+
+    expect(onUpdateSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        presetSlotCount: 8,
+        presetSlots: expect.arrayContaining([expect.objectContaining({ label: "Preset 8" })])
+      })
+    );
+  });
+
   it("edits skin font size and editable theme options before saving settings", async () => {
     const onUpdateSettings = vi.fn();
     render(<SettingsPage settings={defaultSkinSettings} r2Sensor={null} onUpdateSettings={onUpdateSettings} />);
@@ -1141,6 +1166,30 @@ describe("SettingsPage", () => {
 });
 
 describe("BrewPage workflow controls", () => {
+  it("shows up to eight main page presets in two rows of four", () => {
+    render(
+      <BrewPage
+        workflow={{ context: { targetDoseWeight: 18 } }}
+        profiles={profiles}
+        bags={[]}
+        grinders={[]}
+        shots={[]}
+        settings={{
+          ...defaultSkinSettings,
+          presetSlotCount: 8,
+          presetSlots: Array.from({ length: 8 }, (_, index) => ({ label: `Slot ${index + 1}`, profileId: index < 2 ? `p${index + 1}` : undefined })),
+          shownProfileIds: ["p1", "p2"]
+        }}
+        onApplyProfile={vi.fn()}
+        onEditSlot={vi.fn()}
+        onStartBrew={vi.fn()}
+      />
+    );
+
+    expect(screen.getAllByRole("button", { name: /^Slot \d /i })).toHaveLength(8);
+    expect(screen.getByRole("button", { name: "Slot 8 Choose profile" })).toBeInTheDocument();
+  });
+
   it("uses a fixed 1: ratio control to calculate recipe yield from dose", async () => {
     const onUpdateRecipe = vi.fn();
     render(
@@ -1315,6 +1364,7 @@ describe("CommunityPage", () => {
     createdAt: "2026-06-18T13:45:00.000Z",
     updatedAt: "2026-06-18T13:45:00.000Z",
     submittedBy: "Roy",
+    rating: 5,
     shotScore: 8,
     bag: { id: "bag-1", beanId: "bean-1", roaster: "Pilot", name: "Halo", bean: "Ethiopia Halo", country: "Ethiopia", process: "Washed", roastDate: "2026-06-01" },
     profile: { originalId: "p1", originalTitle: "Blooming", fileName: "rec-12345678.json", installedTitle: "Blooming - Halo - Roy" },
@@ -1497,6 +1547,26 @@ describe("CommunityPage", () => {
     expect(screen.getByText("Turbo")).toBeInTheDocument();
   });
 
+  it("shows recommendation star ratings and filters by minimum stars", async () => {
+    const threeStarRecommendation = {
+      ...recommendation,
+      id: "rec-three-stars",
+      rating: 3,
+      profile: { ...recommendation.profile, originalTitle: "Classic", installedTitle: "Classic - Halo - Mia" }
+    };
+    await renderCommunityPage({ recommendations: [recommendation, threeStarRecommendation] });
+
+    const fiveStarRow = screen.getByText("Blooming").closest(".community-row") as HTMLElement;
+    const threeStarRow = screen.getByText("Classic").closest(".community-row") as HTMLElement;
+    expect(within(fiveStarRow).getByLabelText("Recommendation rating 5 out of 5 stars")).toBeInTheDocument();
+    expect(within(threeStarRow).getByLabelText("Recommendation rating 3 out of 5 stars")).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText("Minimum recommendation rating"), "4");
+
+    expect(screen.getByText("Blooming")).toBeInTheDocument();
+    expect(screen.queryByText("Classic")).not.toBeInTheDocument();
+  });
+
   it("shows download success status after the download promise resolves", async () => {
     const onDownload = vi.fn().mockResolvedValue(undefined);
     await renderCommunityPage({ recommendations: [recommendation], onDownload });
@@ -1629,6 +1699,7 @@ describe("CommunityPage", () => {
         drinkWeight: "42",
         secondsMin: "28",
         secondsMax: "34",
+        rating: "5",
         notes: "Gentle declining pressure",
         visualizerUrl: "https://visualizer.coffee/shots/1",
         shotId: "shot-1"
@@ -1638,6 +1709,18 @@ describe("CommunityPage", () => {
     expect(screen.getByLabelText("Saved bag")).toHaveValue("");
     expect(screen.getByLabelText("Grind setting")).toHaveValue("");
     expect(screen.getByLabelText("Notes")).toHaveValue("");
+  });
+
+  it("uploads the selected recommendation star rating", async () => {
+    const onUpload = vi.fn().mockResolvedValue(undefined);
+    await renderCommunityPage({ onUpload });
+    await openRecommendProfile();
+    await fillValidUploadDraft();
+    await userEvent.selectOptions(screen.getByLabelText("Recommendation rating"), "4");
+
+    await userEvent.click(screen.getByRole("button", { name: "Upload recommendation" }));
+
+    await waitFor(() => expect(onUpload).toHaveBeenCalledWith(expect.objectContaining({ rating: "4" })));
   });
 
   it("keeps the draft and shows an alert when upload fails", async () => {

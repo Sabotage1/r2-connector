@@ -14,9 +14,15 @@ function workflowSkinExtras(value: unknown): Record<string, unknown> | null {
 
 export function selectedProfileIdFromWorkflow(workflow: Workflow | undefined, profiles: ProfileRecord[]): string | undefined {
   const selectedProfileId = workflowSkinExtras(workflow?.context?.extras)?.selectedProfileId;
-  if (typeof selectedProfileId === "string") return selectedProfileId;
-
   const workflowTitle = workflow?.profile?.title?.trim();
+  if (typeof selectedProfileId === "string") {
+    const selectedProfile = profiles.find((profile) => profile.id === selectedProfileId);
+    const selectedTitle = selectedProfile?.profile.title?.trim();
+    if (!workflowTitle || !selectedTitle || selectedTitle === workflowTitle) return selectedProfileId;
+    const titleProfile = profiles.find((profile) => profile.profile.title?.trim() === workflowTitle);
+    if (!titleProfile) return selectedProfileId;
+  }
+
   if (!workflowTitle) return undefined;
   return profiles.find((profile) => profile.profile.title?.trim() === workflowTitle)?.id;
 }

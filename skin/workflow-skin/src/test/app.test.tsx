@@ -711,6 +711,7 @@ describe("App shell", () => {
             burrType: "flat",
             settingType: "numeric"
           }),
+          rating: 5,
           brew: {
             grindSetting: "4.2",
             beansWeight: 18,
