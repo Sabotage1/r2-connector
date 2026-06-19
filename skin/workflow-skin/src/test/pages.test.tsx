@@ -1386,6 +1386,8 @@ describe("CommunityPage", () => {
       onUpload: vi.fn(),
       onEditUpload: vi.fn(),
       onDeleteUpload: vi.fn(),
+      userRatings: {},
+      onRateRecommendation: vi.fn(),
       ...overrides
     };
     render(<CommunityPage {...props} />);
@@ -1440,6 +1442,8 @@ describe("CommunityPage", () => {
         onUpload={vi.fn()}
         onEditUpload={vi.fn()}
         onDeleteUpload={vi.fn()}
+        userRatings={{}}
+        onRateRecommendation={vi.fn()}
       />
     );
     expect(screen.getByRole("heading", { name: "Community" })).toBeInTheDocument();
@@ -1555,6 +1559,35 @@ describe("CommunityPage", () => {
 
     expect(screen.getByText("Blooming")).toBeInTheDocument();
     expect(screen.queryByText("Classic")).not.toBeInTheDocument();
+  });
+
+  it("lets people rank recommendations from the list and the detail page", async () => {
+    const rankedRecommendation = {
+      ...recommendation,
+      communityRatingAverage: 4.5,
+      communityRatingCount: 2
+    };
+    const onRateRecommendation = vi.fn().mockResolvedValue(undefined);
+    await renderCommunityPage({
+      recommendations: [rankedRecommendation],
+      userRatings: { [rankedRecommendation.id]: 3 },
+      onRateRecommendation
+    });
+
+    const row = screen.getByText("Blooming").closest(".community-row") as HTMLElement;
+    expect(within(row).getByText("Community rank 4.5/5 (2)")).toBeInTheDocument();
+    expect(within(row).getByLabelText("Your rank for Blooming")).toHaveValue("3");
+
+    await userEvent.selectOptions(within(row).getByLabelText("Your rank for Blooming"), "4");
+
+    await waitFor(() => expect(onRateRecommendation).toHaveBeenCalledWith(rankedRecommendation, 4));
+    expect(screen.getByRole("status")).toHaveTextContent("Rank saved.");
+
+    await userEvent.click(screen.getByRole("button", { name: "Open Blooming details" }));
+
+    expect(await screen.findByRole("heading", { name: "Blooming" })).toBeInTheDocument();
+    expect(screen.getByText("Community rank 4.5/5 (2)")).toBeInTheDocument();
+    expect(screen.getByLabelText("Your rank for Blooming")).toHaveValue("3");
   });
 
   it("shows download success status after the download promise resolves", async () => {

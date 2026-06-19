@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   getOrCreateCommunityOwnerKey,
+  loadCommunityRecommendationRatings,
   loadCommunityDisplayName,
   loadDownloadedCommunityProfiles,
   loadUploadedCommunityProfiles,
+  saveCommunityRecommendationRatings,
   saveCommunityDisplayName,
   saveDownloadedCommunityProfiles,
   saveUploadedCommunityProfiles
@@ -104,9 +106,16 @@ describe("community storage", () => {
     expect(api.putKv).toHaveBeenCalledWith("workflow-skin", "community-uploaded-profiles", [uploadedProfile]);
   });
 
+  it("loads and saves local recommendation ranks", async () => {
+    const api = { getKv: vi.fn().mockResolvedValue({ "rec-1": 4, bad: 9, text: "5" }), putKv: vi.fn().mockResolvedValue(undefined) };
+    await expect(loadCommunityRecommendationRatings(api)).resolves.toEqual({ "rec-1": 4 });
+    await saveCommunityRecommendationRatings(api, { "rec-1": 4, "rec-2": 5 });
+    expect(api.putKv).toHaveBeenCalledWith("workflow-skin", "community-recommendation-ratings", { "rec-1": 4, "rec-2": 5 });
+  });
+
   it("ignores malformed persisted values without throwing", async () => {
     const api = {
-      getKv: vi.fn().mockResolvedValueOnce(42).mockResolvedValueOnce({ name: "Roy" }).mockResolvedValueOnce({ bad: true }).mockResolvedValueOnce("bad"),
+      getKv: vi.fn().mockResolvedValueOnce(42).mockResolvedValueOnce({ name: "Roy" }).mockResolvedValueOnce({ bad: true }).mockResolvedValueOnce("bad").mockResolvedValueOnce([]),
       putKv: vi.fn().mockResolvedValue(undefined)
     };
 
@@ -114,6 +123,7 @@ describe("community storage", () => {
     await expect(loadCommunityDisplayName(api)).resolves.toBeNull();
     await expect(loadDownloadedCommunityProfiles(api)).resolves.toEqual([]);
     await expect(loadUploadedCommunityProfiles(api)).resolves.toEqual([]);
+    await expect(loadCommunityRecommendationRatings(api)).resolves.toEqual({});
     expect(api.putKv).toHaveBeenCalledTimes(1);
   });
 });

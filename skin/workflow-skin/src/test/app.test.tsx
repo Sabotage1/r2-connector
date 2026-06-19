@@ -130,12 +130,14 @@ function mockReaFetch(
   const communityCreatePayloads: unknown[] = [];
   const communityUpdatePayloads: unknown[] = [];
   const communityDeletePayloads: unknown[] = [];
+  const communityRatePayloads: unknown[] = [];
   const createdProfilePayloads: unknown[] = [];
   const updatedProfilePayloads: unknown[] = [];
   const communityStore = new Map<string, unknown>([
     ["/api/v1/store/workflow-skin/community-display-name", ""],
     ["/api/v1/store/workflow-skin/community-downloaded-profiles", []],
     ["/api/v1/store/workflow-skin/community-uploaded-profiles", []],
+    ["/api/v1/store/workflow-skin/community-recommendation-ratings", {}],
     ["/api/v1/store/workflow-skin/community-owner-key", "owner-key"]
   ]);
   const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init = {}) => {
@@ -189,6 +191,25 @@ function mockReaFetch(
       return responseJson({
         recommendation,
         index: { version: 1, updatedAt: "2026-06-18T02:00:00.000Z", items: [recommendation] }
+      });
+    }
+
+    const ratingMatch = url.hostname === "workflow-skin-community.sabotage1.workers.dev" ? url.pathname.match(/^\/api\/recommendations\/([^/]+)\/rating$/) : null;
+    if (ratingMatch && method === "POST") {
+      const recommendationId = decodeURIComponent(ratingMatch[1]);
+      const body = JSON.parse(String(init.body));
+      communityRatePayloads.push({ id: recommendationId, ...body });
+      const previous = options.communityRecommendations?.find((item) => item.id === recommendationId) ?? communityRecommendation;
+      const recommendation = {
+        ...previous,
+        communityRatingAverage: body.rating,
+        communityRatingCount: 1,
+        updatedAt: "2026-06-18T04:00:00.000Z"
+      };
+      return responseJson({
+        rating: body.rating,
+        recommendation,
+        index: { version: 1, updatedAt: "2026-06-18T04:00:00.000Z", items: [recommendation] }
       });
     }
 
@@ -398,6 +419,9 @@ function mockReaFetch(
     },
     get communityDeletePayloads() {
       return communityDeletePayloads;
+    },
+    get communityRatePayloads() {
+      return communityRatePayloads;
     },
     get createdProfilePayloads() {
       return createdProfilePayloads;
@@ -656,6 +680,21 @@ describe("App shell", () => {
         updatedAt: communityRecommendation.updatedAt
       })
     ]);
+  });
+
+  it("ranks a community recommendation and saves the user's rank locally", async () => {
+    const fetchState = mockReaFetch(initialSettings, {
+      communityRecommendations: [communityRecommendation]
+    });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Community" }));
+    await userEvent.selectOptions(await screen.findByLabelText("Your rank for Blooming"), "4");
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Rank saved.");
+    expect(fetchState.communityRatePayloads).toEqual([{ id: "rec-12345678", ownerKey: "owner-key", rating: 4 }]);
+    expect(fetchState.communityStore.get("/api/v1/store/workflow-skin/community-recommendation-ratings")).toEqual({ "rec-12345678": 4 });
+    expect(screen.getByText("Community rank 4/5 (1)")).toBeInTheDocument();
   });
 
   it("uploads a local bag profile and grinder as a community recommendation", async () => {

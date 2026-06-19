@@ -5,6 +5,9 @@ export const COMMUNITY_OWNER_KEY = "community-owner-key";
 export const COMMUNITY_DISPLAY_NAME_KEY = "community-display-name";
 export const COMMUNITY_DOWNLOADED_KEY = "community-downloaded-profiles";
 export const COMMUNITY_UPLOADED_KEY = "community-uploaded-profiles";
+export const COMMUNITY_RECOMMENDATION_RATINGS_KEY = "community-recommendation-ratings";
+
+export type CommunityRecommendationRatings = Record<string, number>;
 
 function uuidFromBytes(bytes: Uint8Array): string {
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
@@ -66,4 +69,20 @@ export async function loadUploadedCommunityProfiles(api: KvApi): Promise<Uploade
 
 export async function saveUploadedCommunityProfiles(api: KvApi, value: UploadedCommunityProfile[]): Promise<void> {
   await api.putKv(SKIN_NAMESPACE, COMMUNITY_UPLOADED_KEY, value);
+}
+
+export async function loadCommunityRecommendationRatings(api: KvApi): Promise<CommunityRecommendationRatings> {
+  const value = await api.getKv<unknown>(SKIN_NAMESPACE, COMMUNITY_RECOMMENDATION_RATINGS_KEY);
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const ratings: CommunityRecommendationRatings = {};
+  for (const [recommendationId, rating] of Object.entries(value)) {
+    if (typeof rating === "number" && Number.isInteger(rating) && rating >= 1 && rating <= 5) {
+      ratings[recommendationId] = rating;
+    }
+  }
+  return ratings;
+}
+
+export async function saveCommunityRecommendationRatings(api: KvApi, value: CommunityRecommendationRatings): Promise<void> {
+  await api.putKv(SKIN_NAMESPACE, COMMUNITY_RECOMMENDATION_RATINGS_KEY, value);
 }

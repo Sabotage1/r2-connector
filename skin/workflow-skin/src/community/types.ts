@@ -79,6 +79,8 @@ export interface CommunityRecommendation {
   visualizerUrl?: string;
   evidenceFileName?: string;
   shotScore?: number;
+  communityRatingAverage?: number;
+  communityRatingCount?: number;
   searchText?: string;
 }
 

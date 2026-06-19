@@ -12,6 +12,11 @@ export interface CommunityDeletePayload {
   ownerKey: string;
 }
 
+export interface CommunityRatePayload {
+  ownerKey: string;
+  rating: number;
+}
+
 export class CommunityApiError extends Error {
   constructor(
     message: string,
@@ -81,6 +86,13 @@ export class CommunityApi {
   delete(id: string, payload: CommunityDeletePayload) {
     return this.request<{ id: string; index: CommunityIndex }>(`/api/recommendations/${encodeURIComponent(id)}`, {
       method: "DELETE",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  rate(id: string, payload: CommunityRatePayload) {
+    return this.request<{ recommendation: CommunityRecommendation; index: CommunityIndex; rating: number }>(`/api/recommendations/${encodeURIComponent(id)}/rating`, {
+      method: "POST",
       body: JSON.stringify(payload)
     });
   }

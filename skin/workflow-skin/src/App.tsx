@@ -76,9 +76,11 @@ import {
 import {
   getOrCreateCommunityOwnerKey,
   loadCommunityDisplayName,
+  loadCommunityRecommendationRatings,
   loadDownloadedCommunityProfiles,
   loadUploadedCommunityProfiles,
   saveCommunityDisplayName,
+  saveCommunityRecommendationRatings,
   saveDownloadedCommunityProfiles,
   saveUploadedCommunityProfiles
 } from "./state/communityStorage";
@@ -555,6 +557,7 @@ export function App() {
   const [communityError, setCommunityError] = useState<string | null>(null);
   const [communityLoading, setCommunityLoading] = useState(false);
   const [communityDisplayName, setCommunityDisplayName] = useState("");
+  const [communityUserRatings, setCommunityUserRatings] = useState<Record<string, number>>({});
   const [downloadedCommunityProfiles, setDownloadedCommunityProfiles] = useState<DownloadedCommunityProfile[]>([]);
   const [uploadedCommunityProfiles, setUploadedCommunityProfiles] = useState<UploadedCommunityProfile[]>([]);
   const [decentAccount, setDecentAccount] = useState<DecentAccountStatus | null>(null);
@@ -660,18 +663,20 @@ export function App() {
   const refreshCommunity = useCallback(async () => {
     setCommunityLoading(true);
     try {
-      const [index, account, displayName, downloaded, uploaded] = await Promise.all([
+      const [index, account, displayName, downloaded, uploaded, userRatings] = await Promise.all([
         communityApi.listRecommendations(),
         api.getDecentAccount().catch(() => null),
         loadCommunityDisplayName(api),
         loadDownloadedCommunityProfiles(api),
-        loadUploadedCommunityProfiles(api)
+        loadUploadedCommunityProfiles(api),
+        loadCommunityRecommendationRatings(api)
       ]);
       setCommunityRecommendations(index.items);
       setDecentAccount(account);
       setCommunityDisplayName(displayName ?? "");
       setDownloadedCommunityProfiles(downloaded);
       setUploadedCommunityProfiles(uploaded);
+      setCommunityUserRatings(userRatings);
       setCommunityError(null);
     } catch (error) {
       setCommunityError(error instanceof Error ? error.message : String(error));
@@ -714,6 +719,41 @@ export function App() {
       return communityApi.download(recommendation.id);
     },
     [communityApi]
+  );
+
+  const rateCommunityRecommendation = useCallback(
+    async (recommendation: CommunityRecommendation, rating: number) => {
+      const ownerKey = await getOrCreateCommunityOwnerKey(api);
+      const result = await communityApi.rate(recommendation.id, { ownerKey, rating });
+      const storedRatings = await loadCommunityRecommendationRatings(api);
+      const nextRatings = { ...storedRatings, [recommendation.id]: rating };
+      await saveCommunityRecommendationRatings(api, nextRatings);
+      setCommunityUserRatings(nextRatings);
+      setCommunityRecommendations(result.index.items);
+      setDownloadedCommunityProfiles((current) =>
+        current.map((item) =>
+          item.recommendationId === recommendation.id
+            ? {
+                ...item,
+                updatedAt: result.recommendation.updatedAt,
+                recommendation: result.recommendation
+              }
+            : item
+        )
+      );
+      setUploadedCommunityProfiles((current) =>
+        current.map((item) =>
+          item.recommendationId === recommendation.id
+            ? {
+                ...item,
+                updatedAt: result.recommendation.updatedAt,
+                recommendation: result.recommendation
+              }
+            : item
+        )
+      );
+    },
+    [api, communityApi]
   );
 
   const uploadCommunityProfile = useCallback(
@@ -1978,6 +2018,7 @@ export function App() {
             shots={data.shots}
             downloaded={downloadedCommunityProfiles}
             uploaded={uploadedCommunityProfiles}
+            userRatings={communityUserRatings}
             submittedBy={publicNameFromDecentAccount(decentAccount) ?? communityDisplayName}
             submittedByLocked={Boolean(publicNameFromDecentAccount(decentAccount))}
             manualDisplayName={communityDisplayName}
@@ -1985,6 +2026,7 @@ export function App() {
             onRefresh={refreshCommunity}
             onLoadDetails={loadCommunityRecommendationDetails}
             onDownload={downloadCommunityProfile}
+            onRateRecommendation={rateCommunityRecommendation}
             onUpload={uploadCommunityProfile}
             onEditUpload={editCommunityUpload}
             onDeleteUpload={deleteCommunityUpload}

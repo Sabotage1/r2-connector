@@ -37,6 +37,7 @@ interface CommunityPageProps {
   shots: ShotRecord[];
   downloaded: DownloadedCommunityProfile[];
   uploaded: UploadedCommunityProfile[];
+  userRatings?: Record<string, number>;
   submittedBy: string | null;
   submittedByLocked: boolean;
   manualDisplayName: string;
@@ -44,6 +45,7 @@ interface CommunityPageProps {
   onRefresh: () => Promise<void> | void;
   onLoadDetails?: (recommendation: CommunityRecommendation) => Promise<CommunityDownloadPayload> | CommunityDownloadPayload;
   onDownload: (recommendation: CommunityRecommendation) => Promise<void> | void;
+  onRateRecommendation?: (recommendation: CommunityRecommendation, rating: number) => Promise<void> | void;
   onUpload: (draft: UploadDraft) => Promise<void> | void;
   onEditUpload: (recommendation: CommunityRecommendation, draft: UploadDraft) => Promise<void> | void;
   onDeleteUpload: (recommendation: CommunityRecommendation) => Promise<void> | void;
@@ -137,6 +139,56 @@ function StarRating({ value }: { value: unknown }) {
       {"★".repeat(rating)}
       {"☆".repeat(5 - rating)}
     </span>
+  );
+}
+
+function communityRankAverage(recommendation: CommunityRecommendation): number | null {
+  return typeof recommendation.communityRatingAverage === "number" && Number.isFinite(recommendation.communityRatingAverage) && recommendation.communityRatingAverage >= 1 && recommendation.communityRatingAverage <= 5
+    ? recommendation.communityRatingAverage
+    : null;
+}
+
+function communityRankCount(recommendation: CommunityRecommendation): number {
+  return typeof recommendation.communityRatingCount === "number" && Number.isInteger(recommendation.communityRatingCount) && recommendation.communityRatingCount > 0 ? recommendation.communityRatingCount : 0;
+}
+
+function formatRankAverage(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function communityRankText(recommendation: CommunityRecommendation): string {
+  const average = communityRankAverage(recommendation);
+  const count = communityRankCount(recommendation);
+  return average === null || count === 0 ? "No community ranks yet" : `Community rank ${formatRankAverage(average)}/5 (${count})`;
+}
+
+function ratingFilterValue(recommendation: CommunityRecommendation): number | null {
+  return communityRankAverage(recommendation) ?? recommendationRating(recommendation.rating);
+}
+
+function CommunityRankControl({
+  title,
+  value,
+  pending,
+  onChange
+}: {
+  title: string;
+  value: number | undefined;
+  pending: boolean;
+  onChange: (rating: number) => void;
+}) {
+  return (
+    <label className="community-rank-control">
+      <span>{pending ? "Saving rank" : "Your rank"}</span>
+      <select aria-label={`Your rank for ${title}`} value={value ? String(value) : ""} disabled={pending} onChange={(event) => onChange(Number(event.target.value))}>
+        <option value="">Rank</option>
+        <option value="5">5 stars</option>
+        <option value="4">4 stars</option>
+        <option value="3">3 stars</option>
+        <option value="2">2 stars</option>
+        <option value="1">1 star</option>
+      </select>
+    </label>
   );
 }
 
@@ -245,7 +297,7 @@ function matchesGrinderFilter(recommendation: CommunityRecommendation, query: st
 function matchesRatingFilter(recommendation: CommunityRecommendation, filter: RatingFilter): boolean {
   if (!filter) return true;
   const minimumRating = Number(filter);
-  const rating = recommendationRating(recommendation.rating);
+  const rating = ratingFilterValue(recommendation);
   return rating !== null && rating >= minimumRating;
 }
 
@@ -314,6 +366,7 @@ export function CommunityPage({
   shots,
   downloaded,
   uploaded,
+  userRatings = {},
   submittedBy,
   submittedByLocked,
   manualDisplayName,
@@ -321,6 +374,7 @@ export function CommunityPage({
   onRefresh,
   onLoadDetails,
   onDownload,
+  onRateRecommendation,
   onUpload,
   onEditUpload,
   onDeleteUpload,
@@ -335,6 +389,7 @@ export function CommunityPage({
   const [burrTypeFilters, setBurrTypeFilters] = useState<Record<BurrTypeFilter, boolean>>({ flat: false, conical: false });
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [pendingDownloadId, setPendingDownloadId] = useState<string | null>(null);
+  const [pendingRankId, setPendingRankId] = useState<string | null>(null);
   const [pendingEditId, setPendingEditId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [selectedRecommendationId, setSelectedRecommendationId] = useState<string | null>(null);
@@ -510,6 +565,21 @@ export function CommunityPage({
     }
   };
 
+  const rankRecommendation = async (recommendation: CommunityRecommendation, rating: number) => {
+    const validRating = recommendationRating(rating);
+    if (validRating === null || !onRateRecommendation) return;
+    setPendingRankId(recommendation.id);
+    setStatus(null);
+    try {
+      await onRateRecommendation(recommendation, validRating);
+      setStatus({ type: "success", message: "Rank saved." });
+    } catch (error) {
+      setStatus({ type: "error", message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setPendingRankId(null);
+    }
+  };
+
   const openRecommendationDetails = async (recommendation: CommunityRecommendation) => {
     setSelectedRecommendationId(recommendation.id);
     setStatus(null);
@@ -667,6 +737,16 @@ export function CommunityPage({
                   <p>{selectedRecommendation.brew.notes}</p>
                 </div>
                 <div className="community-detail-card">
+                  <strong>Community rank</strong>
+                  <span>{communityRankText(selectedRecommendation)}</span>
+                  <CommunityRankControl
+                    title={recommendationTitle(selectedRecommendation)}
+                    value={userRatings[selectedRecommendation.id]}
+                    pending={pendingRankId === selectedRecommendation.id}
+                    onChange={(rating) => void rankRecommendation(selectedRecommendation, rating)}
+                  />
+                </div>
+                <div className="community-detail-card">
                   <strong>Shot</strong>
                   {recommendationShotScore(selectedRecommendation, selectedEvidence) && <span>{recommendationShotScore(selectedRecommendation, selectedEvidence)}</span>}
                   {selectedEvidence?.timestamp && <span>Shot date {formatDateOnly(selectedEvidence.timestamp)}</span>}
@@ -759,12 +839,19 @@ export function CommunityPage({
                     <button type="button" className="community-row-open" aria-label={`Open ${title} details`} onClick={() => void openRecommendationDetails(recommendation)}>
                       <strong>{title}</strong>
                       <StarRating value={recommendation.rating} />
+                      <span>{communityRankText(recommendation)}</span>
                       {recommendationUploadSummary(recommendation) && <span>{recommendationUploadSummary(recommendation)}</span>}
                       <span>{recommendationBagSummary(recommendation)}</span>
                       <span>{recommendationBrewSummary(recommendation)}</span>
                       <p>{recommendation.brew.notes}</p>
                     </button>
-                    <div className="row-actions">
+                    <div className="row-actions community-row-actions">
+                      <CommunityRankControl
+                        title={title}
+                        value={userRatings[recommendation.id]}
+                        pending={pendingRankId === recommendation.id}
+                        onChange={(rating) => void rankRecommendation(recommendation, rating)}
+                      />
                       <button
                         type="button"
                         className="primary-button compact-button"
@@ -823,6 +910,7 @@ export function CommunityPage({
             <div className="list-row community-row" key={`${item.recommendationId}-${item.localProfileId}`}>
               <strong>{item.localProfileTitle}</strong>
               <StarRating value={item.recommendation.rating} />
+              <span>{communityRankText(item.recommendation)}</span>
               <p>{item.recommendation.brew.notes}</p>
               {(item.evidence || recommendationShotScore(item.recommendation)) && (
                 <div className="community-evidence-summary">
@@ -832,6 +920,14 @@ export function CommunityPage({
                   {item.evidence?.notes && <span>{item.evidence.notes}</span>}
                 </div>
               )}
+              <div className="row-actions community-row-actions">
+                <CommunityRankControl
+                  title={recommendationTitle(item.recommendation)}
+                  value={userRatings[item.recommendation.id]}
+                  pending={pendingRankId === item.recommendation.id}
+                  onChange={(rating) => void rankRecommendation(item.recommendation, rating)}
+                />
+              </div>
             </div>
           ))}
         </section>

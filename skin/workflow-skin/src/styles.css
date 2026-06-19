@@ -44,7 +44,7 @@ textarea {
   height: 100vh;
   min-width: 0;
   display: grid;
-  grid-template-columns: 176px 1fr;
+  grid-template-columns: 164px 1fr;
   padding-top: var(--top-status-height);
   color: var(--skin-text);
   background: var(--skin-bg);
@@ -60,7 +60,7 @@ textarea {
   height: calc(100vh - var(--top-status-height));
   display: flex;
   flex-direction: column;
-  padding: 12px 10px 16px;
+  padding: 10px 8px 14px;
   border-right: 1px solid var(--skin-border);
   background: var(--skin-panel);
   overflow-x: hidden;
@@ -303,11 +303,11 @@ textarea {
   min-height: 44px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   border: 1px solid transparent;
   color: #aab5bf;
   background: transparent;
-  padding: 10px 12px;
+  padding: 9px 10px;
   border-radius: 8px;
   cursor: pointer;
 }
@@ -2122,6 +2122,37 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+.community-row-actions {
+  align-items: flex-end;
+}
+
+.community-rank-control {
+  display: grid;
+  min-width: 118px;
+  gap: 4px;
+}
+
+.community-rank-control span {
+  color: var(--skin-muted);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.community-rank-control select {
+  min-height: 38px;
+  border: 1px solid #34414b;
+  border-radius: 8px;
+  padding: 6px 8px;
+  color: var(--skin-text);
+  background: #10171d;
+  font-weight: 900;
+}
+
+.community-detail-card .community-rank-control {
+  max-width: 170px;
 }
 
 .community-row p {

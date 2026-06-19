@@ -122,6 +122,22 @@ describe("CommunityApi", () => {
     );
   });
 
+  it("ranks recommendations with an encoded id and owner key body", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ recommendation: { id: "rec/1", communityRatingAverage: 4 }, rating: 4, index: { version: 1, updatedAt: "now", items: [] } }), { status: 200 })
+    );
+
+    await new CommunityApi("https://worker.example").rate("rec/1", { ownerKey: "owner-key", rating: 4 });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "https://worker.example/api/recommendations/rec%2F1/rating",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ ownerKey: "owner-key", rating: 4 })
+      })
+    );
+  });
+
   it("exposes response status on Worker errors", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ error: "not found" }), { status: 404 }));
     await expect(new CommunityApi("https://worker.example").download("missing")).rejects.toMatchObject({
