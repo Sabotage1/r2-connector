@@ -1,7 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import skinManifest from "../../skin-manifest.json";
 import { ProfilePresetGrid } from "../components/ProfilePresetGrid";
 import { BagsPage } from "../pages/BagsPage";
 import { BrewPage } from "../pages/BrewPage";
@@ -21,8 +20,6 @@ const profiles: ProfileRecord[] = [
   { id: "p1", profile: { title: "Blooming" } },
   { id: "p2", profile: { title: "Classic" } }
 ];
-const currentSkinVersion = skinManifest.version;
-
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -1032,126 +1029,41 @@ describe("SettingsPage", () => {
     expect(screen.getByText("DiFluid R2 status")).toBeInTheDocument();
   });
 
-  it("edits skin updater settings and triggers native update actions", async () => {
+  it("edits the community API setting without exposing skin updater controls", async () => {
     const onUpdateSettings = vi.fn();
-    const onCheckSkinUpdates = vi.fn().mockResolvedValue(undefined);
-    const onInstallSkinUpdate = vi.fn().mockResolvedValue(undefined);
     render(
       <SettingsPage
         {...({
           settings: {
             ...defaultSkinSettings,
-            skinUpdateRepo: "roy/workflow-skin",
-            skinUpdateAsset: "workflow-skin.zip",
-            skinUpdatePrerelease: false
+            communityApiBaseUrl: "https://old.example.com/community"
           },
           r2Sensor: null,
-          webuiSkins: [{ id: "workflow-skin", name: "WorkFlow", version: "0.1.9", path: "/skins/workflow", isBundled: false }],
-          defaultWebuiSkin: { id: "workflow-skin", name: "WorkFlow", version: "0.1.9", path: "/skins/workflow", isBundled: false },
-          skinUpdateStatus: { type: "success", message: "Skin update check completed." },
-          onUpdateSettings,
-          onCheckSkinUpdates,
-          onInstallSkinUpdate
+          onUpdateSettings
         } as any)}
       />
     );
 
     fireEvent.click(screen.getByRole("tab", { name: "Skin settings" }));
-    expect(screen.getByText("Skin updates")).toBeInTheDocument();
-    expect(screen.getByText("Installed: WorkFlow v0.1.9")).toBeInTheDocument();
-    expect(screen.getByText("Default skin: WorkFlow")).toBeInTheDocument();
-    expect(screen.getByText("Skin update check completed.")).toBeInTheDocument();
+    expect(screen.getByText("Community")).toBeInTheDocument();
+    expect(screen.getByText("Profile recommendations use the WorkFlow community service.")).toBeInTheDocument();
+    expect(screen.queryByText("Skin updates")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Check for skin updates" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Install/update from GitHub release" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("GitHub repo")).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("checkbox", { name: "Auto update this skin on startup" }));
-
-    await userEvent.clear(screen.getByLabelText("GitHub repo"));
-    await userEvent.type(screen.getByLabelText("GitHub repo"), "roy/new-workflow-skin");
-    await userEvent.clear(screen.getByLabelText("GitHub branch"));
-    await userEvent.type(screen.getByLabelText("GitHub branch"), "release/test-skin");
-    await userEvent.clear(screen.getByLabelText("Release asset"));
-    await userEvent.type(screen.getByLabelText("Release asset"), "workflow-skin-v2.zip");
+    await userEvent.clear(screen.getByLabelText("Community API"));
+    await userEvent.type(screen.getByLabelText("Community API"), "https://new.example.com/community");
 
     expect(onUpdateSettings).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Install/update from GitHub release" })).toBeDisabled();
 
     await userEvent.click(screen.getByRole("button", { name: "Save settings" }));
 
     expect(onUpdateSettings).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        skinAutoUpdateEnabled: true,
-        skinUpdateRepo: "roy/new-workflow-skin",
-        skinUpdateBranch: "release/test-skin",
-        skinUpdateAsset: "workflow-skin-v2.zip"
+        communityApiBaseUrl: "https://new.example.com/community"
       })
     );
-
-    await userEvent.click(screen.getByRole("button", { name: "Check for skin updates" }));
-    await userEvent.click(screen.getByRole("button", { name: "Install/update from GitHub release" }));
-
-    expect(onCheckSkinUpdates).toHaveBeenCalledTimes(1);
-    expect(onInstallSkinUpdate).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows whether the workflow skin is up-to-date or has an available update", () => {
-    const commonProps = {
-      settings: defaultSkinSettings,
-      r2Sensor: null,
-      onUpdateSettings: vi.fn(),
-      defaultWebuiSkin: { id: "workflow-skin", name: "WorkFlow", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }
-    };
-    const { rerender } = render(
-      <SettingsPage
-        {...commonProps}
-        webuiSkins={[{ id: "workflow-skin", name: "WorkFlow", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }]}
-      />
-    );
-
-    fireEvent.click(screen.getByRole("tab", { name: "Skin settings" }));
-    expect(screen.getByText("The skin is up-to-date.")).toBeInTheDocument();
-
-    rerender(
-      <SettingsPage
-        {...commonProps}
-        webuiSkins={[{ id: "workflow-skin", name: "WorkFlow", version: "0.1.16", path: "/skins/workflow", isBundled: false }]}
-      />
-    );
-
-    fireEvent.click(screen.getByRole("tab", { name: "Skin settings" }));
-    expect(screen.getByText(`Update available: v${currentSkinVersion} is available (installed v0.1.16).`)).toBeInTheDocument();
-  });
-
-  it("uses the checked GitHub release version when the installed skin is stale but the running bundle is also stale", () => {
-    render(
-      <SettingsPage
-        settings={defaultSkinSettings}
-        r2Sensor={null}
-        onUpdateSettings={vi.fn()}
-        webuiSkins={[{ id: "workflow-skin", name: "WorkFlow", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }]}
-        defaultWebuiSkin={{ id: "workflow-skin", name: "WorkFlow", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }}
-        availableSkinVersion="99.0.0"
-      />
-    );
-
-    fireEvent.click(screen.getByRole("tab", { name: "Skin settings" }));
-    expect(screen.queryByText("The skin is up-to-date.")).not.toBeInTheDocument();
-    expect(screen.getByText(`Update available: v99.0.0 is available (installed v${currentSkinVersion}).`)).toBeInTheDocument();
-  });
-
-  it("shows the downloading state while a skin update is installing", () => {
-    render(
-      <SettingsPage
-        {...({
-          settings: defaultSkinSettings,
-          r2Sensor: null,
-          onUpdateSettings: vi.fn(),
-          webuiSkins: [{ id: "workflow-skin", name: "WorkFlow", version: "0.1.15", path: "/skins/workflow", isBundled: false }],
-          skinUpdatePhase: "downloading"
-        } as any)}
-      />
-    );
-
-    fireEvent.click(screen.getByRole("tab", { name: "Skin settings" }));
-    expect(screen.getByText("Downloading update...")).toBeInTheDocument();
   });
 
   it("edits the number of preset cards and their titles before saving settings", async () => {
@@ -1433,6 +1345,7 @@ describe("CommunityPage", () => {
       onDownload: vi.fn(),
       onUpload: vi.fn(),
       onEditUpload: vi.fn(),
+      onDeleteUpload: vi.fn(),
       ...overrides
     };
     render(<CommunityPage {...props} />);
@@ -1486,6 +1399,7 @@ describe("CommunityPage", () => {
         onDownload={vi.fn()}
         onUpload={vi.fn()}
         onEditUpload={vi.fn()}
+        onDeleteUpload={vi.fn()}
       />
     );
     expect(screen.getByRole("heading", { name: "Community" })).toBeInTheDocument();
@@ -1626,6 +1540,7 @@ describe("CommunityPage", () => {
         onDownload={vi.fn()}
         onUpload={onUpload}
         onEditUpload={vi.fn()}
+        onDeleteUpload={vi.fn()}
       />
     );
     await userEvent.click(screen.getByRole("tab", { name: "Recommend Profile" }));
@@ -1769,6 +1684,27 @@ describe("CommunityPage", () => {
     expect(within(row).getByText("sweet balance")).toBeInTheDocument();
   });
 
+  it("deletes an uploaded profile recommendation from the uploaded profiles list", async () => {
+    const onDeleteUpload = vi.fn().mockResolvedValue(undefined);
+    await renderCommunityPage({
+      onDeleteUpload,
+      uploaded: [
+        {
+          recommendationId: recommendation.id,
+          uploadedAt: "2026-06-18T00:00:00.000Z",
+          updatedAt: "2026-06-18T00:00:00.000Z",
+          recommendation
+        }
+      ]
+    });
+
+    await userEvent.click(screen.getByRole("tab", { name: "Uploaded Profiles" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete Blooming" }));
+
+    await waitFor(() => expect(onDeleteUpload).toHaveBeenCalledWith(recommendation));
+    expect(screen.getByRole("status")).toHaveTextContent("Recommendation deleted.");
+  });
+
   it("opens an uploaded profile detail editor, validates mandatory fields, and saves the updated draft", async () => {
     const onEditUpload = vi.fn().mockResolvedValue(undefined);
     await renderCommunityPage({
@@ -1816,6 +1752,28 @@ describe("CommunityPage", () => {
       )
     );
     expect(screen.getByRole("status")).toHaveTextContent("Recommendation updated.");
+  });
+
+  it("deletes an uploaded profile recommendation from the full detail editor", async () => {
+    const onDeleteUpload = vi.fn().mockResolvedValue(undefined);
+    await renderCommunityPage({
+      onDeleteUpload,
+      uploaded: [
+        {
+          recommendationId: recommendation.id,
+          uploadedAt: "2026-06-18T00:00:00.000Z",
+          updatedAt: "2026-06-18T00:00:00.000Z",
+          recommendation
+        }
+      ]
+    });
+
+    await userEvent.click(screen.getByRole("tab", { name: "Uploaded Profiles" }));
+    await userEvent.click(screen.getByRole("button", { name: "Edit Blooming" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Delete Blooming" }));
+
+    await waitFor(() => expect(onDeleteUpload).toHaveBeenCalledWith(recommendation));
+    expect(screen.getByRole("status")).toHaveTextContent("Recommendation deleted.");
   });
 
   it("shows an edit failure alert for uploaded recommendations", async () => {

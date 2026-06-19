@@ -1,4 +1,4 @@
-import { Download, RefreshCw, Upload, X } from "lucide-react";
+import { Download, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Grinder, ProfileRecord, ShotRecord, ShotSnapshot } from "../api/types";
@@ -44,6 +44,7 @@ interface CommunityPageProps {
   onDownload: (recommendation: CommunityRecommendation) => Promise<void> | void;
   onUpload: (draft: UploadDraft) => Promise<void> | void;
   onEditUpload: (recommendation: CommunityRecommendation, draft: UploadDraft) => Promise<void> | void;
+  onDeleteUpload: (recommendation: CommunityRecommendation) => Promise<void> | void;
   initialDraft?: Partial<UploadDraft> | null;
   onInitialDraftApplied?: () => void;
 }
@@ -288,6 +289,7 @@ export function CommunityPage({
   onDownload,
   onUpload,
   onEditUpload,
+  onDeleteUpload,
   initialDraft,
   onInitialDraftApplied
 }: CommunityPageProps) {
@@ -299,6 +301,7 @@ export function CommunityPage({
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [pendingDownloadId, setPendingDownloadId] = useState<string | null>(null);
   const [pendingEditId, setPendingEditId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [selectedRecommendationId, setSelectedRecommendationId] = useState<string | null>(null);
   const [editingUploadId, setEditingUploadId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<UploadDraft>(emptyDraft);
@@ -494,6 +497,20 @@ export function CommunityPage({
       setStatus({ type: "error", message: error instanceof Error ? error.message : String(error) });
     } finally {
       setPendingEditId(null);
+    }
+  };
+
+  const deleteUploadedRecommendation = async (item: UploadedCommunityProfile) => {
+    setPendingDeleteId(item.recommendation.id);
+    setStatus(null);
+    try {
+      await onDeleteUpload(item.recommendation);
+      setEditingUploadId(null);
+      setStatus({ type: "success", message: "Recommendation deleted." });
+    } catch (error) {
+      setStatus({ type: "error", message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setPendingDeleteId(null);
     }
   };
 
@@ -780,6 +797,16 @@ export function CommunityPage({
                 >
                   {pendingEditId === editingUpload.recommendation.id ? "Saving" : "Save updated recommendation"}
                 </button>
+                <button
+                  type="button"
+                  className="ghost-button compact-button"
+                  aria-label={`Delete ${recommendationTitle(editingUpload.recommendation)}`}
+                  disabled={pendingDeleteId === editingUpload.recommendation.id}
+                  onClick={() => void deleteUploadedRecommendation(editingUpload)}
+                >
+                  <Trash2 aria-hidden="true" size={16} />
+                  {pendingDeleteId === editingUpload.recommendation.id ? "Deleting" : "Delete"}
+                </button>
               </div>
               {status && (
                 <p className={status.type === "error" ? "status-message error" : "status-message"} role={status.type === "error" ? "alert" : "status"}>
@@ -860,6 +887,16 @@ export function CommunityPage({
                     <div className="row-actions">
                       <button type="button" className="ghost-button compact-button" onClick={() => startEditingUploadedRecommendation(item)}>
                         Edit {title}
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-button compact-button"
+                        aria-label={`Delete ${title}`}
+                        disabled={pendingDeleteId === item.recommendation.id}
+                        onClick={() => void deleteUploadedRecommendation(item)}
+                      >
+                        <Trash2 aria-hidden="true" size={16} />
+                        {pendingDeleteId === item.recommendation.id ? "Deleting" : "Delete"}
                       </button>
                     </div>
                   </div>

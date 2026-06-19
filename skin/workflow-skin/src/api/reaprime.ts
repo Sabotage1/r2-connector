@@ -20,8 +20,6 @@ import type {
   ShotRecord,
   SteamRecord,
   UpdateDe1MachineSettings,
-  WebUISkin,
-  WebUISkinActionResult,
   Workflow
 } from "./types";
 
@@ -86,21 +84,6 @@ export interface CreateProfilePayload {
 export interface ScanDevicesOptions {
   connect?: boolean;
   quick?: boolean;
-}
-
-export interface InstallSkinFromGithubReleasePayload {
-  repo: string;
-  asset?: string;
-  prerelease?: boolean;
-}
-
-export interface InstallSkinFromGithubBranchPayload {
-  repo: string;
-  branch?: string;
-}
-
-export interface InstallSkinFromUrlPayload {
-  url: string;
 }
 
 export function apiBaseUrl(locationUrl?: URL): string {
@@ -518,52 +501,6 @@ export class ReaPrimeApi {
     return this.request<T>(`/api/v1/plugins/${encodeURIComponent(pluginId)}/${encodeURIComponent(endpoint)}`, {
       method,
       ...(body === undefined ? {} : { body: JSON.stringify(body) })
-    });
-  }
-
-  listWebUISkins() {
-    return this.request<WebUISkin[]>("/api/v1/webui/skins");
-  }
-
-  getWebUISkin(id: string) {
-    return this.request<WebUISkin>(`/api/v1/webui/skins/${encodeURIComponent(id)}`);
-  }
-
-  getDefaultWebUISkin() {
-    return this.request<WebUISkin>("/api/v1/webui/skins/default");
-  }
-
-  setDefaultWebUISkin(skinId: string) {
-    return this.request<WebUISkinActionResult>("/api/v1/webui/skins/default", {
-      method: "PUT",
-      body: JSON.stringify({ skinId })
-    });
-  }
-
-  updateWebUISkins() {
-    return this.request<WebUISkinActionResult>("/api/v1/webui/skins/update", {
-      method: "POST"
-    });
-  }
-
-  installSkinFromGithubRelease(payload: InstallSkinFromGithubReleasePayload) {
-    return this.request<WebUISkinActionResult>("/api/v1/webui/skins/install/github-release", {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-  }
-
-  installSkinFromGithubBranch(payload: InstallSkinFromGithubBranchPayload) {
-    return this.request<WebUISkinActionResult>("/api/v1/webui/skins/install/github-branch", {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-  }
-
-  installSkinFromUrl(payload: InstallSkinFromUrlPayload) {
-    return this.request<WebUISkinActionResult>("/api/v1/webui/skins/install/url", {
-      method: "POST",
-      body: JSON.stringify(payload)
     });
   }
 

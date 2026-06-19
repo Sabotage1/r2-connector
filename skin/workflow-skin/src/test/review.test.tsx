@@ -121,6 +121,81 @@ describe("ReviewPage", () => {
     expect(onSave).toHaveBeenCalledWith("s1", expect.objectContaining({ drinkTds: 9.5, drinkEy: 21.11 }));
   });
 
+  it("prefers the grinder saved on the shot before the default grinder", () => {
+    render(
+      <ReviewPage
+        shot={{
+          ...shot,
+          workflow: { context: { targetDoseWeight: 18, beanBatchId: "batch-1", grinderId: "g2" } },
+          annotations: { ...shot.annotations, extras: { workflowSkin: { grinderId: "g1", grindSize: "4.8" } } }
+        }}
+        previousShots={[]}
+        onSaveAnnotations={vi.fn()}
+        onUploadVisualizer={vi.fn()}
+        r2Sensor={null}
+        onReadR2={vi.fn()}
+        grinders={grinders}
+        defaultGrinderId="g2"
+      />
+    );
+
+    expect(screen.getByLabelText("Grinder")).toHaveValue("g1");
+    expect(screen.getByLabelText("Grind size")).toHaveValue("4.8");
+  });
+
+  it("shares the review shot after saving the latest review annotations", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const onRecommendShot = vi.fn();
+    render(
+      <ReviewPage
+        shot={{
+          ...shot,
+          workflow: { context: { targetDoseWeight: 18, beanBatchId: "batch-1", grinderId: "g1" } },
+          measurements: [{ machine: { timestamp: "2026-06-09T10:00:31Z", pressure: 8 }, scale: { weight: 40 } }]
+        }}
+        previousShots={[]}
+        onSaveAnnotations={onSave}
+        onUploadVisualizer={vi.fn()}
+        r2Sensor={null}
+        onReadR2={vi.fn()}
+        grinders={grinders}
+        onRecommendShot={onRecommendShot}
+      />
+    );
+
+    await userEvent.clear(screen.getByLabelText("TDS"));
+    await userEvent.type(screen.getByLabelText("TDS"), "9.5");
+    await userEvent.clear(screen.getByLabelText("Grind size"));
+    await userEvent.type(screen.getByLabelText("Grind size"), "4.6");
+    await userEvent.clear(screen.getByLabelText("Tasting Notes"));
+    await userEvent.type(screen.getByLabelText("Tasting Notes"), "Sweet and clean");
+    fireEvent.change(screen.getByLabelText("Taste rating"), { target: { value: "9" } });
+    await userEvent.click(screen.getByRole("button", { name: "Share recommendation" }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      "s1",
+      expect.objectContaining({
+        drinkTds: 9.5,
+        drinkEy: 21.11,
+        enjoyment: 9,
+        espressoNotes: "Sweet and clean",
+        extras: expect.objectContaining({
+          workflowSkin: expect.objectContaining({ grinderId: "g1", grinderModel: "EK43", grindSize: "4.6" })
+        })
+      })
+    );
+    expect(onRecommendShot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "s1",
+        annotations: expect.objectContaining({
+          drinkTds: 9.5,
+          drinkEy: 21.11,
+          espressoNotes: "Sweet and clean"
+        })
+      })
+    );
+  });
+
   it("does not show the old live graph return button", () => {
     const onBackToGraph = vi.fn();
     render(
@@ -457,9 +532,9 @@ describe("ReviewPage", () => {
     );
   });
 
-  it("defaults grinder correction to the default grinder and saves it with the review", async () => {
+  it("uses the shot grinder before falling back to the default grinder and saves it with the review", async () => {
     const onSave = vi.fn();
-    render(
+    const { unmount } = render(
       <ReviewPage
         shot={{ ...shot, workflow: { context: { ...shot.workflow.context, grinderId: "g1", grinderModel: "EK43" } } }}
         previousShots={[]}
@@ -472,17 +547,33 @@ describe("ReviewPage", () => {
       />
     );
 
-    expect(screen.getByLabelText("Grinder")).toHaveValue("g2");
+    expect(screen.getByLabelText("Grinder")).toHaveValue("g1");
     await userEvent.click(screen.getByRole("button", { name: /Save Review/i }));
 
     expect(onSave).toHaveBeenCalledWith(
       "s1",
       expect.objectContaining({
         extras: expect.objectContaining({
-          workflowSkin: expect.objectContaining({ grinderId: "g2", grinderModel: "ZP6" })
+          workflowSkin: expect.objectContaining({ grinderId: "g1", grinderModel: "EK43" })
         })
       })
     );
+
+    unmount();
+    render(
+      <ReviewPage
+        shot={{ ...shot, id: "s-default", workflow: { context: { targetDoseWeight: 18, beanBatchId: "batch-1" } } }}
+        previousShots={[]}
+        onSaveAnnotations={onSave}
+        onUploadVisualizer={vi.fn()}
+        r2Sensor={null}
+        onReadR2={vi.fn()}
+        grinders={grinders}
+        defaultGrinderId="g2"
+      />
+    );
+
+    expect(screen.getByLabelText("Grinder")).toHaveValue("g2");
   });
 
   it("renders imperfect shot workflow data without crashing", () => {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Share2 } from "lucide-react";
 import type { Grinder, SensorListItem, ShotAnnotations, ShotRecord } from "../api/types";
 import { ShotGraph } from "../components/ShotGraph";
 import { calculateEy, cleanNumber } from "../lib/ey";
@@ -47,7 +48,8 @@ export function ReviewPage({
   autoReadR2DelaySeconds = DEFAULT_R2_MEASURE_DELAY_SECONDS,
   grinders = [],
   defaultGrinderId,
-  onLoadShot
+  onLoadShot,
+  onRecommendShot
 }: {
   shot: ShotRecord;
   previousShots: ShotRecord[];
@@ -61,6 +63,7 @@ export function ReviewPage({
   grinders?: Grinder[];
   defaultGrinderId?: string;
   onLoadShot?: (shotId: string) => Promise<ShotRecord | null> | ShotRecord | null;
+  onRecommendShot?: (shot: ShotRecord) => Promise<void> | void;
   onBackToGraph?: () => void;
 }) {
   const stats = shotStats(shot);
@@ -68,9 +71,9 @@ export function ReviewPage({
   const grinderById = useMemo(() => new Map(grinders.map((grinder) => [grinder.id, grinder])), [grinders]);
   const savedWorkflowSkin = workflowSkinExtras(shot.annotations);
   const initialGrinderId =
-    (defaultGrinderId && grinderById.has(defaultGrinderId) ? defaultGrinderId : undefined) ??
     (typeof savedWorkflowSkin.grinderId === "string" ? savedWorkflowSkin.grinderId : undefined) ??
     context?.grinderId ??
+    (defaultGrinderId && grinderById.has(defaultGrinderId) ? defaultGrinderId : undefined) ??
     "";
   const [selectedShotId, setSelectedShotId] = useState(shot.id);
   const [tdsText, setTdsText] = useState(String(shot.annotations?.drinkTds ?? ""));
@@ -173,7 +176,7 @@ export function ReviewPage({
     [onLoadShot]
   );
 
-  async function save() {
+  function reviewAnnotations(): ShotAnnotations {
     const workflowSkin = workflowSkinExtras(shot.annotations);
     const selectedGrinder = selectedGrinderId ? grinderById.get(selectedGrinderId) : undefined;
     const grinderExtras =
@@ -184,28 +187,44 @@ export function ReviewPage({
           }
         : {};
     const goldenExtras = tasteRating === 10 ? { goldenShot: true } : {};
-    await onSaveAnnotations(
-      shot.id,
-      {
-        ...shot.annotations,
-        actualDoseWeight: cleanNumber(doseText) ?? undefined,
-        actualYield: cleanNumber(yieldText) ?? undefined,
-        drinkTds: cleanNumber(tdsText) ?? undefined,
-        drinkEy: ey ?? undefined,
-        enjoyment: tasteRating,
-        espressoNotes: notes,
-        extras: {
-          ...shot.annotations?.extras,
-          workflowSkin: {
-            ...workflowSkin,
-            grindSize,
-            ...grinderExtras,
-            ...goldenExtras
-          }
+
+    return {
+      ...shot.annotations,
+      actualDoseWeight: cleanNumber(doseText) ?? undefined,
+      actualYield: cleanNumber(yieldText) ?? undefined,
+      drinkTds: cleanNumber(tdsText) ?? undefined,
+      drinkEy: ey ?? undefined,
+      enjoyment: tasteRating,
+      espressoNotes: notes,
+      extras: {
+        ...shot.annotations?.extras,
+        workflowSkin: {
+          ...workflowSkin,
+          grindSize,
+          ...grinderExtras,
+          ...goldenExtras
         }
       }
-    );
+    };
+  }
+
+  async function save() {
+    await onSaveAnnotations(shot.id, reviewAnnotations());
     await loadShotGraph(shot.id, { force: true });
+  }
+
+  async function recommendShot() {
+    if (!onRecommendShot) return;
+    if (!selectedShotIsLatest) {
+      const fullShot = (selectedShot.measurements?.length ?? 0) > 0 ? selectedShot : (await loadShotGraph(selectedShot.id, { force: true })) ?? selectedShot;
+      await onRecommendShot(fullShot);
+      return;
+    }
+
+    const annotations = reviewAnnotations();
+    await onSaveAnnotations(shot.id, annotations);
+    const fullShot = (await loadShotGraph(shot.id, { force: true })) ?? shot;
+    await onRecommendShot({ ...fullShot, annotations });
   }
 
   async function readR2(options: { allowUnavailable?: boolean } = {}) {
@@ -420,6 +439,12 @@ export function ReviewPage({
           <button type="button" className="ghost-button" onClick={onUploadVisualizer}>
             Upload to Visualizer
           </button>
+          {onRecommendShot && (
+            <button type="button" className="ghost-button" onClick={() => void recommendShot()}>
+              <Share2 aria-hidden="true" size={16} />
+              Share recommendation
+            </button>
+          )}
           <button type="button" className="primary-button" onClick={save}>
             Save Review
           </button>

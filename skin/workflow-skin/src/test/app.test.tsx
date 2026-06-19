@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import skinManifest from "../../skin-manifest.json";
 import { App } from "../App";
-import type { AppInfo, Bean, BeanBatch, DecentAccountStatus, DeviceInfo, Grinder, MachineState, ProfileRecord, SensorListItem, ShotRecord, WebUISkin } from "../api/types";
+import type { AppInfo, Bean, BeanBatch, DecentAccountStatus, DeviceInfo, Grinder, MachineState, ProfileRecord, SensorListItem, ShotRecord } from "../api/types";
 import type { CommunityDownloadPayload, CommunityRecommendation } from "../community/types";
 import { defaultSkinSettings, type SkinSettings } from "../state/skinSettings";
 
@@ -78,14 +78,6 @@ function mockReaFetch(
     pluginSettings?: unknown;
     visualizerStatus?: Record<string, unknown>;
     displayState?: Record<string, unknown>;
-    webuiSkins?: WebUISkin[];
-    defaultWebuiSkin?: WebUISkin;
-    failGithubReleaseInstall?: boolean;
-    githubReleaseInstallWait?: Promise<void>;
-    githubLatestTag?: string;
-    githubReleaseStatus?: number;
-    githubManifestVersion?: string;
-    githubManifestStatus?: number;
     communityStatus?: number;
     communityRecommendations?: CommunityRecommendation[];
     communityDownloadPayloads?: Record<string, CommunityDownloadPayload>;
@@ -137,6 +129,7 @@ function mockReaFetch(
   const communityDownloadIds: string[] = [];
   const communityCreatePayloads: unknown[] = [];
   const communityUpdatePayloads: unknown[] = [];
+  const communityDeletePayloads: unknown[] = [];
   const createdProfilePayloads: unknown[] = [];
   const updatedProfilePayloads: unknown[] = [];
   const communityStore = new Map<string, unknown>([
@@ -148,16 +141,6 @@ function mockReaFetch(
   const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init = {}) => {
     const url = new URL(String(input));
     const method = init.method ?? "GET";
-
-    if (method === "GET" && url.hostname === "api.github.com" && url.pathname.startsWith("/repos/")) {
-      if (options.githubReleaseStatus) return Promise.resolve(new Response("release unavailable", { status: options.githubReleaseStatus }));
-      return responseJson({ tag_name: options.githubLatestTag ?? "v0.1.20" });
-    }
-
-    if (method === "GET" && url.hostname === "raw.githubusercontent.com" && url.pathname.endsWith("/skin/workflow-skin/skin-manifest.json")) {
-      if (options.githubManifestStatus) return Promise.resolve(new Response("manifest unavailable", { status: options.githubManifestStatus }));
-      return responseJson({ id: "workflow-skin", name: "WorkFlow", version: options.githubManifestVersion ?? skinManifest.version });
-    }
 
     if (url.hostname === "workflow-skin-community.sabotage1.workers.dev" && method === "GET" && url.pathname === "/api/recommendations") {
       if (options.communityStatus) return Promise.resolve(new Response("community unavailable", { status: options.communityStatus }));
@@ -206,6 +189,17 @@ function mockReaFetch(
       return responseJson({
         recommendation,
         index: { version: 1, updatedAt: "2026-06-18T02:00:00.000Z", items: [recommendation] }
+      });
+    }
+
+    if (url.hostname === "workflow-skin-community.sabotage1.workers.dev" && method === "DELETE" && url.pathname.startsWith("/api/recommendations/")) {
+      const recommendationId = decodeURIComponent(url.pathname.split("/").pop() ?? "");
+      const body = JSON.parse(String(init.body));
+      communityDeletePayloads.push({ id: recommendationId, ...body });
+      const items = (options.communityRecommendations ?? [communityRecommendation]).filter((item) => item.id !== recommendationId);
+      return responseJson({
+        id: recommendationId,
+        index: { version: 1, updatedAt: "2026-06-18T03:00:00.000Z", items }
       });
     }
 
@@ -330,29 +324,6 @@ function mockReaFetch(
       const endpoint = url.pathname.split("/").pop() ?? "";
       return responseJson(options.visualizerStatus?.[endpoint] ?? {});
     }
-    if (method === "GET" && url.pathname === "/api/v1/webui/skins") {
-      return responseJson(
-        options.webuiSkins ?? [{ id: "workflow-skin", name: "WorkFlow", version: "0.1.9", path: "/skins/workflow", isBundled: false }]
-      );
-    }
-    if (method === "GET" && url.pathname === "/api/v1/webui/skins/default") {
-      return responseJson(options.defaultWebuiSkin ?? { id: "workflow-skin", name: "WorkFlow", version: "0.1.9", path: "/skins/workflow", isBundled: false });
-    }
-    if (method === "POST" && url.pathname === "/api/v1/webui/skins/update") {
-      return responseJson({ message: "Skin update check completed" });
-    }
-    if (method === "POST" && url.pathname === "/api/v1/webui/skins/install/github-release") {
-      if (options.failGithubReleaseInstall) {
-        return Promise.resolve(new Response("error: Exception: Failed to fetch Github release: 404", { status: 500 }));
-      }
-      if (options.githubReleaseInstallWait) {
-        return options.githubReleaseInstallWait.then(() => responseJson({ success: true, repo: JSON.parse(String(init.body)).repo }));
-      }
-      return responseJson({ success: true, repo: JSON.parse(String(init.body)).repo });
-    }
-    if (method === "POST" && url.pathname === "/api/v1/webui/skins/install/url") {
-      return responseJson({ message: "Skin installed from committed workflow zip", url: JSON.parse(String(init.body)).url });
-    }
     if (options.settingsStorageMissing && url.pathname === "/api/v1/store/workflow-skin/settings") {
       return Promise.resolve(new Response("Route not found", { status: 404 }));
     }
@@ -424,6 +395,9 @@ function mockReaFetch(
     },
     get communityUpdatePayloads() {
       return communityUpdatePayloads;
+    },
+    get communityDeletePayloads() {
+      return communityDeletePayloads;
     },
     get createdProfilePayloads() {
       return createdProfilePayloads;
@@ -538,12 +512,6 @@ describe("App shell", () => {
       {
         ...initialSettings,
         menuCollapsed: false
-      },
-      {
-        webuiSkins: [{ id: "workflow-skin", name: "WorkFlow", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }],
-        defaultWebuiSkin: { id: "workflow-skin", name: "WorkFlow", version: currentSkinVersion, path: "/skins/workflow", isBundled: false },
-        githubLatestTag: `v${currentSkinVersion}`,
-        githubManifestVersion: currentSkinVersion
       }
     );
     render(<App />);
@@ -555,26 +523,20 @@ describe("App shell", () => {
     expect(skinVersion).not.toHaveClass("update-available");
   });
 
-  it("highlights the expanded menu skin version when a repo update is available", async () => {
+  it("keeps the expanded menu skin version passive because updates are app-bundled", async () => {
     mockReaFetch(
       {
         ...initialSettings,
         menuCollapsed: false
-      },
-      {
-        webuiSkins: [{ id: "workflow-skin", name: "WorkFlow", version: "0.1.25", path: "/skins/workflow", isBundled: false }],
-        defaultWebuiSkin: { id: "workflow-skin", name: "WorkFlow", version: "0.1.25", path: "/skins/workflow", isBundled: false },
-        githubLatestTag: "v99.0.0",
-        githubManifestVersion: "99.0.0"
       }
     );
     render(<App />);
 
     const skinVersion = await screen.findByLabelText("Skin version");
 
-    await waitFor(() => expect(skinVersion).toHaveClass("update-available"));
-    expect(skinVersion).toHaveTextContent("v0.1.25");
-    expect(skinVersion).toHaveTextContent("Update v99.0.0");
+    expect(skinVersion).toHaveClass("latest");
+    expect(skinVersion).not.toHaveClass("update-available");
+    expect(skinVersion).not.toHaveTextContent("Update");
   });
 
   it("hides the skin version when the menu is minimized", async () => {
@@ -888,6 +850,34 @@ describe("App shell", () => {
         })
       })
     ]);
+  });
+
+  it("deletes an uploaded community recommendation with the local owner key", async () => {
+    const fetchState = mockReaFetch(initialSettings, {
+      communityRecommendations: [communityRecommendation],
+      beans: [{ id: "bean-1", roaster: "Pilot", name: "Ethiopia Halo", country: "Ethiopia", processing: "Washed" }],
+      batchesByBeanId: {
+        "bean-1": [{ id: "batch-1", beanId: "bean-1", roastDate: "2026-06-01", extras: { workflowSkin: { name: "Halo" } } }]
+      },
+      grinders: [{ id: "g1", model: "ZP6", settingType: "numeric", burrType: "flat", burrs: "MP" }]
+    });
+    fetchState.communityStore.set("/api/v1/store/workflow-skin/community-uploaded-profiles", [
+      {
+        recommendationId: communityRecommendation.id,
+        uploadedAt: "2026-06-18T00:00:00.000Z",
+        updatedAt: communityRecommendation.updatedAt,
+        recommendation: communityRecommendation
+      }
+    ]);
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Community" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "Uploaded Profiles" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete Blooming" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Recommendation deleted.");
+    expect(fetchState.communityDeletePayloads).toEqual([{ id: "rec-12345678", ownerKey: "owner-key" }]);
+    expect(fetchState.communityStore.get("/api/v1/store/workflow-skin/community-uploaded-profiles")).toEqual([]);
   });
 
   it("orders grinders below profiles in the default main menu", async () => {
@@ -2285,179 +2275,19 @@ describe("App shell", () => {
     );
   });
 
-  it("installs the configured skin update on startup when auto-update is enabled", async () => {
-    const fetchState = mockReaFetch({ ...initialSettings, skinAutoUpdateEnabled: true });
-    render(<App />);
-
-    await waitFor(() => {
-      expect(fetchState.fetchMock).toHaveBeenCalledWith(
-        "http://localhost:8080/api/v1/webui/skins/install/github-release",
-        expect.objectContaining({
-          method: "POST",
-          body: JSON.stringify({ repo: "Sabotage1/r2-connector", asset: "workflow-skin.zip", prerelease: false })
-        })
-      );
-    });
-  });
-
-  it("can check and install skin updates from Settings", async () => {
-    const currentSkinVersion = typeof skinManifest.version === "string" ? skinManifest.version : "0.0.0";
-    const fetchState = mockReaFetch({
-      ...initialSettings,
-      skinUpdateRepo: "roy/workflow-skin",
-      skinUpdateAsset: "workflow-skin.zip",
-      skinUpdatePrerelease: false
-    }, {
-      webuiSkins: [{ id: "workflow-skin", name: "WorkFlow", version: currentSkinVersion, path: "/skins/workflow", isBundled: false }],
-      defaultWebuiSkin: { id: "workflow-skin", name: "WorkFlow", version: currentSkinVersion, path: "/skins/workflow", isBundled: false },
-      githubLatestTag: "v99.0.0"
-    });
+  it("does not expose bundled skin update controls or call skin updater endpoints", async () => {
+    const fetchState = mockReaFetch(initialSettings);
     render(<App />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
     await userEvent.click(await screen.findByRole("tab", { name: "Skin settings" }));
-    await userEvent.click(await screen.findByRole("button", { name: "Check for skin updates" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Skin update check completed.");
-    expect(screen.getByText(`Update available: v99.0.0 is available (installed v${currentSkinVersion}).`)).toBeInTheDocument();
-    expect(fetchState.fetchMock).toHaveBeenCalledWith("http://localhost:8080/api/v1/webui/skins/update", expect.objectContaining({ method: "POST" }));
-
-    await userEvent.click(screen.getByRole("button", { name: "Install/update from GitHub release" }));
-
-    expect(await screen.findByRole("status")).toHaveTextContent("Skin installed from GitHub release.");
-    expect(fetchState.fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8080/api/v1/webui/skins/install/github-release",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ repo: "roy/workflow-skin", asset: "workflow-skin.zip", prerelease: false })
-      })
-    );
-  });
-
-  it("finds git-committed skin updates from the configured branch when no GitHub release exists", async () => {
-    const fetchState = mockReaFetch(
-      {
-        ...initialSettings,
-        skinUpdateRepo: "Sabotage1/r2-connector",
-        skinUpdateBranch: "codex/reaprime-workflow-skin",
-        skinUpdateAsset: "workflow-skin.zip",
-        skinUpdatePrerelease: false
-      },
-      {
-        webuiSkins: [{ id: "workflow-skin", name: "WorkFlow", version: "0.1.25", path: "/skins/workflow", isBundled: false }],
-        defaultWebuiSkin: { id: "workflow-skin", name: "WorkFlow", version: "0.1.25", path: "/skins/workflow", isBundled: false },
-        githubReleaseStatus: 404,
-        githubManifestVersion: "0.1.28"
-      }
-    );
-    render(<App />);
-
-    await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
-    await userEvent.click(await screen.findByRole("tab", { name: "Skin settings" }));
-    await userEvent.click(await screen.findByRole("button", { name: "Check for skin updates" }));
-
-    expect(await screen.findByRole("status")).toHaveTextContent("Skin update check completed.");
-    expect(screen.getByText("Update available: v0.1.28 is available (installed v0.1.25).")).toBeInTheDocument();
-    expect(fetchState.fetchMock).toHaveBeenCalledWith(
-      "https://raw.githubusercontent.com/Sabotage1/r2-connector/codex/reaprime-workflow-skin/skin/workflow-skin/skin-manifest.json",
-      expect.objectContaining({ headers: { Accept: "application/json" } })
-    );
-  });
-
-  it("installs the committed branch zip when the checked update came from the branch manifest", async () => {
-    const fetchState = mockReaFetch(
-      {
-        ...initialSettings,
-        skinUpdateRepo: "Sabotage1/r2-connector",
-        skinUpdateBranch: "codex/reaprime-workflow-skin",
-        skinUpdateAsset: "workflow-skin.zip",
-        skinUpdatePrerelease: false
-      },
-      {
-        webuiSkins: [{ id: "workflow-skin", name: "WorkFlow", version: "0.1.25", path: "/skins/workflow", isBundled: false }],
-        defaultWebuiSkin: { id: "workflow-skin", name: "WorkFlow", version: "0.1.25", path: "/skins/workflow", isBundled: false },
-        githubLatestTag: "v0.1.20",
-        githubManifestVersion: "0.1.37"
-      }
-    );
-    render(<App />);
-
-    await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
-    await userEvent.click(await screen.findByRole("tab", { name: "Skin settings" }));
-    await userEvent.click(await screen.findByRole("button", { name: "Check for skin updates" }));
-
-    expect(await screen.findByText("Update available: v0.1.37 is available (installed v0.1.25).")).toBeInTheDocument();
-
-    await userEvent.click(await screen.findByRole("button", { name: "Install/update from GitHub release" }));
-
-    expect(await screen.findByRole("status")).toHaveTextContent("Skin installed from committed workflow zip.");
-    expect(fetchState.fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8080/api/v1/webui/skins/install/url",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ url: "https://raw.githubusercontent.com/Sabotage1/r2-connector/codex/reaprime-workflow-skin/skin/workflow-skin/workflow-skin.zip" })
-      })
-    );
-  });
-
-  it("shows downloading update while the configured skin update is installing", async () => {
-    let finishInstall!: () => void;
-    const installWait = new Promise<void>((resolve) => {
-      finishInstall = resolve;
-    });
-    mockReaFetch(
-      {
-        ...initialSettings,
-        skinUpdateRepo: "roy/workflow-skin",
-        skinUpdateAsset: "workflow-skin.zip",
-        skinUpdatePrerelease: false
-      },
-      { githubReleaseInstallWait: installWait }
-    );
-    render(<App />);
-
-    await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
-    await userEvent.click(await screen.findByRole("tab", { name: "Skin settings" }));
-    await userEvent.click(await screen.findByRole("button", { name: "Install/update from GitHub release" }));
-
-    expect(await screen.findByText("Downloading update...")).toBeInTheDocument();
-
-    finishInstall();
-
-    expect(await screen.findByRole("status")).toHaveTextContent("Skin installed from GitHub release.");
-  });
-
-  it("falls back to the committed workflow zip when GitHub release install is missing", async () => {
-    const fetchState = mockReaFetch(
-      {
-        ...initialSettings,
-        skinUpdateRepo: "Sabotage1/r2-connector",
-        skinUpdateAsset: "workflow-skin.zip",
-        skinUpdatePrerelease: false
-      },
-      { failGithubReleaseInstall: true }
-    );
-    render(<App />);
-
-    await userEvent.click(await screen.findByRole("button", { name: "Settings" }));
-    await userEvent.click(await screen.findByRole("tab", { name: "Skin settings" }));
-    await userEvent.click(await screen.findByRole("button", { name: "Install/update from GitHub release" }));
-
-    expect(await screen.findByRole("status")).toHaveTextContent("Skin installed from committed workflow zip.");
-    expect(fetchState.fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8080/api/v1/webui/skins/install/github-release",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ repo: "Sabotage1/r2-connector", asset: "workflow-skin.zip", prerelease: false })
-      })
-    );
-    expect(fetchState.fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8080/api/v1/webui/skins/install/url",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ url: "https://raw.githubusercontent.com/Sabotage1/r2-connector/codex/reaprime-workflow-skin/skin/workflow-skin/workflow-skin.zip" })
-      })
-    );
+    expect(screen.queryByText("Skin updates")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Check for skin updates" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Install/update from GitHub release" })).not.toBeInTheDocument();
+    expect(fetchState.fetchMock).not.toHaveBeenCalledWith("http://localhost:8080/api/v1/webui/skins/update", expect.anything());
+    expect(fetchState.fetchMock).not.toHaveBeenCalledWith("http://localhost:8080/api/v1/webui/skins/install/github-release", expect.anything());
+    expect(fetchState.fetchMock).not.toHaveBeenCalledWith("http://localhost:8080/api/v1/webui/skins/install/url", expect.anything());
   });
 
   it("reveals the current water level when the Water status is pressed", async () => {

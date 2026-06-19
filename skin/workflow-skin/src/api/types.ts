@@ -272,36 +272,6 @@ export interface PluginManifest {
   api?: Array<{ id: string; type: string; data?: JsonMap }>;
 }
 
-export interface WebUIReaMetadata {
-  skinId: string;
-  sourceUrl?: string | null;
-  lastModified?: string | null;
-  etag?: string | null;
-  commitHash?: string | null;
-  installedAt?: string;
-  lastChecked?: string | null;
-}
-
-export interface WebUISkin {
-  id: string;
-  name: string;
-  path: string;
-  isBundled: boolean;
-  description?: string | null;
-  version?: string | null;
-  reaMetadata?: WebUIReaMetadata | null;
-}
-
-export interface WebUISkinActionResult {
-  success?: boolean;
-  message?: string;
-  id?: string;
-  skinId?: string;
-  repo?: string;
-  branch?: string;
-  url?: string;
-}
-
 export interface VisualizerStatus {
   status?: JsonMap | null;
   lastUpload?: JsonMap | null;

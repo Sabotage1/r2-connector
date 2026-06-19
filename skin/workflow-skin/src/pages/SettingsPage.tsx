@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import skinManifest from "../../skin-manifest.json";
 import type {
   De1AdvancedMachineSettings,
   De1MachineCalibration,
@@ -9,13 +8,11 @@ import type {
   PluginManifest,
   SensorListItem,
   UpdateDe1MachineSettings,
-  VisualizerStatus,
-  WebUISkin
+  VisualizerStatus
 } from "../api/types";
 import {
   DEFAULT_COMMUNITY_API_BASE_URL,
   DEFAULT_SKIN_THEMES,
-  DEFAULT_SKIN_UPDATE_BRANCH,
   DEFAULT_R2_MEASURE_DELAY_SECONDS,
   EDITABLE_SKIN_THEME_IDS,
   defaultPresetLabel,
@@ -38,11 +35,6 @@ import {
   topStatusIndicatorIdsForSettings
 } from "../state/skinSettings";
 
-const WORKFLOW_SKIN_ID = "workflow-skin";
-const CURRENT_SKIN_VERSION = typeof skinManifest.version === "string" ? skinManifest.version : "";
-
-type SkinUpdateStatus = { type: "success" | "error"; message: string };
-export type SkinUpdatePhase = "idle" | "checking" | "downloading";
 type SettingsSection = "machine" | "app" | "skin";
 
 const themeColorFields: Array<{ key: keyof Omit<SkinThemePalette, "name">; label: string }> = [
@@ -159,55 +151,6 @@ function visualizerSyncLine(status: VisualizerStatus | null | undefined): string
   return [backResult, forwardResult].filter(Boolean).join(" · ") || "No sync activity";
 }
 
-function skinName(skin: WebUISkin | null | undefined): string {
-  return skin?.name || skin?.id || "Unknown skin";
-}
-
-function installedSkinLine(skin: WebUISkin | null | undefined): string {
-  if (!skin) return "Not listed by ReaPrime";
-  return `${skinName(skin)}${skin.version ? ` v${skin.version}` : ""}`;
-}
-
-function versionParts(value: string): number[] | null {
-  const clean = value.trim().replace(/^v/i, "").split("-", 1)[0];
-  if (!/^\d+(?:\.\d+)*$/.test(clean)) return null;
-  return clean.split(".").map((part) => Number(part));
-}
-
-function compareVersions(left: string, right: string): number | null {
-  const leftParts = versionParts(left);
-  const rightParts = versionParts(right);
-  if (!leftParts || !rightParts) return null;
-  const length = Math.max(leftParts.length, rightParts.length);
-  for (let index = 0; index < length; index += 1) {
-    const leftPart = leftParts[index] ?? 0;
-    const rightPart = rightParts[index] ?? 0;
-    if (leftPart !== rightPart) return leftPart > rightPart ? 1 : -1;
-  }
-  return 0;
-}
-
-function versionLabel(value: string): string {
-  const clean = value.trim().replace(/^v/i, "");
-  return clean ? `v${clean}` : "version unknown";
-}
-
-function skinUpdateLine(skin: WebUISkin | null | undefined, phase: SkinUpdatePhase, availableSkinVersion?: string | null): string {
-  if (phase === "checking") return "Checking for skin updates...";
-  if (phase === "downloading") return "Downloading update...";
-  if (!skin) return "Skin status unavailable.";
-
-  const installedVersion = skin.version?.trim();
-  const referenceVersion = availableSkinVersion?.trim() || CURRENT_SKIN_VERSION;
-  if (!installedVersion || !referenceVersion) return "Skin version unknown.";
-
-  const comparison = compareVersions(installedVersion, referenceVersion);
-  if (comparison === null) return `Skin version ${installedVersion} installed.`;
-  if (comparison < 0) return `Update available: ${versionLabel(referenceVersion)} is available (installed ${versionLabel(installedVersion)}).`;
-  if (comparison > 0) return `Installed skin ${versionLabel(installedVersion)} is newer than this build ${versionLabel(referenceVersion)}.`;
-  return "The skin is up-to-date.";
-}
-
 function brightnessValue(value: number | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return 8;
   return Math.min(100, Math.max(0, Math.round(value)));
@@ -235,17 +178,12 @@ function normalizeDraftSettings(settings: SkinSettings): SkinSettings {
     presetSlotCount,
     presetSlots: ensurePresetSlots(settings.presetSlots, presetSlotCount),
     skinTitle: settings.skinTitle.trim() || "WorkFlow",
-    skinUpdateRepo: settings.skinUpdateRepo.trim(),
-    skinUpdateAsset: settings.skinUpdateAsset.trim() || "workflow-skin.zip",
     mainMenuItems: mainMenuItemsForSettings(settings),
     hiddenMainMenuItemIds: hiddenMainMenuItemIdsForSettings(settings),
     keepScreenAwake: settings.keepScreenAwake !== false,
     screensaverBrightness: brightnessValue(settings.screensaverBrightness),
     autoSleepMinutes: autoSleepValue(settings.autoSleepMinutes),
     r2MeasureDelaySeconds: r2MeasureDelayValue(settings.r2MeasureDelaySeconds),
-    skinAutoUpdateEnabled: Boolean(settings.skinAutoUpdateEnabled),
-    skinUpdatePrerelease: Boolean(settings.skinUpdatePrerelease),
-    skinUpdateBranch: settings.skinUpdateBranch.trim() || DEFAULT_SKIN_UPDATE_BRANCH,
     communityApiBaseUrl: settings.communityApiBaseUrl.trim() || DEFAULT_COMMUNITY_API_BASE_URL,
     skinFontScale: skinFontScaleValue(settings.skinFontScale),
     skinThemeId: settings.skinThemeId,
@@ -257,11 +195,6 @@ function normalizeDraftSettings(settings: SkinSettings): SkinSettings {
   return normalizeSkinSettings(next);
 }
 
-function sourceLine(skin: WebUISkin | null | undefined): string {
-  const source = skin?.reaMetadata?.sourceUrl;
-  return source ? `Remote source: ${source}` : "Remote source not registered";
-}
-
 export function SettingsPage({
   settings,
   r2Sensor,
@@ -270,16 +203,8 @@ export function SettingsPage({
   visualizerPlugin,
   visualizerSettings,
   visualizerStatus,
-  webuiSkins,
-  defaultWebuiSkin,
-  skinUpdateStatus,
-  skinUpdateBusy,
-  skinUpdatePhase = "idle",
-  availableSkinVersion,
   r2RefreshBusy = false,
   onRefreshR2,
-  onCheckSkinUpdates,
-  onInstallSkinUpdate,
   machineSettings,
   advancedMachineSettings,
   machineCalibration,
@@ -296,16 +221,8 @@ export function SettingsPage({
   visualizerPlugin?: PluginManifest | null;
   visualizerSettings?: JsonMap | null;
   visualizerStatus?: VisualizerStatus | null;
-  webuiSkins?: WebUISkin[];
-  defaultWebuiSkin?: WebUISkin | null;
-  skinUpdateStatus?: SkinUpdateStatus | null;
-  skinUpdateBusy?: boolean;
-  skinUpdatePhase?: SkinUpdatePhase;
-  availableSkinVersion?: string | null;
   r2RefreshBusy?: boolean;
   onRefreshR2?: () => Promise<void> | void;
-  onCheckSkinUpdates?: () => Promise<void> | void;
-  onInstallSkinUpdate?: () => Promise<void> | void;
   onSaveMachineSettings?: (
     machineSettings: UpdateDe1MachineSettings,
     advancedMachineSettings: De1AdvancedMachineSettings,
@@ -329,7 +246,6 @@ export function SettingsPage({
   const r2MeasureDelaySeconds = r2MeasureDelayValue(draftSettings.r2MeasureDelaySeconds);
   const skinFontScale = skinFontScaleValue(draftSettings.skinFontScale);
   const skinThemes = skinThemesForSettings(draftSettings);
-  const workflowSkin = webuiSkins?.find((skin) => skin.id === WORKFLOW_SKIN_ID) ?? (defaultWebuiSkin?.id === WORKFLOW_SKIN_ID ? defaultWebuiSkin : null);
 
   useEffect(() => {
     setDraftSettings(settings);
@@ -883,70 +799,16 @@ export function SettingsPage({
             </div>
           </div>
           <div className="list-row settings-update-row">
-            <strong>Skin updates</strong>
-            <span className={skinUpdatePhase === "idle" ? "settings-update-state" : "settings-update-state busy"}>
-              {skinUpdateLine(workflowSkin, skinUpdatePhase, availableSkinVersion)}
-            </span>
-            <span>Installed: {installedSkinLine(workflowSkin)}</span>
-            <span>Default skin: {skinName(defaultWebuiSkin)}</span>
-            <span>{sourceLine(workflowSkin)}</span>
-            <label className="inline-toggle">
+            <strong>Community</strong>
+            <span>Profile recommendations use the WorkFlow community service.</span>
+            <label className="settings-field">
+              Community API
               <input
-                type="checkbox"
-                checked={draftSettings.skinAutoUpdateEnabled}
-                onChange={(event) => updateDraftSettings({ skinAutoUpdateEnabled: event.target.checked })}
+                aria-label="Community API"
+                value={draftSettings.communityApiBaseUrl}
+                onChange={(event) => updateDraftSettings({ communityApiBaseUrl: event.target.value })}
               />
-              Auto update this skin on startup
             </label>
-            <div className="settings-update-grid">
-              <label className="settings-field">
-                GitHub repo
-                <input value={draftSettings.skinUpdateRepo} placeholder="owner/repo" onChange={(event) => updateDraftSettings({ skinUpdateRepo: event.target.value })} />
-              </label>
-              <label className="settings-field">
-                GitHub branch
-                <input
-                  value={draftSettings.skinUpdateBranch}
-                  placeholder="main"
-                  onChange={(event) => updateDraftSettings({ skinUpdateBranch: event.target.value })}
-                />
-              </label>
-              <label className="settings-field">
-                Release asset
-                <input value={draftSettings.skinUpdateAsset} placeholder="workflow-skin.zip" onChange={(event) => updateDraftSettings({ skinUpdateAsset: event.target.value })} />
-              </label>
-              <label className="settings-field">
-                Community API
-                <input
-                  aria-label="Community API"
-                  value={draftSettings.communityApiBaseUrl}
-                  onChange={(event) => updateDraftSettings({ communityApiBaseUrl: event.target.value })}
-                />
-              </label>
-              <label className="inline-toggle settings-update-prerelease">
-                <input
-                  type="checkbox"
-                  checked={draftSettings.skinUpdatePrerelease}
-                  onChange={(event) => updateDraftSettings({ skinUpdatePrerelease: event.target.checked })}
-                />
-                Include prereleases
-              </label>
-            </div>
-            <div className="profile-workflow-controls">
-              <button type="button" className="primary-button" disabled={skinUpdateBusy || !onCheckSkinUpdates} onClick={() => void onCheckSkinUpdates?.()}>
-                Check for skin updates
-              </button>
-              <button
-                type="button"
-                className="ghost-button"
-                disabled={skinUpdateBusy || !onInstallSkinUpdate || !draftSettings.skinUpdateRepo.trim() || settingsChanged}
-                onClick={() => void onInstallSkinUpdate?.()}
-              >
-                Install/update from GitHub release
-              </button>
-            </div>
-            {settingsChanged && <span className="settings-draft-status">Save settings before installing GitHub release updates.</span>}
-            {skinUpdateStatus && <span className={skinUpdateStatus.type === "error" ? "settings-update-status error" : "settings-update-status"}>{skinUpdateStatus.message}</span>}
           </div>
         </section>
       )}

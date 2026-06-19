@@ -24,11 +24,6 @@ describe("skin settings", () => {
     expect(defaultSkinSettings.startupProfileId).toBeUndefined();
     expect(defaultSkinSettings.r2SensorId).toBeUndefined();
     expect(defaultSkinSettings.shownProfileIds).toEqual([]);
-    expect(defaultSkinSettings.skinAutoUpdateEnabled).toBe(false);
-    expect(defaultSkinSettings.skinUpdateRepo).toBe("Sabotage1/r2-connector");
-    expect(defaultSkinSettings.skinUpdateBranch).toBe("codex/reaprime-workflow-skin");
-    expect(defaultSkinSettings.skinUpdateAsset).toBe("workflow-skin.zip");
-    expect(defaultSkinSettings.skinUpdatePrerelease).toBe(false);
     expect((defaultSkinSettings as { communityApiBaseUrl?: string }).communityApiBaseUrl).toBe("https://workflow-skin-community.sabotage1.workers.dev");
     expect(defaultSkinSettings.autoSleepMinutes).toBe(30);
     expect(defaultSkinSettings.r2MeasureDelaySeconds).toBe(20);
@@ -61,11 +56,6 @@ describe("skin settings", () => {
         skinTitle: "Roy's Decent",
         startupProfileId: "p2",
         r2SensorId: "sensor-r2",
-        skinAutoUpdateEnabled: true,
-        skinUpdateRepo: " roy/workflow-skin ",
-        skinUpdateBranch: " release/candidate ",
-        skinUpdateAsset: " workflow-skin.zip ",
-        skinUpdatePrerelease: true,
         communityApiBaseUrl: " https://example.com/community ",
         autoSleepMinutes: 999,
         r2MeasureDelaySeconds: 44.7,
@@ -97,11 +87,6 @@ describe("skin settings", () => {
     expect(settings.skinTitle).toBe("Roy's Decent");
     expect(settings.startupProfileId).toBe("p2");
     expect(settings.r2SensorId).toBe("sensor-r2");
-    expect(settings.skinAutoUpdateEnabled).toBe(true);
-    expect(settings.skinUpdateRepo).toBe("roy/workflow-skin");
-    expect(settings.skinUpdateBranch).toBe("release/candidate");
-    expect(settings.skinUpdateAsset).toBe("workflow-skin.zip");
-    expect(settings.skinUpdatePrerelease).toBe(true);
     expect((settings as { communityApiBaseUrl?: string }).communityApiBaseUrl).toBe("https://example.com/community");
     expect(settings.autoSleepMinutes).toBe(240);
     expect(settings.r2MeasureDelaySeconds).toBe(45);

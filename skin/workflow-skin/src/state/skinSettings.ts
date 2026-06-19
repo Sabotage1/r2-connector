@@ -64,11 +64,6 @@ export interface SkinSettings {
   screensaverBrightness?: number;
   autoSleepMinutes: number;
   r2MeasureDelaySeconds: number;
-  skinAutoUpdateEnabled: boolean;
-  skinUpdateRepo: string;
-  skinUpdateBranch: string;
-  skinUpdateAsset: string;
-  skinUpdatePrerelease: boolean;
   communityApiBaseUrl: string;
   skinFontScale: number;
   skinThemeId: SkinThemeId;
@@ -78,8 +73,6 @@ export interface SkinSettings {
 
 export const SKIN_NAMESPACE = "workflow-skin";
 export const SETTINGS_KEY = "settings";
-export const DEFAULT_SKIN_UPDATE_REPO = "Sabotage1/r2-connector";
-export const DEFAULT_SKIN_UPDATE_BRANCH = "codex/reaprime-workflow-skin";
 export const DEFAULT_COMMUNITY_API_BASE_URL = "https://workflow-skin-community.sabotage1.workers.dev";
 export const MIN_PRESET_SLOT_COUNT = 1;
 export const MAX_PRESET_SLOT_COUNT = 8;
@@ -171,11 +164,6 @@ export function createDefaultSkinSettings(): SkinSettings {
     screensaverBrightness: 8,
     autoSleepMinutes: DEFAULT_AUTO_SLEEP_MINUTES,
     r2MeasureDelaySeconds: DEFAULT_R2_MEASURE_DELAY_SECONDS,
-    skinAutoUpdateEnabled: false,
-    skinUpdateRepo: DEFAULT_SKIN_UPDATE_REPO,
-    skinUpdateBranch: DEFAULT_SKIN_UPDATE_BRANCH,
-    skinUpdateAsset: "workflow-skin.zip",
-    skinUpdatePrerelease: false,
     communityApiBaseUrl: DEFAULT_COMMUNITY_API_BASE_URL,
     skinFontScale: 100,
     skinThemeId: "default",
@@ -405,11 +393,6 @@ export function normalizeSkinSettings(value: unknown): SkinSettings {
         : 8,
     autoSleepMinutes: normalizeAutoSleepMinutes(value.autoSleepMinutes),
     r2MeasureDelaySeconds: normalizeR2MeasureDelaySeconds(value.r2MeasureDelaySeconds),
-    skinAutoUpdateEnabled: typeof value.skinAutoUpdateEnabled === "boolean" ? value.skinAutoUpdateEnabled : false,
-    skinUpdateRepo: normalizeString(value.skinUpdateRepo),
-    skinUpdateBranch: normalizeString(value.skinUpdateBranch, DEFAULT_SKIN_UPDATE_BRANCH),
-    skinUpdateAsset: normalizeString(value.skinUpdateAsset, "workflow-skin.zip"),
-    skinUpdatePrerelease: typeof value.skinUpdatePrerelease === "boolean" ? value.skinUpdatePrerelease : false,
     communityApiBaseUrl: normalizeRequiredString(value.communityApiBaseUrl, DEFAULT_COMMUNITY_API_BASE_URL),
     skinFontScale: normalizeSkinFontScale(value.skinFontScale),
     skinThemeId: normalizeSkinThemeId(value.skinThemeId),

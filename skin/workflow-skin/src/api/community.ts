@@ -8,6 +8,10 @@ export interface CommunityWritePayload {
   evidence?: CommunityShotEvidence;
 }
 
+export interface CommunityDeletePayload {
+  ownerKey: string;
+}
+
 export class CommunityApiError extends Error {
   constructor(
     message: string,
@@ -70,6 +74,13 @@ export class CommunityApi {
   update(id: string, payload: CommunityWritePayload) {
     return this.request<{ recommendation: CommunityRecommendation; index: CommunityIndex }>(`/api/recommendations/${encodeURIComponent(id)}`, {
       method: "PUT",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  delete(id: string, payload: CommunityDeletePayload) {
+    return this.request<{ id: string; index: CommunityIndex }>(`/api/recommendations/${encodeURIComponent(id)}`, {
+      method: "DELETE",
       body: JSON.stringify(payload)
     });
   }

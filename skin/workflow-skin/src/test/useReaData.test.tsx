@@ -18,8 +18,6 @@ function createApi() {
     getMachineState: vi.fn().mockResolvedValue(null),
     getDisplay: vi.fn().mockResolvedValue(null),
     listPlugins: vi.fn().mockResolvedValue([]),
-    listWebUISkins: vi.fn().mockResolvedValue([]),
-    getDefaultWebUISkin: vi.fn().mockResolvedValue(null),
     listBatches: vi.fn().mockResolvedValue([])
   };
 }

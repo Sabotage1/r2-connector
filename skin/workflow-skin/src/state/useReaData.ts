@@ -18,7 +18,6 @@ import type {
   ShotRecord,
   SteamRecord,
   VisualizerStatus,
-  WebUISkin,
   Workflow
 } from "../api/types";
 import { buildBag, type Bag } from "../lib/bags";
@@ -38,8 +37,6 @@ export function useReaData(api: ReaPrimeApi) {
   const [plugins, setPlugins] = useState<PluginManifest[]>([]);
   const [visualizerSettings, setVisualizerSettings] = useState<JsonMap | null>(null);
   const [visualizerStatus, setVisualizerStatus] = useState<VisualizerStatus | null>(null);
-  const [webuiSkins, setWebuiSkins] = useState<WebUISkin[]>([]);
-  const [defaultWebuiSkin, setDefaultWebuiSkin] = useState<WebUISkin | null>(null);
   const [displayState, setDisplayState] = useState<DisplayState | null>(null);
   const [machineSettings, setMachineSettings] = useState<De1MachineSettings | null>(null);
   const [advancedMachineSettings, setAdvancedMachineSettings] = useState<De1AdvancedMachineSettings | null>(null);
@@ -69,9 +66,7 @@ export function useReaData(api: ReaPrimeApi) {
         de1Settings,
         de1AdvancedSettings,
         de1Calibration,
-        pluginList,
-        skinList,
-        defaultSkin
+        pluginList
       ] = await Promise.all([
         api.listProfiles(),
         api.getWorkflow(),
@@ -88,9 +83,7 @@ export function useReaData(api: ReaPrimeApi) {
         api.getMachineSettings().catch(() => null as De1MachineSettings | null),
         api.getAdvancedMachineSettings().catch(() => null as De1AdvancedMachineSettings | null),
         api.getMachineCalibration().catch(() => null as De1MachineCalibration | null),
-        api.listPlugins().catch(() => [] as PluginManifest[]),
-        api.listWebUISkins().catch(() => [] as WebUISkin[]),
-        api.getDefaultWebUISkin().catch(() => null as WebUISkin | null)
+        api.listPlugins().catch(() => [] as PluginManifest[])
       ]);
       const batchLists = await Promise.all(beanList.map((bean) => api.listBatches(bean.id)));
       const visualizerPlugin = pluginList.find((plugin) => plugin.id === "visualizer.reaplugin");
@@ -114,8 +107,6 @@ export function useReaData(api: ReaPrimeApi) {
       setPlugins(pluginList);
       setVisualizerSettings(pluginSettings);
       setVisualizerStatus(visualizerPlugin ? { status, lastUpload, backSyncStatus, forwardSyncStatus } : null);
-      setWebuiSkins(skinList);
-      setDefaultWebuiSkin(defaultSkin);
       setDisplayState(display);
       setMachineSettings(de1Settings);
       setAdvancedMachineSettings(de1AdvancedSettings);
@@ -178,8 +169,6 @@ export function useReaData(api: ReaPrimeApi) {
     plugins,
     visualizerSettings,
     visualizerStatus,
-    webuiSkins,
-    defaultWebuiSkin,
     displayState,
     machineSettings,
     advancedMachineSettings,

@@ -106,6 +106,22 @@ describe("CommunityApi", () => {
     );
   });
 
+  it("deletes recommendations with an encoded id and owner key body", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ id: "rec/1", index: { version: 1, updatedAt: "now", items: [] } }), { status: 200 })
+    );
+
+    await new CommunityApi("https://worker.example").delete("rec/1", { ownerKey: "owner-key" });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "https://worker.example/api/recommendations/rec%2F1",
+      expect.objectContaining({
+        method: "DELETE",
+        body: JSON.stringify({ ownerKey: "owner-key" })
+      })
+    );
+  });
+
   it("exposes response status on Worker errors", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ error: "not found" }), { status: 404 }));
     await expect(new CommunityApi("https://worker.example").download("missing")).rejects.toMatchObject({

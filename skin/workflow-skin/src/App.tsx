@@ -35,7 +35,6 @@ import type {
   ShotRecord,
   ShotSnapshot,
   UpdateDe1MachineSettings,
-  WebUISkin,
   Workflow
 } from "./api/types";
 import { uploadShotToVisualizer } from "./api/visualizer";
@@ -59,7 +58,7 @@ import { LivePage } from "./pages/LivePage";
 import { ProfilesPage } from "./pages/ProfilesPage";
 import { ReviewPage } from "./pages/ReviewPage";
 import { ScreensaverPage } from "./pages/ScreensaverPage";
-import { SettingsPage, type SkinUpdatePhase } from "./pages/SettingsPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { SteamPage } from "./pages/SteamPage";
 import {
   MAIN_MENU_ITEM_LABELS,
@@ -86,12 +85,10 @@ import { useLiveTelemetry } from "./state/useLiveTelemetry";
 import { useReaData } from "./state/useReaData";
 
 type Page = MainMenuItemId | "screensaver";
-type SkinUpdateSource = "release" | "branch";
 
 const POST_ACTIVITY_ROUTE_DELAY_MS = 1000;
 const ACTIVE_MACHINE_STATE_POLL_MS = 500;
 const SCALE_RECONNECT_COOLDOWN_MS = 30_000;
-const WORKFLOW_SKIN_ID = "workflow-skin";
 const CURRENT_SKIN_VERSION = typeof skinManifest.version === "string" ? skinManifest.version : "";
 
 interface TopStatusIndicator {
@@ -118,134 +115,9 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function statusSentence(message: unknown, fallback: string): string {
-  const text = typeof message === "string" && message.trim() ? message.trim() : fallback;
-  return /[.!?]$/.test(text) ? text : `${text}.`;
-}
-
-function githubReleaseMissing(error: unknown): boolean {
-  const message = errorMessage(error).toLowerCase();
-  return message.includes("github-release") && (message.includes("404") || message.includes("not found") || message.includes("failed to fetch github release"));
-}
-
-function rawGithubBranchPath(branch: string): string | null {
-  const cleanBranch = branch.trim().replace(/^\/+|\/+$/g, "");
-  if (!cleanBranch || cleanBranch.includes("..") || !/^[A-Za-z0-9._/-]+$/.test(cleanBranch)) return null;
-  return cleanBranch
-    .split("/")
-    .filter(Boolean)
-    .map((part) => encodeURIComponent(part))
-    .join("/");
-}
-
-function githubWorkflowSkinFileUrl(repo: string, branch: string, path: string): string | null {
-  const normalizedRepo = normalizedGithubRepo(repo);
-  const branchPath = rawGithubBranchPath(branch);
-  if (!normalizedRepo || !branchPath || !path) return null;
-  return `https://raw.githubusercontent.com/${normalizedRepo}/${branchPath}/skin/workflow-skin/${path
-    .split("/")
-    .map((part) => encodeURIComponent(part))
-    .join("/")}`;
-}
-
-function githubWorkflowZipUrl(repo: string, branch: string, asset: string): string | null {
-  const cleanAsset = asset.trim() || "workflow-skin.zip";
-
-  if (!/^[A-Za-z0-9_.-]+\.zip$/.test(cleanAsset)) return null;
-
-  return githubWorkflowSkinFileUrl(repo, branch, cleanAsset);
-}
-
-function normalizedGithubRepo(repo: string): string | null {
-  const normalizedRepo = repo
-    .trim()
-    .replace(/^https:\/\/github\.com\//i, "")
-    .replace(/\.git$/i, "")
-    .replace(/^\/+|\/+$/g, "");
-
-  return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(normalizedRepo) ? normalizedRepo : null;
-}
-
-function versionFromGithubTag(tag: unknown): string | null {
-  if (typeof tag !== "string") return null;
-  const clean = tag.trim().replace(/^v/i, "");
-  return clean ? clean : null;
-}
-
-function releaseVersionFromPayload(payload: unknown): string | null {
-  const releases = Array.isArray(payload) ? payload : [payload];
-  for (const release of releases) {
-    if (!release || typeof release !== "object") continue;
-    if ((release as { draft?: unknown }).draft === true) continue;
-    const version = versionFromGithubTag((release as { tag_name?: unknown }).tag_name);
-    if (version) return version;
-  }
-  return null;
-}
-
-async function fetchLatestGithubReleaseVersion(repo: string, includePrerelease: boolean): Promise<string | null> {
-  const normalizedRepo = normalizedGithubRepo(repo);
-  if (!normalizedRepo) return null;
-
-  const url = includePrerelease
-    ? `https://api.github.com/repos/${normalizedRepo}/releases`
-    : `https://api.github.com/repos/${normalizedRepo}/releases/latest`;
-  const response = await fetch(url, { headers: { Accept: "application/vnd.github+json" } });
-  if (!response.ok) throw new Error(`GitHub release check failed: ${response.status}`);
-  return releaseVersionFromPayload(await response.json());
-}
-
-function manifestVersionFromPayload(payload: unknown): string | null {
-  if (!payload || typeof payload !== "object") return null;
-  const version = (payload as { version?: unknown }).version;
-  return typeof version === "string" && version.trim() ? version.trim() : null;
-}
-
-async function fetchGithubSkinManifestVersion(repo: string, branch: string): Promise<string | null> {
-  const url = githubWorkflowSkinFileUrl(repo, branch, "skin-manifest.json");
-  if (!url) return null;
-  const response = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!response.ok) throw new Error(`GitHub skin manifest check failed: ${response.status}`);
-  return manifestVersionFromPayload(await response.json());
-}
-
-function versionPartsForBest(value: string): number[] | null {
-  const clean = value.trim().replace(/^v/i, "").split("-", 1)[0];
-  if (!/^\d+(?:\.\d+)*$/.test(clean)) return null;
-  return clean.split(".").map((part) => Number(part));
-}
-
-function compareVersionStrings(left: string, right: string): number | null {
-  const leftParts = versionPartsForBest(left);
-  const rightParts = versionPartsForBest(right);
-  if (!leftParts || !rightParts) return null;
-  const length = Math.max(leftParts.length, rightParts.length);
-  for (let index = 0; index < length; index += 1) {
-    const leftPart = leftParts[index] ?? 0;
-    const rightPart = rightParts[index] ?? 0;
-    if (leftPart !== rightPart) return leftPart > rightPart ? 1 : -1;
-  }
-  return 0;
-}
-
-function newestSkinUpdate(releaseVersion: string | null | undefined, manifestVersion: string | null | undefined): { version: string; source: SkinUpdateSource } | null {
-  const release = releaseVersion?.trim();
-  const manifest = manifestVersion?.trim();
-  if (!release && !manifest) return null;
-  if (!release) return { version: manifest!, source: "branch" };
-  if (!manifest) return { version: release, source: "release" };
-
-  const comparison = compareVersionStrings(manifest, release);
-  return comparison !== null && comparison > 0 ? { version: manifest, source: "branch" } : { version: release, source: "release" };
-}
-
 function versionLabel(value: string | null | undefined): string {
   const clean = value?.trim().replace(/^v/i, "");
   return clean ? `v${clean}` : "Version unknown";
-}
-
-function workflowSkinFromList(webuiSkins: WebUISkin[] | undefined, defaultWebuiSkin: WebUISkin | null | undefined): WebUISkin | null {
-  return webuiSkins?.find((skin) => skin.id === WORKFLOW_SKIN_ID) ?? (defaultWebuiSkin?.id === WORKFLOW_SKIN_ID ? defaultWebuiSkin : null);
 }
 
 function dateOnlyToIsoDateTime(value: string | undefined): string | undefined {
@@ -698,10 +570,6 @@ export function App() {
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [sleepPending, setSleepPending] = useState(false);
   const [brewPending, setBrewPending] = useState(false);
-  const [skinUpdateBusy, setSkinUpdateBusy] = useState(false);
-  const [skinUpdatePhase, setSkinUpdatePhase] = useState<SkinUpdatePhase>("idle");
-  const [availableSkinVersion, setAvailableSkinVersion] = useState<string | null>(null);
-  const [availableSkinUpdateSource, setAvailableSkinUpdateSource] = useState<SkinUpdateSource | null>(null);
   const [expandedStatusId, setExpandedStatusId] = useState<TopStatusIndicatorId | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [lastUseAt, setLastUseAt] = useState(() => Date.now());
@@ -725,7 +593,6 @@ export function App() {
     complete: false
   });
   const startupConnectRef = useRef(false);
-  const skinAutoUpdateRef = useRef(false);
   const knownLatestShotIdRef = useRef<string | null | undefined>(undefined);
   const autoReadR2ShotIdRef = useRef<string | null>(null);
   const [autoReadR2ShotId, setAutoReadR2ShotId] = useState<string | null>(null);
@@ -801,10 +668,7 @@ export function App() {
     () => visibleMainMenuItems(data.settings).filter((itemId) => itemId !== "live" || brewingCoffee || holdingCompletedBrewOnLivePage),
     [brewingCoffee, data.settings.mainMenuItems, data.settings.hiddenMainMenuItemIds, holdingCompletedBrewOnLivePage]
   );
-  const workflowSkin = useMemo(() => workflowSkinFromList(data.webuiSkins, data.defaultWebuiSkin), [data.webuiSkins, data.defaultWebuiSkin]);
-  const menuSkinVersion = workflowSkin?.version?.trim() || CURRENT_SKIN_VERSION;
-  const menuSkinUpdateAvailable =
-    Boolean(menuSkinVersion && availableSkinVersion) && compareVersionStrings(menuSkinVersion, availableSkinVersion ?? "") === -1;
+  const menuSkinVersion = CURRENT_SKIN_VERSION;
   const topStatusIndicators = useMemo(
     () =>
       buildTopStatusIndicators({
@@ -1027,6 +891,23 @@ export function App() {
       setCommunityRecommendations(result.index.items);
     },
     [api, communityApi, data.bags, data.grinders, data.profiles, data.shots, uploadedCommunityProfiles]
+  );
+
+  const deleteCommunityUpload = useCallback(
+    async (recommendation: CommunityRecommendation) => {
+      const ownerKey = await getOrCreateCommunityOwnerKey(api);
+      const latestUploads = await loadUploadedCommunityProfiles(api);
+      const localUpload =
+        latestUploads.find((item) => item.recommendationId === recommendation.id) ?? uploadedCommunityProfiles.find((item) => item.recommendationId === recommendation.id);
+      if (!localUpload) throw new Error("This recommendation is not owned by this machine.");
+
+      const result = await communityApi.delete(recommendation.id, { ownerKey });
+      const next = latestUploads.filter((item) => item.recommendationId !== recommendation.id);
+      await saveUploadedCommunityProfiles(api, next);
+      setUploadedCommunityProfiles(next);
+      setCommunityRecommendations(result.index.items);
+    },
+    [api, communityApi, uploadedCommunityProfiles]
   );
 
   const recommendHistoryShot = (shot: ShotRecord) => {
@@ -1432,134 +1313,6 @@ export function App() {
       setR2RefreshBusy(false);
     }
   };
-
-  const checkSkinUpdates = async (reportStatus = true) => {
-    setSkinUpdateBusy(true);
-    setSkinUpdatePhase("checking");
-    try {
-      const result = await api.updateWebUISkins();
-      const repo = data.settings.skinUpdateRepo.trim();
-      const branch = data.settings.skinUpdateBranch.trim();
-      if (repo) {
-        const [releaseVersion, manifestVersion] = await Promise.all([
-          fetchLatestGithubReleaseVersion(repo, data.settings.skinUpdatePrerelease).catch(() => null),
-          fetchGithubSkinManifestVersion(repo, branch).catch(() => null)
-        ]);
-        const update = newestSkinUpdate(releaseVersion, manifestVersion);
-        setAvailableSkinVersion(update?.version ?? null);
-        setAvailableSkinUpdateSource(update?.source ?? null);
-      } else {
-        setAvailableSkinVersion(null);
-        setAvailableSkinUpdateSource(null);
-      }
-      await data.refresh();
-      if (reportStatus) setStatus({ type: "success", message: statusSentence(result.message, "Skin update check completed") });
-    } catch (error) {
-      setStatus({ type: "error", message: `Could not check skin updates: ${errorMessage(error)}` });
-      throw error;
-    } finally {
-      setSkinUpdateBusy(false);
-      setSkinUpdatePhase("idle");
-    }
-  };
-
-  useEffect(() => {
-    if (!data.loaded) return;
-    const repo = data.settings.skinUpdateRepo.trim();
-    const branch = data.settings.skinUpdateBranch.trim();
-    if (!repo) {
-      setAvailableSkinVersion(null);
-      setAvailableSkinUpdateSource(null);
-      return;
-    }
-    setAvailableSkinUpdateSource(null);
-
-    let canceled = false;
-    const refreshAvailableVersion = async () => {
-      const [releaseVersion, manifestVersion] = await Promise.all([
-        fetchLatestGithubReleaseVersion(repo, data.settings.skinUpdatePrerelease).catch(() => null),
-        fetchGithubSkinManifestVersion(repo, branch).catch(() => null)
-      ]);
-      if (canceled) return;
-      const update = newestSkinUpdate(releaseVersion, manifestVersion);
-      setAvailableSkinVersion(update?.version ?? null);
-    };
-
-    void refreshAvailableVersion();
-    return () => {
-      canceled = true;
-    };
-  }, [data.loaded, data.settings.skinUpdateRepo, data.settings.skinUpdateBranch, data.settings.skinUpdatePrerelease]);
-
-  const installSkinUpdate = async (reportStatus = true) => {
-    const repo = data.settings.skinUpdateRepo.trim();
-    if (!repo) {
-      setStatus({ type: "error", message: "Add a GitHub repo before installing skin updates." });
-      return;
-    }
-
-    setSkinUpdateBusy(true);
-    setSkinUpdatePhase("downloading");
-    try {
-      const asset = data.settings.skinUpdateAsset.trim();
-      const branch = data.settings.skinUpdateBranch.trim();
-      const branchZipUrl = availableSkinUpdateSource === "branch" ? githubWorkflowZipUrl(repo, branch, asset) : null;
-      if (branchZipUrl) {
-        const result = await api.installSkinFromUrl({ url: branchZipUrl });
-        await data.refresh();
-        if (reportStatus) setStatus({ type: "success", message: statusSentence(result.message, "Skin installed from committed workflow zip") });
-        return;
-      }
-      const result = await api.installSkinFromGithubRelease({
-        repo,
-        ...(asset ? { asset } : {}),
-        prerelease: data.settings.skinUpdatePrerelease
-      });
-      await data.refresh();
-      if (reportStatus) setStatus({ type: "success", message: statusSentence(result.message, "Skin installed from GitHub release") });
-    } catch (error) {
-      const asset = data.settings.skinUpdateAsset.trim();
-      const branch = data.settings.skinUpdateBranch.trim();
-      const fallbackUrl = githubReleaseMissing(error) ? githubWorkflowZipUrl(repo, branch, asset) : null;
-      if (fallbackUrl) {
-        try {
-          const result = await api.installSkinFromUrl({ url: fallbackUrl });
-          await data.refresh();
-          if (reportStatus) setStatus({ type: "success", message: statusSentence(result.message, "Skin installed from committed workflow zip") });
-          return;
-        } catch (fallbackError) {
-          setStatus({ type: "error", message: `Could not install skin update: ${errorMessage(fallbackError)}` });
-          throw fallbackError;
-        }
-      }
-      setStatus({ type: "error", message: `Could not install skin update: ${errorMessage(error)}` });
-      throw error;
-    } finally {
-      setSkinUpdateBusy(false);
-      setSkinUpdatePhase("idle");
-    }
-  };
-
-  useEffect(() => {
-    if (skinAutoUpdateRef.current || !data.loaded || !data.settings.skinAutoUpdateEnabled) return;
-    skinAutoUpdateRef.current = true;
-
-    const runAutoUpdate = async () => {
-      try {
-        if (data.settings.skinUpdateRepo.trim()) {
-          await installSkinUpdate(false);
-          setStatus({ type: "success", message: "Skin auto-update checked from GitHub release." });
-        } else {
-          await checkSkinUpdates(false);
-          setStatus({ type: "success", message: "Skin auto-update checked." });
-        }
-      } catch {
-        // The action helper already writes a user-visible error.
-      }
-    };
-
-    void runAutoUpdate();
-  }, [data.loaded, data.settings.skinAutoUpdateEnabled]);
 
   const saveProfile = async (profileId: string, profile: Profile) => {
     try {
@@ -2119,13 +1872,8 @@ export function App() {
           );
         })}
         {!data.settings.menuCollapsed && (
-          <div
-            className={menuSkinUpdateAvailable ? "menu-version-footer update-available" : "menu-version-footer latest"}
-            aria-label="Skin version"
-            title={menuSkinUpdateAvailable ? `Update available: ${versionLabel(availableSkinVersion)}` : "Skin is up to date"}
-          >
+          <div className="menu-version-footer latest" aria-label="Skin version" title="Skin version">
             <span>{versionLabel(menuSkinVersion)}</span>
-            {menuSkinUpdateAvailable && <strong>Update {versionLabel(availableSkinVersion)}</strong>}
           </div>
         )}
       </nav>
@@ -2213,6 +1961,7 @@ export function App() {
               grinders={data.grinders ?? []}
               defaultGrinderId={data.settings.defaultGrinderId ?? data.settings.lastGrinderId}
               onLoadShot={(shotId) => api.getShot(shotId)}
+              onRecommendShot={recommendHistoryShot}
             />
           ) : (
             <div className="panel wide">
@@ -2285,6 +2034,7 @@ export function App() {
             onDownload={downloadCommunityProfile}
             onUpload={uploadCommunityProfile}
             onEditUpload={editCommunityUpload}
+            onDeleteUpload={deleteCommunityUpload}
             initialDraft={communityInitialDraft}
             onInitialDraftApplied={clearCommunityInitialDraft}
           />
@@ -2300,18 +2050,10 @@ export function App() {
             visualizerPlugin={visualizerPlugin}
             visualizerSettings={data.visualizerSettings}
             visualizerStatus={data.visualizerStatus}
-            webuiSkins={data.webuiSkins}
-            defaultWebuiSkin={data.defaultWebuiSkin}
-            skinUpdateStatus={status}
-            skinUpdateBusy={skinUpdateBusy}
-            skinUpdatePhase={skinUpdatePhase}
-            availableSkinVersion={availableSkinVersion}
             r2RefreshBusy={r2RefreshBusy}
             onRefreshR2={refreshR2Sensor}
             onSaveMachineSettings={saveMachineSettings}
             onResetMachineSettings={resetMachineSettings}
-            onCheckSkinUpdates={() => checkSkinUpdates()}
-            onInstallSkinUpdate={() => installSkinUpdate()}
             onUpdateSettings={(next) => void persistSettings(next, "Settings saved.")}
           />
         )}
