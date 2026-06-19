@@ -172,7 +172,7 @@ export function HistoryPage({
         const rating = shotTasteRating(shot);
         const tone = rating === null ? "red" : tasteTone(rating);
         const golden = isGoldenShot(shot);
-        const rowClassName = ["list-row", "history-shot-row", `taste-${tone}`, golden ? "golden" : ""].filter(Boolean).join(" ");
+        const rowClassName = ["list-row", "history-shot-row", "history-shot-row-compact", `taste-${tone}`, golden ? "golden" : ""].filter(Boolean).join(" ");
         const title = profileTitle(shot);
         return (
           <div className="history-shot-entry" key={shot.id}>

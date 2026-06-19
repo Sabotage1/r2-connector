@@ -126,17 +126,37 @@ function recommendationRating(value: unknown): number | null {
   return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 5 ? value : null;
 }
 
+function roundedStarRating(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 1 || value > 5) return null;
+  return Math.min(5, Math.ceil(value * 2) / 2);
+}
+
+function formatStarRating(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
 function ratingLabel(value: unknown): string | undefined {
-  const rating = recommendationRating(value);
-  return rating === null ? undefined : `${rating} out of 5 stars`;
+  const rating = roundedStarRating(value);
+  return rating === null ? undefined : `${formatStarRating(rating)} out of 5 stars`;
 }
 
 function StarRating({ value }: { value: unknown }) {
-  const rating = recommendationRating(value);
+  const rating = roundedStarRating(value);
   if (rating === null) return null;
+  const fullStars = Math.floor(rating);
+  const hasHalfStar = rating % 1 === 0.5;
   return (
-    <span className="community-star-rating" aria-label={`Recommendation rating ${rating} out of 5 stars`}>
-      {"⭐".repeat(rating)}
+    <span className="community-star-rating" aria-label={`Recommendation rating ${formatStarRating(rating)} out of 5 stars`}>
+      {Array.from({ length: fullStars }, (_, index) => (
+        <span key={`full-${index}`} className="community-star-full" aria-hidden="true">
+          ⭐
+        </span>
+      ))}
+      {hasHalfStar && (
+        <span className="community-star-half" aria-hidden="true">
+          <span>⭐</span>
+        </span>
+      )}
     </span>
   );
 }
@@ -161,8 +181,13 @@ function communityRankText(recommendation: CommunityRecommendation): string {
   return average === null || count === 0 ? "No community ranks yet" : `Community rank ${formatRankAverage(average)}/5 (${count})`;
 }
 
+function recommendationDisplayRating(recommendation: CommunityRecommendation): number | null {
+  const average = communityRankAverage(recommendation);
+  return roundedStarRating(average !== null && communityRankCount(recommendation) > 0 ? average : recommendation.rating);
+}
+
 function ratingFilterValue(recommendation: CommunityRecommendation): number | null {
-  return communityRankAverage(recommendation) ?? recommendationRating(recommendation.rating);
+  return recommendationDisplayRating(recommendation);
 }
 
 function CommunityRankControl({
@@ -838,7 +863,7 @@ export function CommunityPage({
                     <button type="button" className="community-row-open" aria-label={`Open ${title} details`} onClick={() => void openRecommendationDetails(recommendation)}>
                       <div className="community-card-header">
                         <strong>{title}</strong>
-                        <StarRating value={recommendation.rating} />
+                        <StarRating value={recommendationDisplayRating(recommendation)} />
                       </div>
                       <span>{communityRankText(recommendation)}</span>
                       {recommendationUploadSummary(recommendation) && <span>{recommendationUploadSummary(recommendation)}</span>}
@@ -911,7 +936,7 @@ export function CommunityPage({
             <div className="list-row community-row" key={`${item.recommendationId}-${item.localProfileId}`}>
               <div className="community-card-header">
                 <strong>{item.localProfileTitle}</strong>
-                <StarRating value={item.recommendation.rating} />
+                <StarRating value={recommendationDisplayRating(item.recommendation)} />
               </div>
               <span>{communityRankText(item.recommendation)}</span>
               <p>{item.recommendation.brew.notes}</p>
@@ -1042,7 +1067,7 @@ export function CommunityPage({
                   <div className="list-row community-row" key={item.recommendationId}>
                     <div className="community-card-header">
                       <strong>{title}</strong>
-                      <StarRating value={item.recommendation.rating} />
+                      <StarRating value={recommendationDisplayRating(item.recommendation)} />
                     </div>
                     {localUploadSummary(item) && <span>{localUploadSummary(item)}</span>}
                     <span>{recommendationBagSummary(item.recommendation)}</span>

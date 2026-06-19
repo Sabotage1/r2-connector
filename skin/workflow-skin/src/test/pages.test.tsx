@@ -492,14 +492,14 @@ describe("HistoryPage", () => {
     );
 
     const goldShot = screen.getByRole("button", { name: "Open shot review for Blooming espresso" });
-    expect(goldShot).toHaveClass("history-shot-row", "taste-gold", "golden");
+    expect(goldShot).toHaveClass("history-shot-row", "history-shot-row-compact", "taste-gold", "golden");
     const goldRank = within(goldShot).getByText("10/10 🔥");
     expect(goldRank).toHaveClass("history-rating", "gold");
     expect(goldShot.querySelector(".history-shot-card-header")).not.toBeNull();
     expect(goldRank.closest(".history-shot-card-header")).toBe(goldShot.querySelector(".history-shot-card-header"));
 
     const yellowShot = screen.getByRole("button", { name: "Open shot review for Turbo flow" });
-    expect(yellowShot).toHaveClass("history-shot-row", "taste-yellow");
+    expect(yellowShot).toHaveClass("history-shot-row", "history-shot-row-compact", "taste-yellow");
     const yellowRank = within(yellowShot).getByText("4/10");
     expect(yellowRank).toHaveClass("history-rating", "yellow");
     expect(yellowShot.querySelector(".history-shot-card-header")).not.toBeNull();
@@ -1569,6 +1569,29 @@ describe("CommunityPage", () => {
 
     expect(screen.getByText("Blooming")).toBeInTheDocument();
     expect(screen.queryByText("Classic")).not.toBeInTheDocument();
+  });
+
+  it("shows community card stars as rounded-up emoji half-star ratings", async () => {
+    const averagedRecommendation = {
+      ...recommendation,
+      rating: 2,
+      communityRatingAverage: 4.3,
+      communityRatingCount: 6
+    };
+    await renderCommunityPage({ recommendations: [averagedRecommendation] });
+
+    const row = screen.getByText("Blooming").closest(".community-row") as HTMLElement;
+    const badge = within(row).getByLabelText("Recommendation rating 4.5 out of 5 stars");
+    expect(badge.closest(".community-card-header")).toBe(row.querySelector(".community-card-header"));
+    expect(badge).toHaveTextContent("⭐⭐⭐⭐⭐");
+    expect(badge.querySelectorAll(".community-star-full")).toHaveLength(4);
+    expect(badge.querySelectorAll(".community-star-half")).toHaveLength(1);
+
+    await userEvent.selectOptions(screen.getByLabelText("Minimum recommendation rating"), "5");
+    expect(screen.queryByText("Blooming")).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText("Minimum recommendation rating"), "4");
+    expect(screen.getByText("Blooming")).toBeInTheDocument();
   });
 
   it("lets people rank recommendations from the list and the detail page", async () => {

@@ -597,6 +597,21 @@ textarea {
   letter-spacing: 0;
 }
 
+.community-star-full {
+  display: inline-block;
+}
+
+.community-star-half {
+  display: inline-block;
+  width: 0.58em;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.community-star-half > span {
+  display: inline-block;
+}
+
 .icon-button {
   display: grid;
   place-items: center;
@@ -1069,12 +1084,12 @@ textarea {
 .history-shot-entry {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  gap: 8px;
   align-items: stretch;
 }
 
 .history-shot-entry + .history-shot-entry {
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .history-shot-row {
@@ -1083,15 +1098,30 @@ textarea {
   cursor: pointer;
 }
 
+.history-shot-row-compact {
+  gap: 3px;
+  padding: 8px 10px;
+}
+
+.history-shot-row-compact > span {
+  font-size: 0.92rem;
+  line-height: 1.15;
+}
+
 .history-shot-card-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
 }
 
 .history-shot-card-header strong {
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.94rem;
+  line-height: 1.1;
 }
 
 .history-recommend-button {
@@ -1139,11 +1169,12 @@ textarea {
   flex: 0 0 auto;
   border: 1px solid currentColor;
   border-radius: 999px;
-  padding: 2px 8px;
+  padding: 1px 6px;
   background: rgb(0 0 0 / 18%);
   text-align: center;
   font-weight: 950;
-  line-height: 1.2;
+  font-size: 0.84rem;
+  line-height: 1.1;
 }
 
 .history-rating.red {
